@@ -6,8 +6,9 @@
 -- ============================================================================
 
 UPDATE BIZ_AIACTIONTXN_HIS
-   SET SEND_SYS_ID  = :send_sys_id,
-       SEND_MSG_CTN = :send_msg_ctn,
-       SEND_TM      = SYSTIMESTAMP
+   SET SEND_SYS_ID    = :send_sys_id,
+       SEND_MSG_CTN    = :send_msg_ctn,   -- 인계 메시지 JSON 전문 (컬럼명 원스펙 유지)
+       SEND_TM        = SYSTIMESTAMP,
+       SEND_COMPLT_YN = 'Y'
  WHERE TRACE_ID = :trace_id
    AND TIMEKEY  = :timekey;

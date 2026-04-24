@@ -20,9 +20,11 @@ export interface TraceRow {
   recvMsgCtn: string | null;
   recvTm: string | null;
   sendSysId: string | null;
-  sendMsgTm: string | null;
+  sendMsgCtn: string | null;
   sendTm: string | null;
   sendCompltYn: "Y" | "N" | null;
+  respMsgCtn: string | null;
+  respTm: string | null;
   errCd: string | null;
   errDescCtn: string | null;
 }

@@ -39,9 +39,12 @@ const SELECT_COLUMNS = `
   TRACE_ID, TIMEKEY, USER_ID, SYS_ID,
   RECV_SYS_ID, RECV_MSG_CTN,
   TO_CHAR(RECV_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS RECV_TM,
-  SEND_SYS_ID, SEND_MSG_TM,
+  SEND_SYS_ID, SEND_MSG_CTN,
   TO_CHAR(SEND_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS SEND_TM,
-  SEND_COMPLT_YN, ERR_CD, ERR_DESC_CTN
+  SEND_COMPLT_YN,
+  RESP_MSG_CTN,
+  TO_CHAR(RESP_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS RESP_TM,
+  ERR_CD, ERR_DESC_CTN
 `;
 
 function rowFrom(layer: LayerKey, r: Record<string, unknown>): TraceRow {
@@ -57,9 +60,11 @@ function rowFrom(layer: LayerKey, r: Record<string, unknown>): TraceRow {
     recvMsgCtn: read("RECV_MSG_CTN"),
     recvTm: read("RECV_TM"),
     sendSysId: read("SEND_SYS_ID"),
-    sendMsgTm: read("SEND_MSG_TM"),
+    sendMsgCtn: read("SEND_MSG_CTN"),
     sendTm: read("SEND_TM"),
     sendCompltYn: compl === "Y" || compl === "N" ? compl : null,
+    respMsgCtn: read("RESP_MSG_CTN"),
+    respTm: read("RESP_TM"),
     errCd: read("ERR_CD"),
     errDescCtn: read("ERR_DESC_CTN")
   };
@@ -142,6 +147,6 @@ export async function fetchByTraceId(traceId: string): Promise<TraceRow[]> {
     const ai = LAYER_ORDER.indexOf(a.layer);
     const bi = LAYER_ORDER.indexOf(b.layer);
     if (ai !== bi) return ai - bi;
-    return (a.recvTm ?? "").localeCompare(b.recvTm ?? "");
+    return (a.recvTm ?? a.timekey).localeCompare(b.recvTm ?? b.timekey);
   });
 }

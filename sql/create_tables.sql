@@ -17,11 +17,13 @@ CREATE TABLE BIZ_AIACTIONTXN_HIS (
     RECV_MSG_CTN     VARCHAR2(4000),                    -- 수신 메시지 (JSON 전문)
     RECV_TM          TIMESTAMP,                         -- 인수 시간 (MSG 받은 시각)
     SEND_SYS_ID      VARCHAR2(50),                      -- 발신 시스템 ID (ex. MCP)
-    SEND_MSG_TM      VARCHAR2(4000),                    -- 인계 메시지 (JSON 전문)  ※ 원 스펙 컬럼명 유지
+    SEND_MSG_CTN     VARCHAR2(4000),                    -- 인계 메시지 (JSON 전문)
     SEND_TM          TIMESTAMP,                         -- 인계 일시
-    SEND_COMPLT_YN   VARCHAR2(1)    DEFAULT 'N',        -- 인계 완료 여부 (Y/N)
+    SEND_COMPLT_YN   VARCHAR2(1)    DEFAULT 'N',        -- 인계 완료 여부 (Y/N) — 응답 수신 후 'Y' 로 갱신
+    RESP_MSG_CTN     VARCHAR2(4000),                    -- 응답 메시지 (JSON 전문, 하위 레이어로부터 수신)
+    RESP_TM          TIMESTAMP,                         -- 응답 수신 시각
     ERR_CD           VARCHAR2(50),                      -- 에러 코드
-    ERR_DESC_CTN     VARCHAR2(50),                      -- 에러 내용 설명
+    ERR_DESC_CTN     VARCHAR2(4000),                    -- 에러 내용 설명
     CONSTRAINT PK_BIZ_AIACTIONTXN_HIS PRIMARY KEY (TRACE_ID, TIMEKEY)
 );
 
@@ -40,9 +42,11 @@ COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.RECV_SYS_ID   IS '수신 시스템 ID (기
 COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.RECV_MSG_CTN  IS '수신 메시지 내용 (JSON 전문)';
 COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.RECV_TM       IS '인수 시간';
 COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.SEND_SYS_ID   IS '발신 시스템 ID';
-COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.SEND_MSG_TM   IS '인계 메시지 내용 (JSON 전문)';
+COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.SEND_MSG_CTN  IS '인계 메시지 내용 (JSON 전문)';
 COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.SEND_TM       IS '인계 일시';
-COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.SEND_COMPLT_YN IS '인계 완료 여부 (Y/N)';
+COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.SEND_COMPLT_YN IS '인계 완료 여부 (Y/N) — 응답 수신 완료 시 Y';
+COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.RESP_MSG_CTN  IS '응답 메시지 내용 (JSON 전문, 하위 레이어로부터 수신)';
+COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.RESP_TM       IS '응답 수신 시각';
 COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.ERR_CD        IS '에러 코드';
 COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.ERR_DESC_CTN  IS '에러 내용 설명';
 

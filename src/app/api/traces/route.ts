@@ -14,7 +14,7 @@ function summarize(rows: TraceRow[]): TraceSummary[] {
   const summaries: TraceSummary[] = [];
   for (const [traceId, list] of byTrace) {
     const recvTimes = list.map((r) => r.recvTm).filter((v): v is string => !!v).sort();
-    const sendTimes = list.map((r) => r.sendTm).filter((v): v is string => !!v).sort();
+    const sendTimes = list.flatMap((r) => [r.sendTm, r.respTm]).filter((v): v is string => !!v).sort();
     const layerSet = new Set(list.map((r) => r.layer));
     summaries.push({
       traceId,

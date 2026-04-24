@@ -363,20 +363,75 @@ a:hover { text-decoration: underline; }
 }
 .tl-card-head .right .dur { color: var(--text-2); }
 
-.tl-body {
+/* single-call: 3-column layout (recv | send | resp) */
+.tl-body-3 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 0;
 }
-@media (max-width: 900px) { .tl-body { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .tl-body-3 { grid-template-columns: 1fr; } }
 .tl-col {
   padding: 12px 14px;
   min-width: 0;
 }
 .tl-col + .tl-col { border-left: 1px solid var(--border); }
-@media (max-width: 900px) {
-  .tl-col + .tl-col { border-left: none; border-top: 1px solid var(--border); }
+@media (max-width: 1100px) {
+  .tl-body-3 .tl-col + .tl-col { border-left: none; border-top: 1px solid var(--border); }
 }
+
+/* multi-call layout */
+.tl-multicall-badge {
+  display: inline-flex; align-items: center;
+  font-size: 12px; font-weight: 600;
+  padding: 2px 9px; border-radius: 99px;
+  background: var(--accent-soft); color: var(--accent);
+  border: 1px solid #c3d4fc;
+}
+.tl-recv-section {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.tl-calls-section {
+  padding: 10px 14px 4px;
+}
+.tl-call-item {
+  margin-bottom: 10px;
+}
+.tl-call-item-border {
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.tl-call-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.tl-call-num {
+  font-size: 12.5px; font-weight: 700;
+  color: var(--text-3); text-transform: uppercase; letter-spacing: 0.6px;
+}
+.tl-call-meta {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px;
+}
+.tl-call-meta .hop { font-family: var(--mono); color: var(--text-2); font-weight: 600; }
+.tl-call-meta .dur-inline { color: var(--text-3); font-family: var(--mono); font-size: 12.5px; }
+.tl-call-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+@media (max-width: 900px) { .tl-call-body { grid-template-columns: 1fr; } }
+.tl-call-body .tl-col { padding: 10px 12px; }
+.tl-call-body .tl-col + .tl-col { border-left: 1px solid var(--border); }
+@media (max-width: 900px) {
+  .tl-call-body .tl-col + .tl-col { border-left: none; border-top: 1px solid var(--border); }
+}
+
+.pill.xs { font-size: 11.5px; padding: 2px 8px; }
 .tl-col-head {
   display: flex; align-items: center; justify-content: space-between;
   font-size: 12.5px; color: var(--text-3);

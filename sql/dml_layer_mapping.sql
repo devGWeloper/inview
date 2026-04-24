@@ -38,7 +38,7 @@ INSERT INTO BIZ_AIACTIONTXN_HIS (
 -- 2) 다음 단(GAIA) 인계 완료 후
 UPDATE BIZ_AIACTIONTXN_HIS
    SET SEND_SYS_ID    = 'GAIA',
-       SEND_MSG_TM    = '{"forwardedTo":"GAIA","payload":"..."}',
+       SEND_MSG_CTN   = '{"forwardedTo":"GAIA","payload":"..."}',
        SEND_TM        = SYSTIMESTAMP,
        SEND_COMPLT_YN = 'Y'
  WHERE TRACE_ID = 'TRC-20260422-0001'

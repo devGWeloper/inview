@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchAllRows, isMockMode } from "@/lib/db";
+import { fetchAllRows, isMockMode, connectedLayerCount } from "@/lib/db";
 import { TraceFilter, TraceSummary, TraceRow } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +48,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     summaries,
     total: summaries.length,
-    usedMock: isMockMode()
+    usedMock: isMockMode(),
+    connectedLayers: connectedLayerCount()
   });
 }

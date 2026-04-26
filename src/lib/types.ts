@@ -48,6 +48,7 @@ export interface TraceListResponse {
   summaries: TraceSummary[];
   total: number;
   usedMock: boolean;
+  connectedLayers: number;
 }
 
 export interface TraceFilter {

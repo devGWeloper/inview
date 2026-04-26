@@ -31,8 +31,11 @@ function readConfig(layer: LayerKey): DbConfig | null {
 
 export function isMockMode(): boolean {
   if (process.env.USE_MOCK === "true") return true;
-  // 모든 레이어의 DB 설정이 없으면 mock
   return LAYER_ORDER.every((l) => readConfig(l) === null);
+}
+
+export function connectedLayerCount(): number {
+  return LAYER_ORDER.filter((l) => readConfig(l) !== null).length;
 }
 
 const SELECT_COLUMNS = `
@@ -74,7 +77,7 @@ async function queryLayer(layer: LayerKey, filter: TraceFilter): Promise<TraceRo
   if (isMockMode()) return filterRows(mockRowsForLayer(layer), filter);
 
   const cfg = readConfig(layer);
-  if (!cfg) return filterRows(mockRowsForLayer(layer), filter);
+  if (!cfg) return [];
 
   const oracle = await getOracle();
   if (!oracle) return filterRows(mockRowsForLayer(layer), filter);

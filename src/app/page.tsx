@@ -17,6 +17,7 @@ export default function Page() {
   const [filter, setFilter] = useState<TraceFilter>(DEFAULT_FILTER);
   const [summaries, setSummaries] = useState<TraceSummary[]>([]);
   const [connectedLayers, setConnectedLayers] = useState(0);
+  const [appEnv, setAppEnv] = useState<"dev" | "prd">("dev");
   const [selected, setSelected] = useState<string | null>(null);
   const [detailRows, setDetailRows] = useState<TraceRow[]>([]);
   const [listLoading, setListLoading] = useState(false);
@@ -35,6 +36,7 @@ export default function Page() {
       const data: TraceListResponse = await res.json();
       setSummaries(data.summaries);
       setConnectedLayers(data.connectedLayers);
+      setAppEnv(data.appEnv);
     } finally {
       setListLoading(false);
     }
@@ -82,7 +84,8 @@ export default function Page() {
           INVIEW
           <span className="sub">· AI Action Trace</span>
         </div>
-        <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span className={`env-badge ${appEnv}`}>{appEnv.toUpperCase()}</span>
           <span className="env-badge live"><span className="dot" />CONNECTED · {connectedLayers} LAYER{connectedLayers !== 1 ? "S" : ""}</span>
         </div>
       </header>

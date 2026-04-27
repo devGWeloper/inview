@@ -48,6 +48,7 @@ export interface TraceListResponse {
   summaries: TraceSummary[];
   total: number;
   connectedLayers: number;
+  appEnv: "dev" | "prd";
 }
 
 export interface TraceFilter {

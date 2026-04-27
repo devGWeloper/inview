@@ -4,9 +4,9 @@
   "private": true,
   "description": "AI Action Transaction Trace Integrated Viewer",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 5174",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 5174",
     "lint": "next lint"
   },
   "dependencies": {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchAllRows, connectedLayerCount } from "@/lib/db";
+import { fetchAllRows, connectedLayerCount, getAppEnv } from "@/lib/db";
 import { TraceFilter, TraceSummary, TraceRow } from "@/lib/types";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,7 @@ function summarize(rows: TraceRow[]): TraceSummary[] {
 }
 
 export async function GET(req: NextRequest) {
+  const t0 = Date.now();
   const sp = req.nextUrl.searchParams;
   const filter: TraceFilter = {
     traceId: sp.get("traceId") || undefined,
@@ -42,12 +44,14 @@ export async function GET(req: NextRequest) {
     limit: sp.get("limit") ? Number(sp.get("limit")) : 200
   };
 
+  logger.info("GET /api/traces", { filter });
+
   const rows = await fetchAllRows(filter);
   const summaries = summarize(rows);
+  const connectedLayers = connectedLayerCount();
+  const appEnv = getAppEnv();
 
-  return NextResponse.json({
-    summaries,
-    total: summaries.length,
-    connectedLayers: connectedLayerCount()
-  });
+  logger.info("GET /api/traces done", { appEnv, total: summaries.length, connectedLayers, ms: Date.now() - t0 });
+
+  return NextResponse.json({ summaries, total: summaries.length, connectedLayers, appEnv });
 }

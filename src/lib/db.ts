@@ -1,4 +1,11 @@
 import { LAYER_ORDER, LayerKey, TraceFilter, TraceRow } from "./types";
+import { logger } from "./logger";
+
+export type AppEnv = "dev" | "prd";
+
+export function getAppEnv(): AppEnv {
+  return process.env.APP_ENV?.toLowerCase() === "prd" ? "prd" : "dev";
+}
 
 type DbConfig = {
   user: string;
@@ -13,17 +20,21 @@ async function getOracle(): Promise<typeof import("oracledb") | null> {
   try {
     const mod = await import("oracledb");
     oracledbCached = mod;
+    logger.info("oracledb driver loaded");
     return mod;
   } catch (e) {
-    console.error("[db] oracledb 로드 실패:", e);
+    logger.error("oracledb driver load failed", { err: String(e) });
     return null;
   }
 }
 
 function readConfig(layer: LayerKey): DbConfig | null {
-  const user = process.env[`${layer}_DB_USER`];
-  const password = process.env[`${layer}_DB_PASSWORD`];
-  const connectString = process.env[`${layer}_DB_CONNECT_STRING`];
+  const prefix = getAppEnv().toUpperCase(); // DEV | PRD
+  const e = (key: string) =>
+    process.env[`${prefix}_${layer}_${key}`] ?? process.env[`${layer}_${key}`];
+  const user = e("DB_USER");
+  const password = e("DB_PASSWORD");
+  const connectString = e("DB_CONNECT_STRING");
   if (!user || !password || !connectString) return null;
   return { user, password, connectString };
 }
@@ -104,13 +115,16 @@ async function queryLayer(layer: LayerKey, filter: TraceFilter): Promise<TraceRo
     (filter.limit ? ` FETCH FIRST ${Math.max(1, Math.min(filter.limit, 500))} ROWS ONLY` : "");
 
   let conn: Awaited<ReturnType<typeof oracle.getConnection>> | undefined;
+  const t0 = Date.now();
   try {
     conn = await oracle.getConnection(cfg);
     const result = await conn.execute(sql, binds, { outFormat: oracle.OBJECT });
     const rows = (result.rows ?? []) as Record<string, unknown>[];
-    return rows.map((r) => rowFrom(layer, r));
+    const mapped = rows.map((r) => rowFrom(layer, r));
+    logger.info("db query ok", { layer, rows: mapped.length, ms: Date.now() - t0 });
+    return mapped;
   } catch (e) {
-    console.error(`[db] layer=${layer} error`, e);
+    logger.error("db query failed", { layer, ms: Date.now() - t0, err: String(e) });
     return [];
   } finally {
     if (conn) {

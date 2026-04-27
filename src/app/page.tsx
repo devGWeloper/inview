@@ -159,7 +159,6 @@ export default function Page() {
                     type="text"
                     value={filter.traceId ?? ""}
                     onChange={(e) => setFilter({ ...filter, traceId: e.target.value || undefined })}
-                    placeholder="예) TRC-20260420-0001"
                   />
                 </label>
                 <label>
@@ -168,7 +167,6 @@ export default function Page() {
                     type="text"
                     value={filter.userId ?? ""}
                     onChange={(e) => setFilter({ ...filter, userId: e.target.value || undefined })}
-                    placeholder="예) hong.gildong"
                   />
                 </label>
                 <label>

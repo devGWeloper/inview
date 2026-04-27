@@ -16,7 +16,6 @@ function fmtTs(ts: string | null): string {
 export default function Page() {
   const [filter, setFilter] = useState<TraceFilter>(DEFAULT_FILTER);
   const [summaries, setSummaries] = useState<TraceSummary[]>([]);
-  const [usedMock, setUsedMock] = useState(false);
   const [connectedLayers, setConnectedLayers] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [detailRows, setDetailRows] = useState<TraceRow[]>([]);
@@ -35,7 +34,6 @@ export default function Page() {
       const res = await fetch(`/api/traces?${q.toString()}`, { cache: "no-store" });
       const data: TraceListResponse = await res.json();
       setSummaries(data.summaries);
-      setUsedMock(data.usedMock);
       setConnectedLayers(data.connectedLayers);
     } finally {
       setListLoading(false);
@@ -85,9 +83,7 @@ export default function Page() {
           <span className="sub">· AI Action Trace</span>
         </div>
         <div>
-          {usedMock
-            ? <span className="env-badge mock"><span className="dot" />MOCK DATA</span>
-            : <span className="env-badge live"><span className="dot" />CONNECTED · {connectedLayers} LAYER{connectedLayers !== 1 ? "S" : ""}</span>}
+          <span className="env-badge live"><span className="dot" />CONNECTED · {connectedLayers} LAYER{connectedLayers !== 1 ? "S" : ""}</span>
         </div>
       </header>
 

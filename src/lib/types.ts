@@ -47,7 +47,6 @@ export interface TraceDetailResponse {
 export interface TraceListResponse {
   summaries: TraceSummary[];
   total: number;
-  usedMock: boolean;
   connectedLayers: number;
 }
 

@@ -1,5 +1,4 @@
 import { LAYER_ORDER, LayerKey, TraceFilter, TraceRow } from "./types";
-import { mockAllRows, mockRowsForLayer } from "./mock";
 
 type DbConfig = {
   user: string;
@@ -13,10 +12,10 @@ async function getOracle(): Promise<typeof import("oracledb") | null> {
   if (oracledbCached) return oracledbCached;
   try {
     const mod = await import("oracledb");
-    mod.outFormat = mod.OBJECT;
     oracledbCached = mod;
     return mod;
-  } catch {
+  } catch (e) {
+    console.error("[db] oracledb 로드 실패:", e);
     return null;
   }
 }
@@ -27,11 +26,6 @@ function readConfig(layer: LayerKey): DbConfig | null {
   const connectString = process.env[`${layer}_DB_CONNECT_STRING`];
   if (!user || !password || !connectString) return null;
   return { user, password, connectString };
-}
-
-export function isMockMode(): boolean {
-  if (process.env.USE_MOCK === "true") return true;
-  return LAYER_ORDER.every((l) => readConfig(l) === null);
 }
 
 export function connectedLayerCount(): number {
@@ -74,8 +68,6 @@ function rowFrom(layer: LayerKey, r: Record<string, unknown>): TraceRow {
 }
 
 async function queryLayer(layer: LayerKey, filter: TraceFilter): Promise<TraceRow[]> {
-  if (isMockMode()) return filterRows(mockRowsForLayer(layer), filter);
-
   const cfg = readConfig(layer);
   if (!cfg) return [];
 
@@ -127,19 +119,7 @@ async function queryLayer(layer: LayerKey, filter: TraceFilter): Promise<TraceRo
   }
 }
 
-function filterRows(rows: TraceRow[], f: TraceFilter): TraceRow[] {
-  return rows.filter((r) => {
-    if (f.traceId && r.traceId !== f.traceId) return false;
-    if (f.userId && r.userId !== f.userId) return false;
-    if (f.onlyError && !r.errCd) return false;
-    if (f.dateFrom && r.recvTm && r.recvTm < f.dateFrom) return false;
-    if (f.dateTo && r.recvTm && r.recvTm > f.dateTo) return false;
-    return true;
-  });
-}
-
 export async function fetchAllRows(filter: TraceFilter): Promise<TraceRow[]> {
-  if (isMockMode()) return filterRows(mockAllRows(), filter);
   const arrs = await Promise.all(LAYER_ORDER.map((l) => queryLayer(l, filter)));
   return arrs.flat();
 }

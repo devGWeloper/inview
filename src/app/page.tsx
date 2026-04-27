@@ -1,12 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { TraceTimeline } from "@/components/TraceTimeline";
 import {
   TraceFilter, TraceListResponse, TraceDetailResponse, TraceSummary, TraceRow
 } from "@/lib/types";
 
 const DEFAULT_FILTER: TraceFilter = {};
+const SPLIT_KEY = "inview.splitPx";
+const MIN_LEFT = 360;
+const MIN_RIGHT = 480;
+const SPLITTER_W = 14;
 
 function fmtTs(ts: string | null): string {
   if (!ts) return "—";
@@ -22,6 +26,60 @@ export default function Page() {
   const [detailRows, setDetailRows] = useState<TraceRow[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const splitterRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const [leftWidth, setLeftWidth] = useState<number | null>(null);
+
+  useEffect(() => {
+    const stored = Number(localStorage.getItem(SPLIT_KEY));
+    setLeftWidth(Number.isFinite(stored) && stored > 0 ? stored : 540);
+  }, []);
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      if (!draggingRef.current || !layoutRef.current) return;
+      const rect = layoutRef.current.getBoundingClientRect();
+      const padding = parseFloat(getComputedStyle(layoutRef.current).paddingLeft) || 0;
+      const max = rect.width - padding * 2 - MIN_RIGHT - SPLITTER_W;
+      let next = e.clientX - rect.left - padding;
+      if (next < MIN_LEFT) next = MIN_LEFT;
+      if (next > max) next = max;
+      setLeftWidth(next);
+    };
+    const onUp = () => {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      splitterRef.current?.classList.remove("dragging");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (leftWidth != null && !draggingRef.current) {
+      localStorage.setItem(SPLIT_KEY, String(Math.round(leftWidth)));
+    }
+  }, [leftWidth]);
+
+  const onSplitterDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    draggingRef.current = true;
+    splitterRef.current?.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  const onSplitterDoubleClick = () => setLeftWidth(540);
 
   const loadList = useCallback(async (f: TraceFilter) => {
     setListLoading(true);
@@ -90,7 +148,11 @@ export default function Page() {
         </div>
       </header>
 
-      <div className="layout">
+      <div
+        className="layout"
+        ref={layoutRef}
+        style={leftWidth != null ? ({ "--left-w": `${leftWidth}px` } as CSSProperties) : undefined}
+      >
         <section className="panel">
           <div className="panel-header">
             <span className="title">Traces</span>
@@ -194,6 +256,17 @@ export default function Page() {
             </table>
           </div>
         </section>
+
+        <div
+          ref={splitterRef}
+          className="splitter"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="패널 너비 조절"
+          onPointerDown={onSplitterDown}
+          onDoubleClick={onSplitterDoubleClick}
+          title="드래그하여 너비 조절 · 더블클릭으로 초기화"
+        />
 
         <section className="panel">
           <div className="panel-header">

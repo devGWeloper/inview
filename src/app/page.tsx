@@ -7,7 +7,6 @@ import {
 } from "@/lib/types";
 
 const DEFAULT_FILTER: TraceFilter = {};
-const SPLIT_KEY = "inview.splitPx";
 const MIN_LEFT = 360;
 const MIN_RIGHT = 480;
 const SPLITTER_W = 14;
@@ -33,13 +32,9 @@ export default function Page() {
   const [leftWidth, setLeftWidth] = useState<number | null>(null);
 
   useEffect(() => {
-    const stored = Number(localStorage.getItem(SPLIT_KEY));
-    if (Number.isFinite(stored) && stored > 0) setLeftWidth(stored);
-  }, []);
-
-  useEffect(() => {
     const onMove = (e: PointerEvent) => {
       if (!draggingRef.current || !layoutRef.current) return;
+      e.preventDefault();
       const rect = layoutRef.current.getBoundingClientRect();
       const padding = parseFloat(getComputedStyle(layoutRef.current).paddingLeft) || 0;
       const max = rect.width - padding * 2 - MIN_RIGHT - SPLITTER_W;
@@ -65,24 +60,14 @@ export default function Page() {
     };
   }, []);
 
-  useEffect(() => {
-    if (leftWidth != null && !draggingRef.current) {
-      localStorage.setItem(SPLIT_KEY, String(Math.round(leftWidth)));
-    }
-  }, [leftWidth]);
-
-  const onSplitterDown = (e: React.PointerEvent) => {
-    e.preventDefault();
+  const onSplitterDown = () => {
     draggingRef.current = true;
     splitterRef.current?.classList.add("dragging");
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
   };
 
-  const onSplitterDoubleClick = () => {
-    localStorage.removeItem(SPLIT_KEY);
-    setLeftWidth(null);
-  };
+  const onSplitterDoubleClick = () => setLeftWidth(null);
 
   const loadList = useCallback(async (f: TraceFilter) => {
     setListLoading(true);

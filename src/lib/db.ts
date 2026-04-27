@@ -80,7 +80,7 @@ async function queryLayer(layer: LayerKey, filter: TraceFilter): Promise<TraceRo
   if (!cfg) return [];
 
   const oracle = await getOracle();
-  if (!oracle) return filterRows(mockRowsForLayer(layer), filter);
+  if (!oracle) return [];
 
   const where: string[] = [];
   const binds: Record<string, unknown> = {};

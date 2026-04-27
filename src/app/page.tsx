@@ -34,7 +34,7 @@ export default function Page() {
 
   useEffect(() => {
     const stored = Number(localStorage.getItem(SPLIT_KEY));
-    setLeftWidth(Number.isFinite(stored) && stored > 0 ? stored : 540);
+    if (Number.isFinite(stored) && stored > 0) setLeftWidth(stored);
   }, []);
 
   useEffect(() => {
@@ -79,7 +79,10 @@ export default function Page() {
     document.body.style.userSelect = "none";
   };
 
-  const onSplitterDoubleClick = () => setLeftWidth(540);
+  const onSplitterDoubleClick = () => {
+    localStorage.removeItem(SPLIT_KEY);
+    setLeftWidth(null);
+  };
 
   const loadList = useCallback(async (f: TraceFilter) => {
     setListLoading(true);

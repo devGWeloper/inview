@@ -94,7 +94,7 @@ a:hover { text-decoration: underline; }
 
 .layout {
   display: grid;
-  grid-template-columns: var(--left-w, minmax(460px, 540px)) auto minmax(0, 1fr);
+  grid-template-columns: var(--left-w, minmax(460px, 1fr)) auto minmax(0, 1.35fr);
   gap: 0;
   padding: 14px;
   flex: 1;

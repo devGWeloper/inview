@@ -13,7 +13,7 @@ There is no test runner configured.
 
 ## Big picture
 
-INVIEW is a single-page **AI Action Transaction trace viewer** built on Next.js 14 (App Router, React 18, TypeScript strict). It reads the `BIZ_AIACTIONTXN_HIS` table that is replicated across **five Oracle databases** — one per layer in the request path: `CUBE → GAIA → MCP → ONEOIS → LEGACY` (see `LAYER_ORDER` in `src/lib/types.ts` and `sql/create_tables.sql`). The UI reconstructs a single end-to-end trace by joining rows from all five layers on `TRACE_ID`.
+TraceX is a single-page **AI Action Transaction trace viewer** built on Next.js 14 (App Router, React 18, TypeScript strict). It reads the `BIZ_AIACTIONTXN_HIS` table that is replicated across **five Oracle databases** — one per layer in the request path: `CUBE → GAIA → MCP → ONEOIS → LEGACY` (see `LAYER_ORDER` in `src/lib/types.ts` and `sql/create_tables.sql`). The UI reconstructs a single end-to-end trace by joining rows from all five layers on `TRACE_ID`.
 
 ### Data flow
 

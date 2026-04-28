@@ -1,7 +1,87 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { LAYER_LABEL, LAYER_ORDER, LayerKey, TraceRow } from "@/lib/types";
+
+const COL_MIN_FR = 0.25;
+const SPLITTER_PX = 6;
+
+type StartColResize = (
+  e: React.PointerEvent,
+  body: HTMLElement,
+  index: number,
+  fracs: number[],
+  setter: (next: number[]) => void
+) => void;
+
+function useColResize(): StartColResize {
+  const dragRef = useRef<{
+    body: HTMLElement;
+    index: number;
+    splitter: HTMLElement;
+    setter: (next: number[]) => void;
+    fracs: number[];
+    total: number;
+    fixedLeft: number;
+    pair: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      e.preventDefault();
+      const rect = d.body.getBoundingClientRect();
+      const numSplitters = d.fracs.length - 1;
+      const usable = rect.width - SPLITTER_PX * numSplitters;
+      if (usable <= 0) return;
+      const x = e.clientX - rect.left;
+      const ratioCum = ((x - SPLITTER_PX * d.index - SPLITTER_PX / 2) / usable) * d.total;
+      let newLeft = ratioCum - d.fixedLeft;
+      let newRight = d.pair - newLeft;
+      if (newLeft < COL_MIN_FR) { newLeft = COL_MIN_FR; newRight = d.pair - newLeft; }
+      if (newRight < COL_MIN_FR) { newRight = COL_MIN_FR; newLeft = d.pair - newRight; }
+      const next = [...d.fracs];
+      next[d.index] = newLeft;
+      next[d.index + 1] = newRight;
+      d.fracs = next;
+      d.setter(next);
+    };
+    const onUp = () => {
+      const d = dragRef.current;
+      if (!d) return;
+      d.splitter.classList.remove("dragging");
+      dragRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, []);
+
+  return (e, body, index, fracs, setter) => {
+    const splitter = e.currentTarget as HTMLElement;
+    splitter.classList.add("dragging");
+    const total = fracs.reduce((a, b) => a + b, 0);
+    const fixedLeft = fracs.slice(0, index).reduce((a, b) => a + b, 0);
+    const pair = fracs[index] + fracs[index + 1];
+    dragRef.current = { body, index, splitter, setter, fracs: [...fracs], total, fixedLeft, pair };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+}
+
+function colsStyle(fracs: number[]): CSSProperties {
+  const out: Record<string, string> = {};
+  fracs.forEach((f, i) => { out[`--c${i + 1}`] = `${f}fr`; });
+  return out as CSSProperties;
+}
 
 function tryFormat(raw: string | null): { ok: boolean; text: string; lines: number } {
   if (!raw) return { ok: false, text: "", lines: 0 };
@@ -134,11 +214,17 @@ function Stepper({ groups }: { groups: LayerGroup[] }) {
 }
 
 // ── 단일 호출 카드 (recv | send | resp 3컬럼) ─────────────────────────────────
-function SingleCallCard({ row }: { row: TraceRow }) {
+function SingleCallCard({ row, frac3, setFrac3, startResize }: {
+  row: TraceRow;
+  frac3: number[];
+  setFrac3: (next: number[]) => void;
+  startResize: StartColResize;
+}) {
   const status: "ok" | "err" | "warn" =
     row.errCd ? "err" : row.sendCompltYn === "Y" ? "ok" : "warn";
   const statusLabel = status === "err" ? "ERROR" : status === "ok" ? "OK" : "PENDING";
   const dur = diffMs(row.recvTm, row.respTm ?? row.sendTm);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   return (
     <div className="tl-card">
@@ -159,7 +245,7 @@ function SingleCallCard({ row }: { row: TraceRow }) {
         </div>
       </div>
 
-      <div className="tl-body tl-body-3">
+      <div ref={bodyRef} className="tl-body tl-body-3" style={colsStyle(frac3)}>
         <div className="tl-col">
           <div className="tl-col-head">
             <span>RECV</span>
@@ -167,6 +253,13 @@ function SingleCallCard({ row }: { row: TraceRow }) {
           </div>
           <JsonBlock raw={row.recvMsgCtn} kind="recv" />
         </div>
+        <div
+          className="json-splitter"
+          role="separator"
+          aria-orientation="vertical"
+          title="드래그하여 너비 조절"
+          onPointerDown={(e) => bodyRef.current && startResize(e, bodyRef.current, 0, frac3, setFrac3)}
+        />
         <div className="tl-col">
           <div className="tl-col-head">
             <span>SEND</span>
@@ -174,6 +267,13 @@ function SingleCallCard({ row }: { row: TraceRow }) {
           </div>
           <JsonBlock raw={row.sendMsgCtn} kind="send" />
         </div>
+        <div
+          className="json-splitter"
+          role="separator"
+          aria-orientation="vertical"
+          title="드래그하여 너비 조절"
+          onPointerDown={(e) => bodyRef.current && startResize(e, bodyRef.current, 1, frac3, setFrac3)}
+        />
         <div className="tl-col">
           <div className="tl-col-head">
             <span>RESP</span>
@@ -196,7 +296,12 @@ function SingleCallCard({ row }: { row: TraceRow }) {
 // ── 복수 호출 카드 ────────────────────────────────────────────────────────────
 // recv는 첫 번째 row(upstream 요청)를 상단에 전체 폭으로 표시
 // 각 call은 번호 붙여 send | resp 2컬럼으로 표시
-function MultiCallCard({ group }: { group: LayerGroup }) {
+function MultiCallCard({ group, frac2, setFrac2, startResize }: {
+  group: LayerGroup;
+  frac2: number[];
+  setFrac2: (next: number[]) => void;
+  startResize: StartColResize;
+}) {
   const { layer, rows } = group;
   const status = groupStatus(rows);
   const statusLabel = status === "err" ? "ERROR" : status === "ok" ? "OK" : "PENDING";
@@ -234,47 +339,73 @@ function MultiCallCard({ group }: { group: LayerGroup }) {
 
       {/* 각 call: send | resp */}
       <div className="tl-calls-section">
-        {rows.map((row, ci) => {
-          const callStatus: "ok" | "err" | "warn" =
-            row.errCd ? "err" : row.sendCompltYn === "Y" ? "ok" : "warn";
-          const callDur = diffMs(row.sendTm, row.respTm);
-          return (
-            <div key={row.timekey} className={`tl-call-item ${ci > 0 ? "tl-call-item-border" : ""}`}>
-              <div className="tl-call-header">
-                <span className="tl-call-num">Call #{ci + 1}</span>
-                <span className="tl-call-meta">
-                  <span className="hop mono">{row.sendSysId ?? "-"}</span>
-                  <span className="dur-inline">{callDur}</span>
-                  {row.errCd && <span className={`pill err xs`}><span className="dot" />{row.errCd}</span>}
-                  {!row.errCd && <span className={`pill ${callStatus} xs`}><span className="dot" />{callStatus.toUpperCase()}</span>}
-                </span>
-              </div>
-              <div className="tl-call-body">
-                <div className="tl-col">
-                  <div className="tl-col-head">
-                    <span>SEND</span>
-                    <span className="peer">→ {row.sendSysId ?? "-"} · {fmtTsShort(row.sendTm)}</span>
-                  </div>
-                  <JsonBlock raw={row.sendMsgCtn} kind="send" />
-                </div>
-                <div className="tl-col">
-                  <div className="tl-col-head">
-                    <span>RESP</span>
-                    <span className="peer">← {row.sendSysId ?? "-"} · {fmtTsShort(row.respTm)}</span>
-                  </div>
-                  <JsonBlock raw={row.respMsgCtn} kind="resp" />
-                </div>
-              </div>
-              {row.errCd && (
-                <div className="tl-error" style={{ margin: "0 14px 10px" }}>
-                  <code>{row.errCd}</code>
-                  <span>{row.errDescCtn ?? "에러 상세가 기록되지 않았습니다."}</span>
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {rows.map((row, ci) => (
+          <CallItem
+            key={row.timekey}
+            row={row}
+            ci={ci}
+            frac2={frac2}
+            setFrac2={setFrac2}
+            startResize={startResize}
+          />
+        ))}
       </div>
+    </div>
+  );
+}
+
+function CallItem({ row, ci, frac2, setFrac2, startResize }: {
+  row: TraceRow;
+  ci: number;
+  frac2: number[];
+  setFrac2: (next: number[]) => void;
+  startResize: StartColResize;
+}) {
+  const callStatus: "ok" | "err" | "warn" =
+    row.errCd ? "err" : row.sendCompltYn === "Y" ? "ok" : "warn";
+  const callDur = diffMs(row.sendTm, row.respTm);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  return (
+    <div className={`tl-call-item ${ci > 0 ? "tl-call-item-border" : ""}`}>
+      <div className="tl-call-header">
+        <span className="tl-call-num">Call #{ci + 1}</span>
+        <span className="tl-call-meta">
+          <span className="hop mono">{row.sendSysId ?? "-"}</span>
+          <span className="dur-inline">{callDur}</span>
+          {row.errCd && <span className={`pill err xs`}><span className="dot" />{row.errCd}</span>}
+          {!row.errCd && <span className={`pill ${callStatus} xs`}><span className="dot" />{callStatus.toUpperCase()}</span>}
+        </span>
+      </div>
+      <div ref={bodyRef} className="tl-call-body" style={colsStyle(frac2)}>
+        <div className="tl-col">
+          <div className="tl-col-head">
+            <span>SEND</span>
+            <span className="peer">→ {row.sendSysId ?? "-"} · {fmtTsShort(row.sendTm)}</span>
+          </div>
+          <JsonBlock raw={row.sendMsgCtn} kind="send" />
+        </div>
+        <div
+          className="json-splitter"
+          role="separator"
+          aria-orientation="vertical"
+          title="드래그하여 너비 조절"
+          onPointerDown={(e) => bodyRef.current && startResize(e, bodyRef.current, 0, frac2, setFrac2)}
+        />
+        <div className="tl-col">
+          <div className="tl-col-head">
+            <span>RESP</span>
+            <span className="peer">← {row.sendSysId ?? "-"} · {fmtTsShort(row.respTm)}</span>
+          </div>
+          <JsonBlock raw={row.respMsgCtn} kind="resp" />
+        </div>
+      </div>
+      {row.errCd && (
+        <div className="tl-error" style={{ margin: "0 14px 10px" }}>
+          <code>{row.errCd}</code>
+          <span>{row.errDescCtn ?? "에러 상세가 기록되지 않았습니다."}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -284,6 +415,10 @@ export function TraceTimeline({ traceId, rows, loading }: {
   rows: TraceRow[];
   loading: boolean;
 }) {
+  const [frac3, setFrac3] = useState<number[]>([1, 1, 1]);
+  const [frac2, setFrac2] = useState<number[]>([1, 1]);
+  const startResize = useColResize();
+
   if (!traceId) {
     return (
       <div className="empty">
@@ -326,8 +461,8 @@ export function TraceTimeline({ traceId, rows, loading }: {
       <div className="timeline">
         {groups.map((g) =>
           g.rows.length === 1
-            ? <SingleCallCard key={g.layer} row={g.rows[0]} />
-            : <MultiCallCard key={g.layer} group={g} />
+            ? <SingleCallCard key={g.layer} row={g.rows[0]} frac3={frac3} setFrac3={setFrac3} startResize={startResize} />
+            : <MultiCallCard key={g.layer} group={g} frac2={frac2} setFrac2={setFrac2} startResize={startResize} />
         )}
       </div>
     </>

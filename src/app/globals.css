@@ -412,17 +412,41 @@ a:hover { text-decoration: underline; }
 /* single-call: 3-column layout (recv | send | resp) */
 .tl-body-3 {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: var(--c1, 1fr) auto var(--c2, 1fr) auto var(--c3, 1fr);
   gap: 0;
 }
-@container (max-width: 980px) { .tl-body-3 { grid-template-columns: 1fr; } }
+@container (max-width: 980px) {
+  .tl-body-3 { grid-template-columns: 1fr; }
+  .tl-body-3 > .json-splitter { display: none; }
+  .tl-body-3 > .tl-col:not(:first-child) { border-top: 1px solid var(--border); }
+}
 .tl-col {
   padding: 12px 14px;
   min-width: 0;
 }
-.tl-col + .tl-col { border-left: 1px solid var(--border); }
-@container (max-width: 980px) {
-  .tl-body-3 .tl-col + .tl-col { border-left: none; border-top: 1px solid var(--border); }
+
+/* json-column splitter (inside cards) */
+.json-splitter {
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  user-select: none;
+  touch-action: none;
+}
+.json-splitter::before {
+  content: "";
+  position: absolute;
+  top: 8px; bottom: 8px; left: 50%;
+  width: 1px;
+  background: var(--border);
+  transform: translateX(-0.5px);
+  transition: background .12s, width .12s;
+}
+.json-splitter:hover::before,
+.json-splitter.dragging::before {
+  width: 3px;
+  background: var(--accent);
 }
 
 /* multi-call layout */
@@ -464,18 +488,18 @@ a:hover { text-decoration: underline; }
 .tl-call-meta .dur-inline { color: var(--text-3); font-family: var(--mono); font-size: 12.5px; }
 .tl-call-body {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: var(--c1, 1fr) auto var(--c2, 1fr);
   gap: 0;
   border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
 }
-@container (max-width: 720px) { .tl-call-body { grid-template-columns: 1fr; } }
-.tl-call-body .tl-col { padding: 10px 12px; }
-.tl-call-body .tl-col + .tl-col { border-left: 1px solid var(--border); }
 @container (max-width: 720px) {
-  .tl-call-body .tl-col + .tl-col { border-left: none; border-top: 1px solid var(--border); }
+  .tl-call-body { grid-template-columns: 1fr; }
+  .tl-call-body > .json-splitter { display: none; }
+  .tl-call-body > .tl-col:not(:first-child) { border-top: 1px solid var(--border); }
 }
+.tl-call-body .tl-col { padding: 10px 12px; }
 
 .pill.xs { font-size: 11.5px; padding: 2px 8px; }
 .tl-col-head {

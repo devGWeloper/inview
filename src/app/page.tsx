@@ -127,7 +127,7 @@ export default function Page() {
       <header className="topbar">
         <div className="brand">
           <span className="logo" aria-hidden />
-          INVIEW
+          TraceX
           <span className="sub">· AI Action Trace</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

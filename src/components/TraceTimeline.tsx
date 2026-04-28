@@ -259,6 +259,7 @@ function SingleCallCard({ row, frac3, setFrac3, startResize }: {
           aria-orientation="vertical"
           title="드래그하여 너비 조절"
           onPointerDown={(e) => bodyRef.current && startResize(e, bodyRef.current, 0, frac3, setFrac3)}
+          onDoubleClick={() => setFrac3([1, 1, 1])}
         />
         <div className="tl-col">
           <div className="tl-col-head">
@@ -273,6 +274,7 @@ function SingleCallCard({ row, frac3, setFrac3, startResize }: {
           aria-orientation="vertical"
           title="드래그하여 너비 조절"
           onPointerDown={(e) => bodyRef.current && startResize(e, bodyRef.current, 1, frac3, setFrac3)}
+          onDoubleClick={() => setFrac3([1, 1, 1])}
         />
         <div className="tl-col">
           <div className="tl-col-head">
@@ -391,6 +393,7 @@ function CallItem({ row, ci, frac2, setFrac2, startResize }: {
           aria-orientation="vertical"
           title="드래그하여 너비 조절"
           onPointerDown={(e) => bodyRef.current && startResize(e, bodyRef.current, 0, frac2, setFrac2)}
+          onDoubleClick={() => setFrac2([1, 1])}
         />
         <div className="tl-col">
           <div className="tl-col-head">

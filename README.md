@@ -46,14 +46,30 @@ AI 액션 호출이 `CUBE → GAIA → MCP → ONEOIS → LEGACY` 5개 레이어
 
 > 즉 PARTIAL 은 "비정상" 이 아니라 **"OK 라고 단정할 만큼의 정보가 모이지 않은 상태"** 다. 실시간 진행 중인 트랜잭션도, 중간에 끊긴 트랜잭션도 모두 PARTIAL 로 묶인다.
 
-## 환경 변수
+## 설정 파일
 
-`.env.example` 참조. 핵심:
+설정은 프로젝트 루트의 YAML 파일로 관리합니다 (`src/lib/config.ts`).
 
-- `APP_ENV=dev|prd` — 어느 prefix 변수를 읽을지 (`DEV_*` vs `PRD_*`).
-- 레이어별 3개씩 × 5레이어 = 15개의 DB 변수 (`{ENV}_{LAYER}_DB_USER` / `_PASSWORD` / `_CONNECT_STRING`).
-- `USE_MOCK=true` 또는 **어느 레이어도 DB 설정이 완비되지 않은 경우** → mock 모드 (`src/lib/mock.ts`).
+| 파일 | 환경 |
+|---|---|
+| `config.dev.yml` | dev / local — 존재하면 우선 사용 |
+| `config.yml` | prd — `config.dev.yml` 이 없을 때 사용 |
+
+스키마:
+
+```yaml
+useMock: false
+layers:
+  CUBE:    { user: "...", password: "...", connectString: "host:1521/SVC" }
+  GAIA:    { user: "...", password: "...", connectString: "..." }
+  MCP:     { user: "...", password: "...", connectString: "..." }
+  ONEOIS:  { user: "...", password: "...", connectString: "..." }
+  LEGACY:  { user: "...", password: "...", connectString: "..." }
+```
+
+- `useMock: true` 또는 **어느 레이어도 DB 설정이 완비되지 않은 경우** → mock 모드 (`src/lib/mock.ts`).
 - 일부 레이어만 설정해도 동작한다. 설정된 레이어만 조회하고, 나머지는 빈 결과로 처리.
+- 두 yml 파일은 모두 `.gitignore` 처리되어 있다 (서버에서 직접 관리).
 
 ## 실행
 

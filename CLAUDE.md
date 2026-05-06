@@ -21,7 +21,7 @@ TraceX is a single-page **AI Action Transaction trace viewer** built on Next.js 
    - `GET /api/traces` — list view, returns per-trace summaries
    - `GET /api/traces/[traceId]` — detail view, returns the raw rows across layers
 2. Route handlers in `src/app/api/traces/` delegate to `src/lib/db.ts`.
-3. `db.ts` fans out **one query per layer** in parallel (`Promise.all` over `LAYER_ORDER`), each using its own connection config read from `${LAYER}_DB_USER` / `_PASSWORD` / `_CONNECT_STRING` env vars.
+3. `db.ts` fans out **one query per layer** in parallel (`Promise.all` over `LAYER_ORDER`), each using its own connection config read from the YAML loader in `src/lib/config.ts` (see "Config files" below).
 4. `/api/traces` groups rows by `TRACE_ID` and computes `allComplete` (requires all 5 layers with `SEND_COMPLT_YN='Y'`) and `hasError`. `lastSendTm` in `TraceSummary` is the max of all `sendTm` and `respTm` values.
 5. `TraceTimeline` groups rows by layer and renders them. Single-call layers show **recv | send | resp** in a 3-column layout; multi-call layers show the upstream recv once at the top, then numbered `Call #N` items each with a **send | resp** pair.
 
@@ -52,9 +52,13 @@ For layers that make multiple downstream calls in one trace (e.g. GAIA → MCP t
 
 `TraceTimeline.tsx` groups `TraceRow[]` by layer before rendering. `SingleCallCard` handles the `rows.length === 1` case (3-col). `MultiCallCard` handles `rows.length > 1`: it reads `recvMsgCtn` from the first row and renders each row's `send`/`resp` as a numbered call. The `Stepper` shows call count (`N calls`) in the subtitle when a layer has multiple rows.
 
+### Config files
+
+`src/lib/config.ts` loads YAML at startup (cached): if `config.dev.yml` exists it's used and `appEnv='dev'`, otherwise `config.yml` is used and `appEnv='prd'`. Both files are gitignored. The schema is `{ useMock: boolean, layers: { <LAYER>: { user, password, connectString } } }`. `loadConfig()` strips any layer entry missing one of the three credential fields, so partially-filled layers behave like "not configured".
+
 ### Mock vs. live mode
 
-`isMockMode()` in `src/lib/db.ts` returns true when `USE_MOCK=true` **or** when no layer has a complete DB config. Mock data lives in `src/lib/mock.ts` and includes:
+Mock mode is active when `useMock: true` in the active YAML **or** when no layer has a complete DB config. Mock data lives in `src/lib/mock.ts` and includes:
 - 5 single-call scenarios exercising success, mid-chain stop (`stopAt`), and error (`errorAt`) paths
 - 1 multi-call scenario (`TRC-20260420-0006`) where GAIA makes 2 MCP calls (WO search + EQ status)
 

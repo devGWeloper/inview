@@ -6,6 +6,8 @@ dist/
 .env
 .env.local
 .env.*.local
+config.yml
+config.dev.yml
 next-env.d.ts
 *.log
 .DS_Store

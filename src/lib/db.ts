@@ -1,17 +1,12 @@
 import { LAYER_ORDER, LayerKey, TraceFilter, TraceRow } from "./types";
 import { logger } from "./logger";
+import { AppEnv, LayerDbConfig, loadConfig } from "./config";
 
-export type AppEnv = "dev" | "prd";
+export type { AppEnv } from "./config";
 
 export function getAppEnv(): AppEnv {
-  return process.env.APP_ENV?.toLowerCase() === "prd" ? "prd" : "dev";
+  return loadConfig().appEnv;
 }
-
-type DbConfig = {
-  user: string;
-  password: string;
-  connectString: string;
-};
 
 let oracledbCached: typeof import("oracledb") | null = null;
 
@@ -28,15 +23,8 @@ async function getOracle(): Promise<typeof import("oracledb") | null> {
   }
 }
 
-function readConfig(layer: LayerKey): DbConfig | null {
-  const prefix = getAppEnv().toUpperCase(); // DEV | PRD
-  const e = (key: string) =>
-    process.env[`${prefix}_${layer}_${key}`] ?? process.env[`${layer}_${key}`];
-  const user = e("DB_USER");
-  const password = e("DB_PASSWORD");
-  const connectString = e("DB_CONNECT_STRING");
-  if (!user || !password || !connectString) return null;
-  return { user, password, connectString };
+function readConfig(layer: LayerKey): LayerDbConfig | null {
+  return loadConfig().layers[layer] ?? null;
 }
 
 export function connectedLayerCount(): number {

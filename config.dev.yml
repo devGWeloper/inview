@@ -1,0 +1,32 @@
+# ============================================================
+# config.dev.yml — 개발/로컬 환경 설정
+#
+# 이 파일이 존재하면 앱은 dev 모드로 동작합니다 (config.yml 무시).
+# prd 배포에서는 deploy.sh 가 이 파일을 제거합니다.
+# ============================================================
+
+layers:
+  CUBE:
+    user: ""
+    password: ""
+    connectString: ""
+
+  GAIA:
+    user: ""
+    password: ""
+    connectString: ""
+
+  MCP:
+    user: ""
+    password: ""
+    connectString: ""
+
+  ONEOIS:
+    user: ""
+    password: ""
+    connectString: ""
+
+  LEGACY:
+    user: ""
+    password: ""
+    connectString: ""

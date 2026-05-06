@@ -2,9 +2,13 @@
 # ============================================================
 #  deploy.sh — TraceX 자동 배포 스크립트
 #  사용법:
-#    ./deploy.sh           # 기본: 서버에 config.dev.yml 이 있으면 dev, 없으면 prd
-#    ./deploy.sh dev       # 강제로 dev 브랜치(main) 배포
-#    ./deploy.sh prd       # 강제로 prd 브랜치 배포
+#    ./deploy.sh           # 기본: prd
+#    ./deploy.sh dev       # dev 브랜치(main) 배포
+#    ./deploy.sh prd       # prd 브랜치 배포
+#
+#  yml 설정은 리포에 함께 커밋되어 있습니다:
+#    - dev 배포: 두 yml 모두 유지 → 로더가 config.dev.yml 사용
+#    - prd 배포: config.dev.yml 을 삭제하여 config.yml 만 남김
 # ============================================================
 
 set -e
@@ -28,14 +32,7 @@ log() {
 }
 
 # ── 0. 배포 환경/브랜치 결정 ──────────────────────────────
-TARGET_ENV="${1:-}"
-if [ -z "$TARGET_ENV" ]; then
-  if [ -f "$DEPLOY_DIR/config.dev.yml" ]; then
-    TARGET_ENV="dev"
-  else
-    TARGET_ENV="prd"
-  fi
-fi
+TARGET_ENV="${1:-prd}"
 
 case "$TARGET_ENV" in
   dev)  GIT_BRANCH="$DEV_BRANCH" ;;
@@ -75,14 +72,17 @@ else
   log "  clone 완료 ($GIT_BRANCH @ $(git rev-parse --short HEAD))"
 fi
 
-# ── 3. 설정 파일 확인 ─────────────────────────────────────
-# 설정은 git 에 포함되지 않으므로 서버에서 직접 관리합니다.
-#   dev → $DEPLOY_DIR/config.dev.yml
-#   prd → $DEPLOY_DIR/config.yml
-if [ "$TARGET_ENV" = "dev" ]; then
-  CONFIG_FILE="$DEPLOY_DIR/config.dev.yml"
-else
+# ── 3. 환경별 설정 파일 정리 ──────────────────────────────
+# 두 yml 은 리포에 모두 들어있다. prd 배포는 dev yml 을 제거해
+# 로더가 config.yml 을 선택하도록 한다.
+if [ "$TARGET_ENV" = "prd" ]; then
+  if [ -f "$DEPLOY_DIR/config.dev.yml" ]; then
+    rm -f "$DEPLOY_DIR/config.dev.yml"
+    log "  config.dev.yml 제거 (prd 모드 강제)"
+  fi
   CONFIG_FILE="$DEPLOY_DIR/config.yml"
+else
+  CONFIG_FILE="$DEPLOY_DIR/config.dev.yml"
 fi
 
 if [ ! -f "$CONFIG_FILE" ]; then

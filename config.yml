@@ -1,0 +1,37 @@
+# ============================================================
+# config.yml — 운영(prd) 환경 설정
+#
+# 로딩 규칙 (src/lib/config.ts)
+#   - config.dev.yml 이 있으면 dev 로 동작
+#   - 없으면 이 파일이 사용되며 appEnv = prd
+#   prd 배포에서는 deploy.sh 가 config.dev.yml 을 제거합니다.
+#
+# connectString 예: host:port/service  ex) 10.0.0.10:1521/XEPDB1
+# 일부 레이어만 채워도 동작합니다 (채운 레이어만 조회).
+# ============================================================
+
+layers:
+  CUBE:
+    user: ""
+    password: ""
+    connectString: ""
+
+  GAIA:
+    user: ""
+    password: ""
+    connectString: ""
+
+  MCP:
+    user: ""
+    password: ""
+    connectString: ""
+
+  ONEOIS:
+    user: ""
+    password: ""
+    connectString: ""
+
+  LEGACY:
+    user: ""
+    password: ""
+    connectString: ""

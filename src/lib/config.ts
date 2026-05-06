@@ -19,13 +19,11 @@ interface RawLayer {
 }
 
 interface RawConfig {
-  useMock?: boolean;
   layers?: Partial<Record<LayerKey, RawLayer>>;
 }
 
 interface AppConfig {
   appEnv: AppEnv;
-  useMock: boolean;
   layers: Partial<Record<LayerKey, LayerDbConfig>>;
   sourceFile: string | null;
 }
@@ -80,21 +78,17 @@ export function loadConfig(): AppConfig {
     appEnv = "dev";
     sourceFile = null;
     raw = null;
-    logger.warn("no config file found; falling back to mock", {
-      tried: [devPath, prdPath],
-    });
+    logger.warn("no config file found", { tried: [devPath, prdPath] });
   }
 
   cached = {
     appEnv,
-    useMock: raw?.useMock === true,
     layers: normalizeLayers(raw),
     sourceFile,
   };
   logger.info("config loaded", {
     appEnv: cached.appEnv,
     sourceFile: cached.sourceFile,
-    useMock: cached.useMock,
     layers: Object.keys(cached.layers),
   });
   return cached;

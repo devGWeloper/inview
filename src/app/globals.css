@@ -85,9 +85,7 @@ a:hover { text-decoration: underline; }
 .env-badge .dot {
   width: 7px; height: 7px; border-radius: 50%;
 }
-.env-badge.mock  .dot { background: var(--warn); }
 .env-badge.live  .dot { background: var(--ok); }
-.env-badge.mock  { color: var(--warn); background: var(--warn-soft); border-color: #f1d6ba; }
 .env-badge.live  { color: var(--ok);   background: var(--ok-soft);   border-color: #bfe3ce; }
 .env-badge.dev   { color: #2563eb; background: #eff6ff; border-color: #bfdbfe; font-weight: 600; letter-spacing: .04em; }
 .env-badge.prd   { color: #b45309; background: #fffbeb; border-color: #fde68a; font-weight: 600; letter-spacing: .04em; }

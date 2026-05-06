@@ -58,7 +58,6 @@ AI 액션 호출이 `CUBE → GAIA → MCP → ONEOIS → LEGACY` 5개 레이어
 스키마:
 
 ```yaml
-useMock: false
 layers:
   CUBE:    { user: "...", password: "...", connectString: "host:1521/SVC" }
   GAIA:    { user: "...", password: "...", connectString: "..." }
@@ -67,7 +66,6 @@ layers:
   LEGACY:  { user: "...", password: "...", connectString: "..." }
 ```
 
-- `useMock: true` 또는 **어느 레이어도 DB 설정이 완비되지 않은 경우** → mock 모드 (`src/lib/mock.ts`).
 - 일부 레이어만 설정해도 동작한다. 설정된 레이어만 조회하고, 나머지는 빈 결과로 처리.
 - 두 yml 파일은 모두 `.gitignore` 처리되어 있다 (서버에서 직접 관리).
 
@@ -80,7 +78,7 @@ npm run build && npm run start
 npm run lint
 ```
 
-Oracle 네이티브 드라이버(`oracledb`)는 lazy import 로 로드되며 실패하면 자동으로 mock 으로 폴백한다 — Instant Client 없는 머신에서도 앱은 뜬다.
+Oracle 네이티브 드라이버(`oracledb`)는 lazy import 로 로드되며, 실패하면 해당 레이어 조회는 빈 결과를 반환한다 — Instant Client 없는 머신에서도 앱은 뜬다.
 
 ## 스택
 
@@ -98,8 +96,8 @@ src/
     api/traces/[traceId]/    # GET /api/traces/:id
   components/TraceTimeline.tsx
   lib/
-    db.ts                    # 5레이어 병렬 조회 + 환경별 config
+    config.ts                # config.yml / config.dev.yml 로더
+    db.ts                    # 5레이어 병렬 조회
     types.ts                 # LAYER_ORDER, TraceRow, TraceSummary …
-    mock.ts                  # 5 single + 1 multi-call 시나리오
 sql/                         # DDL + 3-phase DML 템플릿
 ```

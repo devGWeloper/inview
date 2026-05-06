@@ -54,22 +54,12 @@ For layers that make multiple downstream calls in one trace (e.g. GAIA → MCP t
 
 ### Config files
 
-`src/lib/config.ts` loads YAML at startup (cached): if `config.dev.yml` exists it's used and `appEnv='dev'`, otherwise `config.yml` is used and `appEnv='prd'`. Both files are gitignored. The schema is `{ useMock: boolean, layers: { <LAYER>: { user, password, connectString } } }`. `loadConfig()` strips any layer entry missing one of the three credential fields, so partially-filled layers behave like "not configured".
-
-### Mock vs. live mode
-
-Mock mode is active when `useMock: true` in the active YAML **or** when no layer has a complete DB config. Mock data lives in `src/lib/mock.ts` and includes:
-- 5 single-call scenarios exercising success, mid-chain stop (`stopAt`), and error (`errorAt`) paths
-- 1 multi-call scenario (`TRC-20260420-0006`) where GAIA makes 2 MCP calls (WO search + EQ status)
-
-Every data-fetching code path must keep working in mock mode — do not add logic that assumes a live DB.
-
-The UI surfaces the mode via a `usedMock` flag returned from `/api/traces` (rendered as the `MOCK DATA` vs `CONNECTED · 5 LAYERS` badge in the topbar).
+`src/lib/config.ts` loads YAML at startup (cached): if `config.dev.yml` exists it's used and `appEnv='dev'`, otherwise `config.yml` is used and `appEnv='prd'`. Both files are gitignored. The schema is `{ layers: { <LAYER>: { user, password, connectString } } }`. `loadConfig()` strips any layer entry missing one of the three credential fields, so partially-filled layers behave like "not configured" and return empty rows from `queryLayer`.
 
 ### Oracle integration notes
 
 - `oracledb` is listed in `next.config.mjs` under `experimental.serverComponentsExternalPackages` — it must not be bundled.
-- Import is done lazily via `await import("oracledb")` inside `getOracle()` and **swallows the error** if the native driver is unavailable, falling back to mock. Keep this pattern when touching DB code so the app still runs on machines without the Oracle Instant Client.
+- Import is done lazily via `await import("oracledb")` inside `getOracle()` and **swallows the error** if the native driver is unavailable, returning `null` so the layer query yields an empty result. Keep this pattern when touching DB code so the app still runs on machines without the Oracle Instant Client.
 - Timestamps are selected with `TO_CHAR(..., 'YYYY-MM-DD"T"HH24:MI:SS.FF3')` so that the app receives ISO-like strings and never has to deal with Oracle date objects.
 - The SQL assembles a `WHERE` clause from `TraceFilter` using bind variables — preserve the bind-variable style when adding filters.
 - The physical column for the outbound message is `SEND_MSG_CTN` (not `SEND_MSG_TM` — the old name was a legacy spec artifact that has since been corrected).

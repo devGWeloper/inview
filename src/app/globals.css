@@ -274,6 +274,26 @@ a:hover { text-decoration: underline; }
 .trace-list td.mono { font-family: var(--mono); font-size: 13.5px; color: var(--text-2); }
 .trace-list td.strong { font-weight: 500; color: var(--text); }
 
+/* layer presence dots (list 컬럼) */
+.layer-dots {
+  display: inline-flex; align-items: center; gap: 4px;
+  vertical-align: middle;
+}
+.layer-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  display: inline-block;
+  transition: background .12s, border-color .12s;
+}
+.layer-dot.on { /* color는 inline style 로 주입 */ }
+.layer-dots-count {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
 /* ---------------- status pill ---------------- */
 .pill {
   display: inline-flex; align-items: center; gap: 6px;
@@ -327,38 +347,75 @@ a:hover { text-decoration: underline; }
 .detail-meta .cell .v { color: var(--text); font-family: var(--mono); }
 .detail-meta .cell .v.sans { font-family: var(--sans); }
 
-/* stepper */
+/* stepper — grid-template-columns 는 컴포넌트에서 LAYER_ORDER.length 로 inline 주입 */
 .stepper {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
   gap: 0;
   margin-top: 14px;
 }
 .step {
   position: relative;
-  padding: 10px 10px 10px 26px;
+  padding: 10px 12px 10px 14px;
   border: 1px solid var(--border);
   background: var(--surface);
   font-size: 13px;
   color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 .step:first-child { border-radius: 6px 0 0 6px; }
 .step:last-child  { border-radius: 0 6px 6px 0; }
 .step + .step { border-left: none; }
-.step .idx {
-  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
-  width: 9px; height: 9px; border-radius: 50%;
-  background: var(--border-strong);
+.step .step-num {
+  flex: 0 0 auto;
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 12px; font-weight: 700;
+  line-height: 1;
 }
-.step .name { font-weight: 600; color: var(--text); display: block; font-size: 13.5px; }
-.step .sub  { color: var(--text-3); font-size: 12px; font-family: var(--mono); }
-.step.ok      .idx { background: var(--ok); }
-.step.err     .idx { background: var(--err); }
-.step.warn    .idx { background: var(--warn); }
-.step.ok      { background: var(--ok-soft); }
-.step.err     { background: var(--err-soft); }
-.step.warn    { background: var(--warn-soft); }
-.step.skip    { opacity: 0.55; }
+.step .step-body {
+  display: flex; flex-direction: column; gap: 3px;
+  min-width: 0; flex: 1;
+}
+.step .step-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  min-width: 0;
+}
+.step .name {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-weight: 600; color: var(--text); font-size: 13.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.step .layer-chip {
+  width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex: 0 0 auto;
+}
+.step .step-sub {
+  display: flex; align-items: center; gap: 8px;
+  color: var(--text-3); font-size: 12px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.step .step-sub .mono { font-family: var(--mono); }
+.step .step-sub .muted { font-style: italic; }
+.step .step-calls {
+  font-size: 11px;
+  padding: 1px 6px; border-radius: 99px;
+  background: var(--accent-soft); color: var(--accent);
+  border: 1px solid #c3d4fc; font-weight: 600;
+}
+.step.ok    { background: var(--ok-soft); }
+.step.ok    .step-num { background: var(--ok); border-color: var(--ok); color: #fff; }
+.step.err   { background: var(--err-soft); }
+.step.err   .step-num { background: var(--err); border-color: var(--err); color: #fff; }
+.step.warn  { background: var(--warn-soft); }
+.step.warn  .step-num { background: var(--warn); border-color: var(--warn); color: #fff; }
+.step.skip  { opacity: 0.55; }
 
 /* timeline nodes */
 .timeline { padding: 16px; }

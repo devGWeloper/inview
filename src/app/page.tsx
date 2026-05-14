@@ -3,7 +3,7 @@
 import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { TraceTimeline } from "@/components/TraceTimeline";
 import {
-  LAYER_ORDER,
+  LAYER_COLOR, LAYER_ORDER,
   TraceFilter, TraceListResponse, TraceDetailResponse, TraceSummary, TraceRow
 } from "@/lib/types";
 
@@ -231,7 +231,25 @@ export default function Page() {
                     <td className="mono strong">{s.traceId}</td>
                     <td>{s.userId ?? "—"}</td>
                     <td className="mono">{fmtTs(s.firstRecvTm)}</td>
-                    <td>{s.layerCount} / {LAYER_ORDER.length}</td>
+                    <td>
+                      <span
+                        className="layer-dots"
+                        title={`${s.layerCount} / ${LAYER_ORDER.length} layers · ${s.layers.join(", ") || "—"}`}
+                      >
+                        {LAYER_ORDER.map((l) => {
+                          const present = s.layers.includes(l);
+                          return (
+                            <span
+                              key={l}
+                              className={"layer-dot" + (present ? " on" : "")}
+                              style={present ? { background: LAYER_COLOR[l], borderColor: LAYER_COLOR[l] } : undefined}
+                              aria-label={`${l} ${present ? "present" : "missing"}`}
+                            />
+                          );
+                        })}
+                        <span className="layer-dots-count">{s.layerCount}/{LAYER_ORDER.length}</span>
+                      </span>
+                    </td>
                     <td>
                       {s.status === "error"
                         ? <span className="pill err"><span className="dot" />ERROR</span>

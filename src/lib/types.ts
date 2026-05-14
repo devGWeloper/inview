@@ -55,6 +55,8 @@ export interface TraceSummary {
   firstRecvTm: string | null;
   lastSendTm: string | null;
   layerCount: number;
+  /** 행이 존재하는 레이어 키 목록 (목록 패널의 dot 인디케이터용) */
+  layers: LayerKey[];
   status: TraceStatus;
   allComplete: boolean;
 }

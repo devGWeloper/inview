@@ -44,6 +44,7 @@ function summarize(rows: TraceRow[]): TraceSummary[] {
       firstRecvTm: recvTimes[0] ?? null,
       lastSendTm: sendTimes.length ? sendTimes[sendTimes.length - 1] : null,
       layerCount: layerSet.size,
+      layers: LAYER_ORDER.filter((l) => layerSet.has(l)),
       status: classify(list, allComplete),
       allComplete
     });

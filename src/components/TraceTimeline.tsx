@@ -230,25 +230,44 @@ function groupStatus(rows: TraceRow[]): "ok" | "err" | "warn" | "skip" {
 
 function Stepper({ groups }: { groups: LayerGroup[] }) {
   const byLayer = Object.fromEntries(groups.map((g) => [g.layer, g])) as Record<LayerKey, LayerGroup | undefined>;
+  const gridStyle: CSSProperties = { gridTemplateColumns: `repeat(${LAYER_ORDER.length}, minmax(0, 1fr))` };
 
   return (
-    <div className="stepper">
-      {LAYER_ORDER.map((l) => {
+    <div className="stepper" style={gridStyle}>
+      {LAYER_ORDER.map((l, i) => {
         const g = byLayer[l];
         const status = groupStatus(g?.rows ?? []);
         const row = g?.rows[0];
         const callCount = g?.rows.length ?? 0;
+        const statusLabel = status === "err" ? "ERR" : status === "ok" ? "OK" : status === "warn" ? "WAIT" : "—";
         return (
           <div key={l} className={`step ${status}`}>
-            <span className="idx" />
-            <span className="name">{l}</span>
-            <span className="sub">
-              {!row ? "—" : status === "err"
-                ? `err · ${row.errCd ?? "-"}`
-                : callCount > 1
-                ? `${callCount} calls · ${fmtTsShort(row.recvTm)}`
-                : fmtTsShort(row.recvTm)}
-            </span>
+            <span className="step-num">{i + 1}</span>
+            <div className="step-body">
+              <div className="step-top">
+                <span className="name">
+                  <span className="layer-chip" style={{ background: LAYER_COLOR[l] }} />
+                  {l}
+                </span>
+                {status !== "skip" && (
+                  <span className={`pill xs ${status === "warn" ? "warn" : status === "err" ? "err" : "ok"}`}>
+                    {statusLabel}
+                  </span>
+                )}
+              </div>
+              <div className="step-sub">
+                {!row ? (
+                  <span className="muted">기록 없음</span>
+                ) : status === "err" ? (
+                  <span className="mono">{row.errCd ?? "-"}</span>
+                ) : (
+                  <>
+                    <span className="mono">{fmtTsShort(row.recvTm)}</span>
+                    {callCount > 1 && <span className="step-calls">{callCount} calls</span>}
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         );
       })}
@@ -499,7 +518,6 @@ export function TraceTimeline({ traceId, rows, loading }: {
           <div className="cell"><span className="k">First Recv</span><span className="v">{fmtTs(first)}</span></div>
           <div className="cell"><span className="k">Last Activity</span><span className="v">{fmtTs(last)}</span></div>
           <div className="cell"><span className="k">Total Latency</span><span className="v">{totalLatency}</span></div>
-          <div className="cell"><span className="k">Layers</span><span className="v">{groups.length} / {LAYER_ORDER.length}</span></div>
         </div>
         <Stepper groups={groups} />
       </div>

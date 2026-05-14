@@ -2,13 +2,15 @@
 
 **AI Action Transaction Trace Integrated Viewer**
 
-AI 액션 호출이 `CUBE → GAIA → MCP → ONEOIS → LEGACY` 5개 레이어를 거쳐 흐를 때, 각 레이어가 자기 Oracle DB의 `BIZ_AIACTIONTXN_HIS` 테이블에 남기는 이력을 `TRACE_ID` 기준으로 합쳐 한 화면에서 보여주는 단일 페이지 뷰어.
+AI 액션 호출이 `CUBE → GAIA → MCP → ONEOIS` 레이어를 거쳐 흐를 때, 각 레이어가 자기 Oracle DB의 `BIZ_AIACTIONTXN_HIS` 테이블에 남기는 이력을 `TRACE_ID` 기준으로 합쳐 한 화면에서 보여주는 단일 페이지 뷰어.
+
+> 레이어 구성은 `src/lib/types.ts` 의 `LAYERS` 배열 한 곳에서만 정의된다. 레이어 추가/삭제/순서·라벨·색상 변경은 이 배열만 수정하면 화면, API, 스텝퍼, 색상이 모두 자동으로 따라간다 (+ `config.yml` / `config.dev.yml` 에 동일 key 로 접속 정보 추가).
 
 ---
 
 ## 무엇을 하는 앱인가
 
-- 5개 레이어 DB에 **병렬로 동시 조회**하여 한 트랜잭션의 전 구간을 재구성한다.
+- 모든 레이어 DB에 **병렬로 동시 조회**하여 한 트랜잭션의 전 구간을 재구성한다.
 - 좌측 패널: TRACE 목록 (필터 = TRACE_ID / USER_ID / 기간 / 오류만).
 - 우측 패널: 선택한 TRACE의 레이어별 타임라인.
   - 단일 호출 레이어 → `recv | send | resp` 3컬럼 카드.
@@ -34,15 +36,17 @@ AI 액션 호출이 `CUBE → GAIA → MCP → ONEOIS → LEGACY` 5개 레이어
 
 | 뱃지 | 조건 | 의미 |
 |---|---|---|
-| **OK** (초록) | 5개 레이어 모두 행이 있고 + 모든 행의 `SEND_COMPLT_YN='Y'` + 오류 없음 | 5단 전 구간 왕복 완료 |
+| **OK** (초록) | 정의된 모든 레이어에 행이 있고 + 모든 행의 `SEND_COMPLT_YN='Y'` + 오류 없음 | 전 구간 왕복 완료 |
 | **PARTIAL** (노랑) | OK 도 ERROR 도 아닌 모든 경우 | **불완전 상태** — 아래 케이스 중 하나 |
 | **ERROR** (빨강) | 어떤 행이든 `ERR_CD` 가 채워져 있음 | 레이어 어디선가 오류 발생 |
 
+(여기서 "정의된 모든 레이어" = `LAYERS.length`, 즉 `src/lib/types.ts` 의 `LAYERS` 배열 길이)
+
 ### PARTIAL 이 뜨는 대표적 상황
 
-1. **호출이 중간 레이어까지만 도달** — 예: CUBE → GAIA 까지만 흐르고 MCP/ONEOIS/LEGACY 행이 아예 없음 (`layerCount < 5`).
+1. **호출이 중간 레이어까지만 도달** — 예: CUBE → GAIA 까지만 흐르고 그 뒤 레이어 행이 아예 없음 (`layerCount < LAYERS.length`).
 2. **응답을 아직 못 받음** — 행은 전부 있지만 일부 행의 `SEND_COMPLT_YN='N'` (= 보냈는데 응답 미수신, 진행 중 또는 hang).
-3. **5개 레이어 DB 중 일부만 연결됨** — 연결 안 된 레이어의 데이터는 가져올 수 없으니 자연스럽게 `layerCount` 가 5 미만이 되어 PARTIAL 로 보임. 상단 `CONNECTED · N LAYERS` 뱃지로 확인.
+3. **레이어 DB 중 일부만 연결됨** — 연결 안 된 레이어의 데이터는 가져올 수 없으니 자연스럽게 `layerCount` 가 모자라 PARTIAL 로 보임. 상단 `CONNECTED · N LAYERS` 뱃지로 확인.
 
 > 즉 PARTIAL 은 "비정상" 이 아니라 **"OK 라고 단정할 만큼의 정보가 모이지 않은 상태"** 다. 실시간 진행 중인 트랜잭션도, 중간에 끊긴 트랜잭션도 모두 PARTIAL 로 묶인다.
 
@@ -63,8 +67,9 @@ layers:
   GAIA:    { user: "...", password: "...", connectString: "..." }
   MCP:     { user: "...", password: "...", connectString: "..." }
   ONEOIS:  { user: "...", password: "...", connectString: "..." }
-  LEGACY:  { user: "...", password: "...", connectString: "..." }
 ```
+
+키는 `src/lib/types.ts` 의 `LAYERS[*].key` 와 동일해야 한다. 새 레이어를 추가하려면 `LAYERS` 배열에 한 줄 추가하고 yml 에도 같은 key 로 접속 정보를 추가하면 된다.
 
 - 일부 레이어만 설정해도 동작한다. 설정된 레이어만 조회하고, 나머지는 빈 결과로 처리.
 - 두 yml 파일은 리포에 함께 커밋된다. prd 배포 시 `deploy.sh` 가 `config.dev.yml` 을 제거하여 `config.yml` 만 남도록 처리한다.
@@ -97,7 +102,7 @@ src/
   components/TraceTimeline.tsx
   lib/
     config.ts                # config.yml / config.dev.yml 로더
-    db.ts                    # 5레이어 병렬 조회
-    types.ts                 # LAYER_ORDER, TraceRow, TraceSummary …
+    db.ts                    # LAYERS 기준 병렬 조회
+    types.ts                 # LAYERS (단일 소스), LayerKey, TraceRow …
 sql/                         # DDL + 3-phase DML 템플릿
 ```

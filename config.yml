@@ -30,8 +30,3 @@ layers:
     user: ""
     password: ""
     connectString: ""
-
-  LEGACY:
-    user: ""
-    password: ""
-    connectString: ""

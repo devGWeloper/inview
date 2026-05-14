@@ -13,7 +13,7 @@ There is no test runner configured.
 
 ## Big picture
 
-TraceX is a single-page **AI Action Transaction trace viewer** built on Next.js 14 (App Router, React 18, TypeScript strict). It reads the `BIZ_AIACTIONTXN_HIS` table that is replicated across **five Oracle databases** — one per layer in the request path: `CUBE → GAIA → MCP → ONEOIS → LEGACY` (see `LAYER_ORDER` in `src/lib/types.ts` and `sql/create_tables.sql`). The UI reconstructs a single end-to-end trace by joining rows from all five layers on `TRACE_ID`.
+TraceX is a single-page **AI Action Transaction trace viewer** built on Next.js 14 (App Router, React 18, TypeScript strict). It reads the `BIZ_AIACTIONTXN_HIS` table that is replicated across one Oracle database per layer in the request path. The current path is `CUBE → GAIA → MCP → ONEOIS`, but the layer set is **data-driven**: the `LAYERS` array at the top of `src/lib/types.ts` is the single source of truth. Everything else (`LayerKey`, `LAYER_ORDER`, `LAYER_LABEL`, `LAYER_COLOR`, the API’s `allComplete` check, the stepper, the `/N` denominator, the inline tag colors) is derived from it. Adding/removing/reordering a layer = edit that array + add/remove the matching block in `config.yml` / `config.dev.yml`. The UI reconstructs a single end-to-end trace by joining rows from all configured layers on `TRACE_ID`.
 
 ### Data flow
 
@@ -22,7 +22,7 @@ TraceX is a single-page **AI Action Transaction trace viewer** built on Next.js 
    - `GET /api/traces/[traceId]` — detail view, returns the raw rows across layers
 2. Route handlers in `src/app/api/traces/` delegate to `src/lib/db.ts`.
 3. `db.ts` fans out **one query per layer** in parallel (`Promise.all` over `LAYER_ORDER`), each using its own connection config read from the YAML loader in `src/lib/config.ts` (see "Config files" below).
-4. `/api/traces` groups rows by `TRACE_ID` and computes `allComplete` (requires all 5 layers with `SEND_COMPLT_YN='Y'`) and `hasError`. `lastSendTm` in `TraceSummary` is the max of all `sendTm` and `respTm` values.
+4. `/api/traces` groups rows by `TRACE_ID` and computes `allComplete` (requires `layerSet.size === LAYER_ORDER.length` and every row `SEND_COMPLT_YN='Y'`) and `hasError`. `lastSendTm` in `TraceSummary` is the max of all `sendTm` and `respTm` values.
 5. `TraceTimeline` groups rows by layer and renders them. Single-call layers show **recv | send | resp** in a 3-column layout; multi-call layers show the upstream recv once at the top, then numbered `Call #N` items each with a **send | resp** pair.
 
 ### Row lifecycle — 3-phase write pattern

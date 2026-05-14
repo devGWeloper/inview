@@ -1,7 +1,7 @@
 "use client";
 
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
-import { LAYER_LABEL, LAYER_ORDER, LayerKey, TraceRow } from "@/lib/types";
+import { LAYER_COLOR, LAYER_LABEL, LAYER_ORDER, LayerKey, TraceRow } from "@/lib/types";
 
 const COL_MIN_FR = 0.25;
 const SPLITTER_PX = 6;
@@ -128,11 +128,57 @@ type JsonKind = "recv" | "send" | "resp";
 
 const KIND_LABEL: Record<JsonKind, string> = { recv: "RECV", send: "SEND", resp: "RESP" };
 
+function showToast(message: string) {
+  if (typeof document === "undefined") return;
+  const el = document.createElement("div");
+  el.className = "app-toast";
+  el.textContent = message;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add("show"));
+  window.setTimeout(() => {
+    el.classList.remove("show");
+    window.setTimeout(() => el.remove(), 200);
+  }, 1200);
+}
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  if (typeof navigator !== "undefined" && navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch { /* fallback below */ }
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "0";
+    ta.style.left = "0";
+    ta.style.opacity = "0";
+    ta.style.pointerEvents = "none";
+    document.body.appendChild(ta);
+    const sel = document.getSelection();
+    const prevRange = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    if (prevRange && sel) {
+      sel.removeAllRanges();
+      sel.addRange(prevRange);
+    }
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 function JsonBlock({ raw, kind }: { raw: string | null; kind: JsonKind }) {
   const { ok, text, lines } = useMemo(() => tryFormat(raw), [raw]);
   const long = lines > 14 || text.length > 700;
   const [expanded, setExpanded] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   if (!raw) {
     return (
@@ -148,11 +194,8 @@ function JsonBlock({ raw, kind }: { raw: string | null; kind: JsonKind }) {
   const html = ok ? highlightJson(text) : escapeHtml(text);
 
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(raw);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } catch { /* noop */ }
+    const success = await copyToClipboard(ok ? text : raw);
+    if (success) showToast("클립보드에 복사되었습니다");
   };
 
   return (
@@ -165,7 +208,7 @@ function JsonBlock({ raw, kind }: { raw: string | null; kind: JsonKind }) {
               {expanded ? "접기" : "펼치기"}
             </button>
           )}
-          <button className="btn ghost xs" onClick={copy}>{copied ? "복사됨" : "복사"}</button>
+          <button className="btn ghost xs" onClick={copy}>복사</button>
         </span>
       </div>
       <pre
@@ -230,7 +273,7 @@ function SingleCallCard({ row, frac3, setFrac3, startResize }: {
     <div className="tl-card">
       <div className="tl-card-head">
         <div className="left">
-          <span className={`tl-layer-tag ${row.layer}`}>{row.layer}</span>
+          <span className="tl-layer-tag" style={{ background: LAYER_COLOR[row.layer] }}>{row.layer}</span>
           <span className="route" title={LAYER_LABEL[row.layer]}>
             <span className="hop">{row.recvSysId ?? "-"}</span>
             <span className="arrow">→</span>
@@ -316,7 +359,7 @@ function MultiCallCard({ group, frac2, setFrac2, startResize }: {
     <div className="tl-card">
       <div className="tl-card-head">
         <div className="left">
-          <span className={`tl-layer-tag ${layer}`}>{layer}</span>
+          <span className="tl-layer-tag" style={{ background: LAYER_COLOR[layer] }}>{layer}</span>
           <span className="route" title={LAYER_LABEL[layer]}>
             <span className="hop">{firstRow.recvSysId ?? "-"}</span>
             <span className="arrow">→</span>
@@ -426,7 +469,7 @@ export function TraceTimeline({ traceId, rows, loading }: {
     return (
       <div className="empty">
         좌측 TRACE 목록에서 항목을 선택하면<br />
-        전체 레이어(CUBE → GAIA → MCP → ONEOIS → LEGACY) 송수신 내역이 표시됩니다.
+        전체 레이어({LAYER_ORDER.join(" → ")}) 송수신 내역이 표시됩니다.
       </div>
     );
   }
@@ -456,7 +499,7 @@ export function TraceTimeline({ traceId, rows, loading }: {
           <div className="cell"><span className="k">First Recv</span><span className="v">{fmtTs(first)}</span></div>
           <div className="cell"><span className="k">Last Activity</span><span className="v">{fmtTs(last)}</span></div>
           <div className="cell"><span className="k">Total Latency</span><span className="v">{totalLatency}</span></div>
-          <div className="cell"><span className="k">Layers</span><span className="v">{groups.length} / 5</span></div>
+          <div className="cell"><span className="k">Layers</span><span className="v">{groups.length} / {LAYER_ORDER.length}</span></div>
         </div>
         <Stepper groups={groups} />
       </div>

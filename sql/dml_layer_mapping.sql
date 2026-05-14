@@ -1,11 +1,15 @@
 -- ============================================================================
 -- 레이어별 주입값 레퍼런스
 --
---   흐름:  CUBE → GAIA → MCP → ONEOIS → LEGACY
+--   흐름:  CUBE → GAIA → MCP → ONEOIS
 --
 --   각 앱의 자기 Oracle DB 에 기록할 때 :recv_sys_id / :send_sys_id 에
 --   넣어야 하는 값을 정리한다. SYS_ID 는 보통 RECV_SYS_ID 와 동일
 --   (= 기록 주체 = 이 앱).
+--
+--   ※ 레이어 정의의 단일 소스는 src/lib/types.ts 의 LAYERS 배열이다.
+--     레이어를 추가/삭제/순서변경 할 때는 그 배열 + config.yml(.dev.yml)
+--     만 수정하면 된다.
 -- ============================================================================
 --
 --  레이어   | RECV_SYS_ID | SEND_SYS_ID | 비고
@@ -13,8 +17,7 @@
 --  CUBE     | CUBE        | GAIA        | 최초 진입점. TRACE_ID 신규 발급
 --  GAIA     | GAIA        | MCP         |
 --  MCP      | MCP         | ONEOIS      |
---  ONEOIS   | ONEOIS      | LEGACY      |
---  LEGACY   | LEGACY      | END         | 종단. 응답 후 SEND_COMPLT_YN='Y'
+--  ONEOIS   | ONEOIS      | END         | 종단. 응답 후 SEND_COMPLT_YN='Y'
 --
 -- ============================================================================
 -- 샘플 실행 (CUBE 레이어 DB 에서)

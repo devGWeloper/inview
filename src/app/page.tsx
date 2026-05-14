@@ -3,6 +3,7 @@
 import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { TraceTimeline } from "@/components/TraceTimeline";
 import {
+  LAYER_ORDER,
   TraceFilter, TraceListResponse, TraceDetailResponse, TraceSummary, TraceRow
 } from "@/lib/types";
 
@@ -120,7 +121,8 @@ export default function Page() {
     loadList(DEFAULT_FILTER);
   };
 
-  const errorCount = summaries.filter((s) => s.hasError).length;
+  const errorCount = summaries.filter((s) => s.status === "error").length;
+  const failCount = summaries.filter((s) => s.status === "fail").length;
 
   return (
     <div className="app">
@@ -147,6 +149,7 @@ export default function Page() {
             <span className="meta">
               {summaries.length.toLocaleString()} 건
               {errorCount > 0 && <>  ·  <span style={{ color: "var(--err)" }}>오류 {errorCount}</span></>}
+              {failCount > 0 && <>  ·  <span style={{ color: "var(--warn)" }}>실패 {failCount}</span></>}
             </span>
           </div>
 
@@ -228,13 +231,15 @@ export default function Page() {
                     <td className="mono strong">{s.traceId}</td>
                     <td>{s.userId ?? "—"}</td>
                     <td className="mono">{fmtTs(s.firstRecvTm)}</td>
-                    <td>{s.layerCount} / 5</td>
+                    <td>{s.layerCount} / {LAYER_ORDER.length}</td>
                     <td>
-                      {s.hasError
+                      {s.status === "error"
                         ? <span className="pill err"><span className="dot" />ERROR</span>
-                        : s.allComplete
-                          ? <span className="pill ok"><span className="dot" />OK</span>
-                          : <span className="pill warn"><span className="dot" />PARTIAL</span>}
+                        : s.status === "fail"
+                          ? <span className="pill fail"><span className="dot" />FAIL</span>
+                          : s.status === "ok"
+                            ? <span className="pill ok"><span className="dot" />OK</span>
+                            : <span className="pill warn"><span className="dot" />PARTIAL</span>}
                     </td>
                   </tr>
                 ))}
@@ -257,7 +262,7 @@ export default function Page() {
         <section className="panel">
           <div className="panel-header">
             <span className="title">Trace Detail</span>
-            <span className="meta">CUBE → GAIA → MCP → ONEOIS → LEGACY</span>
+            <span className="meta">{LAYER_ORDER.join(" → ")}</span>
           </div>
           <div className="panel-body tight">
             <TraceTimeline traceId={selected} rows={detailRows} loading={detailLoading} />

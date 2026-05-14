@@ -23,13 +23,11 @@
   --warn-soft:  #fdf2e5;
   --err:        #b42318;
   --err-soft:   #fdecec;
+  --fail:       #a16207;
+  --fail-soft:  #fef6da;
 
-  /* layer accents (softer, enterprise-friendly) */
-  --layer-cube:   #4b6bfb;
-  --layer-gaia:   #7c3aed;
-  --layer-mcp:    #059669;
-  --layer-oneois: #d97706;
-  --layer-legacy: #db2777;
+  /* 레이어별 색상은 src/lib/types.ts 의 LAYERS 배열을 단일 소스로 사용한다
+     (.tl-layer-tag 에 inline style 로 주입). 여기서는 색상 변수 정의 없음. */
 
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "D2Coding", monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR",
@@ -291,6 +289,8 @@ a:hover { text-decoration: underline; }
 .pill.err .dot{ background: var(--err); }
 .pill.warn    { background: var(--warn-soft); color: var(--warn); border-color: #f1d6ba; }
 .pill.warn .dot{ background: var(--warn); }
+.pill.fail    { background: var(--fail-soft); color: var(--fail); border-color: #ecd99a; }
+.pill.fail .dot{ background: var(--fail); }
 .pill.muted   { background: var(--surface-3); color: var(--text-3); border-color: var(--border); }
 .pill.muted .dot{ background: var(--text-muted); }
 
@@ -386,11 +386,7 @@ a:hover { text-decoration: underline; }
   padding: 4px 11px; border-radius: 5px; font-size: 13px; font-weight: 700;
   color: #fff; letter-spacing: 0.3px;
 }
-.tl-layer-tag.CUBE   { background: var(--layer-cube); }
-.tl-layer-tag.GAIA   { background: var(--layer-gaia); }
-.tl-layer-tag.MCP    { background: var(--layer-mcp); }
-.tl-layer-tag.ONEOIS { background: var(--layer-oneois); }
-.tl-layer-tag.LEGACY { background: var(--layer-legacy); }
+/* layer 배경색은 컴포넌트에서 LAYER_COLOR 로 inline 주입 */
 .tl-card-head .route {
   font-size: 14px; color: var(--text-2);
   display: inline-flex; align-items: center; gap: 7px;
@@ -580,3 +576,26 @@ a:hover { text-decoration: underline; }
 }
 .panel-body::-webkit-scrollbar-thumb:hover,
 .json-content::-webkit-scrollbar-thumb:hover { background: #b9bfc7; background-clip: padding-box; }
+
+/* ── toast ──────────────────────────────────────────────────────────────── */
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translate(-50%, 10px);
+  background: rgba(31, 35, 40, 0.92);
+  color: #fff;
+  font-size: 13px;
+  font-family: var(--sans);
+  padding: 9px 16px;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 9999;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+.app-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}

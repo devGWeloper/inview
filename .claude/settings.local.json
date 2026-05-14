@@ -9,7 +9,9 @@
       "Bash(npx next *)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(grep -E \"^\\\\.env|env$\")",
+      "Bash(awk '{print $NF}')"
     ]
   }
 }

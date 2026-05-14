@@ -3,7 +3,7 @@
 --   * ADM 계정(테이블 소유자)과 APP 계정(애플리케이션 접속자)이 분리된 환경에서
 --     APP 계정이 ADM 계정 소유의 테이블을 스키마 prefix 없이 접근할 수 있도록
 --     권한을 부여하고 PUBLIC SYNONYM 을 생성한다.
---   * 각 레이어(CUBE / GAIA / MCP / ONEOIS / LEGACY)의 Oracle DB 에서
+--   * 각 레이어(CUBE / GAIA / MCP / ONEOIS)의 Oracle DB 에서
 --     동일하게 실행한다.
 --
 --   ▶ 가정 : ADM 계정명 = AIACT_ADM, APP 계정명 = AIACT_APP

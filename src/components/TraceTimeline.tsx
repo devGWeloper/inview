@@ -221,9 +221,19 @@ function JsonBlock({ raw, kind }: { raw: string | null; kind: JsonKind }) {
 
 type LayerGroup = { layer: LayerKey; rows: TraceRow[] };
 
-function groupStatus(rows: TraceRow[]): "ok" | "err" | "warn" | "skip" {
+// ERR_CD 컨벤션: FAIL_* = 비즈니스 validation 실패, ERROR_* = 인프라/통신 에러.
+// 알 수 없는 prefix는 안전하게 err 로 취급.
+function rowErrKind(errCd: string | null): "fail" | "err" | null {
+  if (!errCd) return null;
+  if (errCd.startsWith("FAIL_")) return "fail";
+  return "err";
+}
+
+function groupStatus(rows: TraceRow[]): "ok" | "err" | "fail" | "warn" | "skip" {
   if (rows.length === 0) return "skip";
-  if (rows.some((r) => !!r.errCd)) return "err";
+  const kinds = rows.map((r) => rowErrKind(r.errCd)).filter((k): k is "fail" | "err" => !!k);
+  if (kinds.includes("err")) return "err";
+  if (kinds.length > 0) return "fail";
   if (rows.every((r) => r.sendCompltYn === "Y")) return "ok";
   return "warn";
 }
@@ -239,7 +249,14 @@ function Stepper({ groups }: { groups: LayerGroup[] }) {
         const status = groupStatus(g?.rows ?? []);
         const row = g?.rows[0];
         const callCount = g?.rows.length ?? 0;
-        const statusLabel = status === "err" ? "ERR" : status === "ok" ? "OK" : status === "warn" ? "WAIT" : "—";
+        const statusLabel =
+          status === "err" ? "ERROR"
+          : status === "fail" ? "FAIL"
+          : status === "ok" ? "OK"
+          : status === "warn" ? "WAIT"
+          : "—";
+        const isErrRow = status === "err" || status === "fail";
+        const errRow = g?.rows.find((r) => !!r.errCd);
         return (
           <div key={l} className={`step ${status}`}>
             <span className="step-num">{i + 1}</span>
@@ -250,7 +267,7 @@ function Stepper({ groups }: { groups: LayerGroup[] }) {
                   {l}
                 </span>
                 {status !== "skip" && (
-                  <span className={`pill xs ${status === "warn" ? "warn" : status === "err" ? "err" : "ok"}`}>
+                  <span className={`pill xs ${status}`}>
                     {statusLabel}
                   </span>
                 )}
@@ -258,8 +275,8 @@ function Stepper({ groups }: { groups: LayerGroup[] }) {
               <div className="step-sub">
                 {!row ? (
                   <span className="muted">기록 없음</span>
-                ) : status === "err" ? (
-                  <span className="mono">{row.errCd ?? "-"}</span>
+                ) : isErrRow ? (
+                  <span className="mono">{errRow?.errCd ?? "-"}</span>
                 ) : (
                   <>
                     <span className="mono">{fmtTsShort(row.recvTm)}</span>
@@ -282,9 +299,14 @@ function SingleCallCard({ row, frac3, setFrac3, startResize }: {
   setFrac3: (next: number[]) => void;
   startResize: StartColResize;
 }) {
-  const status: "ok" | "err" | "warn" =
-    row.errCd ? "err" : row.sendCompltYn === "Y" ? "ok" : "warn";
-  const statusLabel = status === "err" ? "ERROR" : status === "ok" ? "OK" : "PENDING";
+  const errKind = rowErrKind(row.errCd);
+  const status: "ok" | "err" | "fail" | "warn" =
+    errKind ? errKind : row.sendCompltYn === "Y" ? "ok" : "warn";
+  const statusLabel =
+    status === "err" ? "ERROR"
+    : status === "fail" ? "FAIL"
+    : status === "ok" ? "OK"
+    : "PENDING";
   const dur = diffMs(row.recvTm, row.respTm ?? row.sendTm);
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -348,7 +370,7 @@ function SingleCallCard({ row, frac3, setFrac3, startResize }: {
       </div>
 
       {row.errCd && (
-        <div className="tl-error">
+        <div className={`tl-error ${errKind ?? ""}`}>
           <code>{row.errCd}</code>
           <span>{row.errDescCtn ?? "에러 상세가 기록되지 않았습니다."}</span>
         </div>
@@ -368,7 +390,11 @@ function MultiCallCard({ group, frac2, setFrac2, startResize }: {
 }) {
   const { layer, rows } = group;
   const status = groupStatus(rows);
-  const statusLabel = status === "err" ? "ERROR" : status === "ok" ? "OK" : "PENDING";
+  const statusLabel =
+    status === "err" ? "ERROR"
+    : status === "fail" ? "FAIL"
+    : status === "ok" ? "OK"
+    : "PENDING";
   const firstRecv = rows.find((r) => r.recvTm)?.recvTm ?? null;
   const lastResp = [...rows].sort((a, b) => (b.respTm ?? "").localeCompare(a.respTm ?? ""))[0]?.respTm ?? null;
   const dur = diffMs(firstRecv, lastResp);
@@ -425,8 +451,9 @@ function CallItem({ row, ci, frac2, setFrac2, startResize }: {
   setFrac2: (next: number[]) => void;
   startResize: StartColResize;
 }) {
-  const callStatus: "ok" | "err" | "warn" =
-    row.errCd ? "err" : row.sendCompltYn === "Y" ? "ok" : "warn";
+  const errKind = rowErrKind(row.errCd);
+  const callStatus: "ok" | "err" | "fail" | "warn" =
+    errKind ? errKind : row.sendCompltYn === "Y" ? "ok" : "warn";
   const callDur = diffMs(row.sendTm, row.respTm);
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -437,7 +464,7 @@ function CallItem({ row, ci, frac2, setFrac2, startResize }: {
         <span className="tl-call-meta">
           <span className="hop mono">{row.sendSysId ?? "-"}</span>
           <span className="dur-inline">{callDur}</span>
-          {row.errCd && <span className={`pill err xs`}><span className="dot" />{row.errCd}</span>}
+          {row.errCd && <span className={`pill ${errKind} xs`}><span className="dot" />{row.errCd}</span>}
           {!row.errCd && <span className={`pill ${callStatus} xs`}><span className="dot" />{callStatus.toUpperCase()}</span>}
         </span>
       </div>
@@ -466,7 +493,7 @@ function CallItem({ row, ci, frac2, setFrac2, startResize }: {
         </div>
       </div>
       {row.errCd && (
-        <div className="tl-error" style={{ margin: "0 14px 10px" }}>
+        <div className={`tl-error ${errKind ?? ""}`} style={{ margin: "0 14px 10px" }}>
           <code>{row.errCd}</code>
           <span>{row.errDescCtn ?? "에러 상세가 기록되지 않았습니다."}</span>
         </div>

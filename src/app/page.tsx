@@ -149,7 +149,7 @@ export default function Page() {
             <span className="meta">
               {summaries.length.toLocaleString()} 건
               {errorCount > 0 && <>  ·  <span style={{ color: "var(--err)" }}>오류 {errorCount}</span></>}
-              {failCount > 0 && <>  ·  <span style={{ color: "var(--warn)" }}>실패 {failCount}</span></>}
+              {failCount > 0 && <>  ·  <span style={{ color: "var(--fail)" }}>실패 {failCount}</span></>}
             </span>
           </div>
 

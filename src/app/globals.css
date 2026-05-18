@@ -23,8 +23,8 @@
   --warn-soft:  #fdf2e5;
   --err:        #b42318;
   --err-soft:   #fdecec;
-  --fail:       #a16207;
-  --fail-soft:  #fef6da;
+  --fail:       #c2410c;
+  --fail-soft:  #ffedd5;
 
   /* 레이어별 색상은 src/lib/types.ts 의 LAYERS 배열을 단일 소스로 사용한다
      (.tl-layer-tag 에 inline style 로 주입). 여기서는 색상 변수 정의 없음. */
@@ -309,7 +309,7 @@ a:hover { text-decoration: underline; }
 .pill.err .dot{ background: var(--err); }
 .pill.warn    { background: var(--warn-soft); color: var(--warn); border-color: #f1d6ba; }
 .pill.warn .dot{ background: var(--warn); }
-.pill.fail    { background: var(--fail-soft); color: var(--fail); border-color: #ecd99a; }
+.pill.fail    { background: var(--fail-soft); color: var(--fail); border-color: #fed7aa; }
 .pill.fail .dot{ background: var(--fail); }
 .pill.muted   { background: var(--surface-3); color: var(--text-3); border-color: var(--border); }
 .pill.muted .dot{ background: var(--text-muted); }
@@ -413,6 +413,8 @@ a:hover { text-decoration: underline; }
 .step.ok    .step-num { background: var(--ok); border-color: var(--ok); color: #fff; }
 .step.err   { background: var(--err-soft); }
 .step.err   .step-num { background: var(--err); border-color: var(--err); color: #fff; }
+.step.fail  { background: var(--fail-soft); }
+.step.fail  .step-num { background: var(--fail); border-color: var(--fail); color: #fff; }
 .step.warn  { background: var(--warn-soft); }
 .step.warn  .step-num { background: var(--warn); border-color: var(--warn); color: #fff; }
 .step.skip  { opacity: 0.55; }
@@ -575,6 +577,14 @@ a:hover { text-decoration: underline; }
   font-family: var(--mono); font-weight: 600;
   padding: 1px 6px; background: rgba(180, 35, 24, 0.08);
   border-radius: 4px;
+}
+.tl-error.fail {
+  background: var(--fail-soft);
+  border-color: #fed7aa;
+  color: var(--fail);
+}
+.tl-error.fail code {
+  background: rgba(194, 65, 12, 0.10);
 }
 
 /* ---------------- JSON block ---------------- */

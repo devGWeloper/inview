@@ -92,15 +92,20 @@ fi
 log "  설정 파일 확인: $CONFIG_FILE"
 
 # ── 4. 패키지 설치 ────────────────────────────────────────
-log "▶ 패키지 설치 중..."
+log "▶ 패키지 설치 중 (빌드용 devDeps 포함)..."
 cd "$DEPLOY_DIR"
-npm install --omit=dev --silent
+npm install --silent
 log "  패키지 설치 완료"
 
 # ── 5. 빌드 ───────────────────────────────────────────────
 log "▶ Next.js 빌드 중..."
 npm run build
 log "  빌드 완료"
+
+# ── 5-1. devDependencies 정리 ─────────────────────────────
+log "▶ devDependencies 정리 중..."
+npm prune --omit=dev --silent
+log "  정리 완료"
 
 # ── 6. 서버 기동 ──────────────────────────────────────────
 log "▶ 서버 시작 중..."

@@ -13,6 +13,8 @@ INSERT INTO BIZ_AIACTIONTXN_HIS (
     TIMEKEY,
     USER_ID,
     SYS_ID,
+    CHANNEL_ID,
+    ACTION_TYP,
     RECV_SYS_ID,
     RECV_MSG_CTN,
     RECV_TM,
@@ -22,6 +24,8 @@ INSERT INTO BIZ_AIACTIONTXN_HIS (
     :timekey,         -- YYYYMMDDHH24MISSFF3
     :user_id,
     :sys_id,          -- 현재 이 앱의 시스템 ID
+    :channel_id,      -- 채널 ID (요청 유입 채널, ex. WEB/APP/BOT)
+    :action_typ,      -- 액션 유형 (요청된 액션 타입, ex. CHAT/SEARCH)
     :recv_sys_id,     -- 기록 주체(= 이 앱) 시스템 ID
     :recv_msg_ctn,    -- 수신 메시지 JSON 전문
     SYSTIMESTAMP,

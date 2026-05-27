@@ -11,7 +11,15 @@
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
       "Bash(grep -E \"^\\\\.env|env$\")",
-      "Bash(awk '{print $NF}')"
+      "Bash(awk '{print $NF}')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5174/)",
+      "Bash(curl -s \"http://localhost:5174/api/stats?dateFrom=2026-05-27T00:00:00&dateTo=2026-05-27T23:59:59\")",
+      "Bash(curl -s \"http://localhost:5174/dashboard\")",
+      "Bash(curl -s \"http://localhost:5174/api/stats?dateFrom=2026-05-27T00:00:00&dateTo=2026-05-27T23:59:59&channelId=WEB&actionTyp=CHAT\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('keys:', list\\(d.keys\\(\\)\\)\\); print\\('byChannel:', d['byChannel']\\); print\\('byAction:', d['byAction']\\)\")",
+      "Bash(curl *)",
+      "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 5174 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }')",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('keys:', sorted\\(d.keys\\(\\)\\)\\)\")"
     ]
   }
 }

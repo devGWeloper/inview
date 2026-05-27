@@ -34,6 +34,8 @@ export interface TraceRow {
   timekey: string;
   userId: string | null;
   sysId: string | null;
+  channelId: string | null;
+  actionTyp: string | null;
   recvSysId: string | null;
   recvMsgCtn: string | null;
   recvTm: string | null;
@@ -76,8 +78,86 @@ export interface TraceListResponse {
 export interface TraceFilter {
   traceId?: string;
   userId?: string;
+  channelId?: string;
+  actionTyp?: string;
   dateFrom?: string;
   dateTo?: string;
   onlyError?: boolean;
   limit?: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dashboard stats
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface StatsFilter {
+  dateFrom?: string;
+  dateTo?: string;
+  userId?: string;
+  channelId?: string;
+  actionTyp?: string;
+}
+
+export interface DimensionStats {
+  /** 차원 값 (예: 'WEB', 'CHAT'). null/empty 는 '(none)' 로 정규화 */
+  key: string;
+  total: number;
+  ok: number;
+  fail: number;
+  error: number;
+  pending: number;
+}
+
+export interface StatusCounts {
+  ok: number;
+  fail: number;
+  error: number;
+  pending: number;
+}
+
+export interface LayerStats {
+  layer: LayerKey;
+  total: number;
+  errCount: number;
+  failCount: number;
+  okRows: number;
+  avgRespMs: number | null;
+}
+
+export interface TimeBucket {
+  /** ISO 형태 버킷 시작 시각 (예: "2026-05-27T13:00:00") */
+  ts: string;
+  ok: number;
+  fail: number;
+  error: number;
+  pending: number;
+}
+
+export interface TopItem {
+  key: string;
+  count: number;
+}
+
+export interface StatsResponse {
+  /** 적용된 기간 */
+  range: { from: string | null; to: string | null };
+  /** 트레이스 단위 합계 */
+  totals: StatusCounts & { total: number };
+  /** 트레이스 평균 end-to-end 지연 (ms). 측정 가능한 트레이스가 없으면 null */
+  avgLatencyMs: number | null;
+  /** 시간대별 버킷 (오름차순). granularity 는 자동: <=2h → 5분, <=48h → 1시간, 그 이상 → 1일 */
+  granularity: "5m" | "1h" | "1d";
+  buckets: TimeBucket[];
+  /** 레이어별 행 단위 통계 */
+  layers: LayerStats[];
+  /** 상위 사용자 (트레이스 수 기준) */
+  topUsers: TopItem[];
+  /** 상위 에러/실패 코드 */
+  topErrors: TopItem[];
+  /** 채널별 트레이스 분포 (count desc) */
+  byChannel: DimensionStats[];
+  /** 액션 유형별 트레이스 분포 (count desc) */
+  byAction: DimensionStats[];
+  /** 트레이스 행 데이터를 가져온 전체 행 수 */
+  rowCount: number;
 }

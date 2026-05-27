@@ -9,13 +9,14 @@ import { TimeSeriesChart } from "@/components/TimeSeriesChart";
 import { TopList } from "@/components/TopList";
 import { StatsFilter, StatsResponse } from "@/lib/types";
 
-type Preset = "1h" | "6h" | "24h" | "7d" | "custom";
+type Preset = "1h" | "6h" | "24h" | "7d" | "30d" | "custom";
 
 const PRESETS: { key: Preset; label: string; hours: number }[] = [
   { key: "1h",  label: "1H",  hours: 1   },
   { key: "6h",  label: "6H",  hours: 6   },
   { key: "24h", label: "24H", hours: 24  },
   { key: "7d",  label: "7D",  hours: 168 },
+  { key: "30d", label: "30D", hours: 720 },
 ];
 
 function toLocalInput(ms: number): string {
@@ -30,7 +31,7 @@ function fmtRange(from: string | null, to: string | null): string {
 }
 
 export default function DashboardPage() {
-  const [preset, setPreset] = useState<Preset>("24h");
+  const [preset, setPreset] = useState<Preset>("7d");
   const [userId, setUserId] = useState("");
   const [channelId, setChannelId] = useState("");
   const [actionTyp, setActionTyp] = useState("");
@@ -107,7 +108,6 @@ export default function DashboardPage() {
     }
   };
 
-  // 차트 클릭으로 채널/액션 필터링
   const onSelectChannel = (k: string) => {
     setChannelId(k);
     load({ ...computeFilter(), channelId: k });
@@ -115,6 +115,14 @@ export default function DashboardPage() {
   const onSelectAction = (k: string) => {
     setActionTyp(k);
     load({ ...computeFilter(), actionTyp: k });
+  };
+
+  const hasFilter = !!(userId || channelId || actionTyp);
+  const clearFilters = () => {
+    setUserId("");
+    setChannelId("");
+    setActionTyp("");
+    load({ ...computeFilter(), userId: undefined, channelId: undefined, actionTyp: undefined });
   };
 
   return (
@@ -184,6 +192,11 @@ export default function DashboardPage() {
             value={actionTyp}
             onChange={(e) => setActionTyp(e.target.value)}
           />
+          {hasFilter && (
+            <button type="button" className="btn ghost" onClick={clearFilters}>
+              필터 초기화
+            </button>
+          )}
           <button type="submit" className="btn primary">조회</button>
         </form>
       </div>
@@ -193,12 +206,43 @@ export default function DashboardPage() {
 
       {stats && (
         <>
+          {/* 1. Hero KPIs — 한눈에 보는 핵심 지표 */}
           <StatsCards stats={stats} />
 
+          {/* 2. 일별/시간별 추이 — 임원이 가장 보고 싶어하는 차트, 메인으로 노출 */}
+          <section className="dash-card dash-card-hero">
+            <div className="dash-card-head">
+              <div className="dash-card-title-group">
+                <span className="dash-card-title">사용 추이</span>
+                <span className="dash-card-sub">상태별 적층 · {granText(stats.granularity)} 단위</span>
+              </div>
+              <div className="dash-card-aux">
+                <span className="aux-pill">
+                  <span className="aux-pill-key">총</span>
+                  <span className="aux-pill-val">{stats.totals.total.toLocaleString()}</span>
+                </span>
+                <span className="aux-pill ok">
+                  <span className="aux-pill-key">성공</span>
+                  <span className="aux-pill-val">{stats.totals.ok.toLocaleString()}</span>
+                </span>
+                {(stats.totals.fail + stats.totals.error) > 0 && (
+                  <span className="aux-pill err">
+                    <span className="aux-pill-key">실패</span>
+                    <span className="aux-pill-val">{(stats.totals.fail + stats.totals.error).toLocaleString()}</span>
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="dash-card-body">
+              <TimeSeriesChart stats={stats} />
+            </div>
+          </section>
+
+          {/* 3. 상태 분포 + 상위 에러 — 의사결정에 바로 쓰이는 보조 정보 */}
           <div className="dash-row split">
             <section className="dash-card">
               <div className="dash-card-head">
-                <span className="dash-card-title">Status Distribution</span>
+                <span className="dash-card-title">상태 분포</span>
                 <span className="dash-card-sub">trace 단위</span>
               </div>
               <div className="dash-card-body">
@@ -208,8 +252,8 @@ export default function DashboardPage() {
 
             <section className="dash-card">
               <div className="dash-card-head">
-                <span className="dash-card-title">Top Errors</span>
-                <span className="dash-card-sub">ERR_CD 빈도</span>
+                <span className="dash-card-title">주요 에러</span>
+                <span className="dash-card-sub">ERR_CD 빈도 top {stats.topErrors.length || 0}</span>
               </div>
               <div className="dash-card-body">
                 <TopList items={stats.topErrors} totalForPct={stats.rowCount} emptyText="에러 없음 ✓" tone="err" />
@@ -217,30 +261,11 @@ export default function DashboardPage() {
             </section>
           </div>
 
-          <section className="dash-card">
-            <div className="dash-card-head">
-              <span className="dash-card-title">Traces Over Time</span>
-              <span className="dash-card-sub">상태별 적층 · {stats.granularity}</span>
-            </div>
-            <div className="dash-card-body">
-              <TimeSeriesChart stats={stats} />
-            </div>
-          </section>
-
-          <section className="dash-card">
-            <div className="dash-card-head">
-              <span className="dash-card-title">Per-Layer Breakdown</span>
-              <span className="dash-card-sub">행 단위 호출량 · 응답 시간</span>
-            </div>
-            <div className="dash-card-body">
-              <LayerBars stats={stats} />
-            </div>
-          </section>
-
+          {/* 4. 채널 / 액션 — 어디서 많이 쓰이는지 */}
           <div className="dash-row split">
             <section className="dash-card">
               <div className="dash-card-head">
-                <span className="dash-card-title">By Channel</span>
+                <span className="dash-card-title">채널별</span>
                 <span className="dash-card-sub">CHANNEL_ID 별 분포{channelId ? ` · 필터: ${channelId}` : ""}</span>
               </div>
               <div className="dash-card-body">
@@ -255,7 +280,7 @@ export default function DashboardPage() {
 
             <section className="dash-card">
               <div className="dash-card-head">
-                <span className="dash-card-title">By Action Type</span>
+                <span className="dash-card-title">액션 타입별</span>
                 <span className="dash-card-sub">ACTION_TYP 별 분포{actionTyp ? ` · 필터: ${actionTyp}` : ""}</span>
               </div>
               <div className="dash-card-body">
@@ -269,17 +294,35 @@ export default function DashboardPage() {
             </section>
           </div>
 
+          {/* 5. 사용자 Top — 헤비 유저 파악 */}
           <section className="dash-card">
             <div className="dash-card-head">
-              <span className="dash-card-title">Top Users</span>
+              <span className="dash-card-title">Top 사용자</span>
               <span className="dash-card-sub">트레이스 수 기준</span>
             </div>
             <div className="dash-card-body">
               <TopList items={stats.topUsers} totalForPct={stats.totals.total} emptyText="데이터 없음" tone="neutral" />
             </div>
           </section>
+
+          {/* 6. 레이어 — 엔지니어용 디테일, 접근성 위해 유지하되 가장 아래 */}
+          <section className="dash-card dash-card-muted">
+            <div className="dash-card-head">
+              <div className="dash-card-title-group">
+                <span className="dash-card-title">레이어별 호출</span>
+                <span className="dash-card-sub">행 단위 호출량 · 평균 응답시간 (engineering view)</span>
+              </div>
+            </div>
+            <div className="dash-card-body">
+              <LayerBars stats={stats} />
+            </div>
+          </section>
         </>
       )}
     </div>
   );
+}
+
+function granText(g: StatsResponse["granularity"]): string {
+  return g === "5m" ? "5분" : g === "1h" ? "시간" : "일";
 }

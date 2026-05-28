@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchAllRows, connectedLayerCount, getAppEnv } from "@/lib/db";
 import { LAYER_ORDER, TraceFilter, TraceStatus, TraceSummary, TraceRow } from "@/lib/types";
 import { logger, reqContext } from "@/lib/logger";
+import { classifyPendingByCubeResp } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,8 @@ export const dynamic = "force-dynamic";
 // 둘 다 아닌 코드는 안전하게 error 로 처리하고 컨벤션 위반을 warn 으로 남긴다.
 function classify(rows: TraceRow[], allComplete: boolean): TraceStatus {
   const errs = rows.filter((r) => !!r.errCd);
-  if (errs.length === 0) return allComplete ? "ok" : "pending";
+  // TEMP(ONEOIS 미연결): pending 대신 CUBE RESP 로 ok/fail 판정 — tempStatus.ts 참고
+  if (errs.length === 0) return allComplete ? "ok" : classifyPendingByCubeResp(rows);
 
   let sawError = false;
   for (const r of errs) {

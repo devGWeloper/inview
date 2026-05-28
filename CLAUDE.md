@@ -67,3 +67,22 @@ For layers that make multiple downstream calls in one trace (e.g. GAIA → MCP t
 ### Path alias
 
 `@/*` → `./src/*` (configured in `tsconfig.json`).
+
+## ⚠️ TEMPORARY WORKAROUND — ONEOIS 미연결 status 보정 (제거 예정)
+
+**배경**: ONEOIS 레이어의 DB 연결이 아직 없어 모든 트레이스가 `allComplete=false`가 되고,
+에러 코드가 없는 트레이스가 전부 `pending`(대시보드의 PARTIAL)으로 분류되어 대시보드/목록 값이 무의미해지는 문제가 있었다.
+
+**임시 규칙**: 에러 코드(`errCd`)가 없는 미완료(pending) 트레이스를 CUBE 레이어의 RESP 메시지(`respMsgCtn`)로 재판정한다.
+- CUBE RESP 에 `"Seasoning 실패"` 문구 포함 → `fail`
+- 그 외 → `ok`(성공으로 간주)
+
+**구현 위치**:
+- `src/lib/tempStatus.ts` — `classifyPendingByCubeResp(rows)` 헬퍼 + `SEASONING_FAIL_PHRASE` 상수 (이 파일 전체가 임시 코드)
+- `src/app/api/traces/route.ts` 와 `src/app/api/stats/route.ts` 의 `classify()` 내 `// TEMP(ONEOIS 미연결)` 주석 라인에서 호출
+
+**ONEOIS DB 연결이 완료되면 원복 방법**:
+1. `src/lib/tempStatus.ts` 파일 삭제
+2. 두 route 파일의 `import { classifyPendingByCubeResp } ...` 라인 제거
+3. 두 `classify()` 의 `// TEMP(ONEOIS 미연결)` 블록을 원래 코드로 복원:
+   `if (errs.length === 0) return allComplete ? "ok" : "pending";`

@@ -12,13 +12,15 @@ import {
   TraceStatus,
 } from "@/lib/types";
 import { logger, reqContext } from "@/lib/logger";
+import { classifyPendingByCubeResp } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
 
 export const dynamic = "force-dynamic";
 
 // /api/traces 의 classify 와 동일한 규칙 (ERR_CD 컨벤션). 작아서 인라인 유지.
 function classify(rows: TraceRow[], allComplete: boolean): TraceStatus {
   const errs = rows.filter((r) => !!r.errCd);
-  if (errs.length === 0) return allComplete ? "ok" : "pending";
+  // TEMP(ONEOIS 미연결): pending 대신 CUBE RESP 로 ok/fail 판정 — tempStatus.ts 참고
+  if (errs.length === 0) return allComplete ? "ok" : classifyPendingByCubeResp(rows);
   let sawError = false;
   for (const r of errs) {
     const code = r.errCd!;

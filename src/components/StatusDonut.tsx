@@ -38,11 +38,11 @@ function DonutTooltip({ active, payload, total }: any) {
         {seg.label}
       </div>
       <div className="ts-tooltip-body">
-        <div className="ts-tooltip-row">
+        <div className="ts-tooltip-row two-col">
           <span className="ts-tooltip-key">COUNT</span>
           <span className="ts-tooltip-val">{seg.count.toLocaleString()}</span>
         </div>
-        <div className="ts-tooltip-row">
+        <div className="ts-tooltip-row two-col">
           <span className="ts-tooltip-key">SHARE</span>
           <span className="ts-tooltip-val">{pct.toFixed(1)}%</span>
         </div>

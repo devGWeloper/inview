@@ -974,9 +974,15 @@ a:hover { text-decoration: underline; }
   position: relative;
   flex: 0 0 auto;
 }
+/* keep the recharts tooltip (inside the chart wrapper) above the center overlay */
+.donut-chart .recharts-wrapper {
+  position: relative;
+  z-index: 2;
+}
 .donut-center {
   position: absolute;
   inset: 0;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1129,6 +1135,10 @@ a:hover { text-decoration: underline; }
   margin-top: 5px;
   padding-top: 6px;
   border-top: 1px dashed var(--border);
+  grid-template-columns: auto 1fr;
+}
+/* donut tooltip rows have no swatch — key + value only */
+.ts-tooltip-row.two-col {
   grid-template-columns: auto 1fr;
 }
 .ts-tooltip-swatch {

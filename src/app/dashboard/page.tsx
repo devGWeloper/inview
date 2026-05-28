@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { DimensionBreakdown } from "@/components/DimensionBreakdown";
-import { ErrCodeFilter, ErrFilterMode } from "@/components/ErrCodeFilter";
 import { LayerBars } from "@/components/LayerBars";
 import { StatsCards } from "@/components/StatsCards";
 import { StatusDonut } from "@/components/StatusDonut";
@@ -38,8 +37,7 @@ export default function DashboardPage() {
   const [actionTyp, setActionTyp] = useState("");
   const [customFrom, setCustomFrom] = useState<string>("");
   const [customTo, setCustomTo] = useState<string>("");
-  const [errMode, setErrMode] = useState<ErrFilterMode>(null);
-  const [errCds, setErrCds] = useState<string[]>([]);
+  const [excludeErrCds, setExcludeErrCds] = useState<string[]>([]);
 
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -66,8 +64,7 @@ export default function DashboardPage() {
       userId: userId || undefined,
       channelId: channelId || undefined,
       actionTyp: actionTyp || undefined,
-      errMode: errMode ?? undefined,
-      errCds: errCds.length > 0 ? errCds : undefined,
+      excludeErrCds: excludeErrCds.length > 0 ? excludeErrCds : undefined,
     };
     if (preset === "custom") {
       return {
@@ -83,7 +80,7 @@ export default function DashboardPage() {
       dateFrom: toLocalInput(now - p.hours * 3_600_000) + ":00",
       dateTo:   toLocalInput(now) + ":00",
     };
-  }, [preset, customFrom, customTo, userId, channelId, actionTyp, errMode, errCds]);
+  }, [preset, customFrom, customTo, userId, channelId, actionTyp, excludeErrCds]);
 
   const load = useCallback(async (f: StatsFilter) => {
     setLoading(true);
@@ -95,9 +92,8 @@ export default function DashboardPage() {
       if (f.userId)    q.set("userId",    f.userId);
       if (f.channelId) q.set("channelId", f.channelId);
       if (f.actionTyp) q.set("actionTyp", f.actionTyp);
-      if (f.errMode && f.errCds && f.errCds.length > 0) {
-        q.set("errMode", f.errMode);
-        q.set("errCds", f.errCds.join(","));
+      if (f.excludeErrCds && f.excludeErrCds.length > 0) {
+        q.set("excludeErrCds", f.excludeErrCds.join(","));
       }
       const res = await fetch(`/api/stats?${q.toString()}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -129,8 +125,7 @@ export default function DashboardPage() {
         userId: userId || undefined,
         channelId: channelId || undefined,
         actionTyp: actionTyp || undefined,
-        errMode: errMode ?? undefined,
-        errCds: errCds.length > 0 ? errCds : undefined,
+        excludeErrCds: excludeErrCds.length > 0 ? excludeErrCds : undefined,
       });
     }
   };
@@ -146,31 +141,29 @@ export default function DashboardPage() {
     load({ ...computeFilter(), actionTyp: next || undefined });
   };
 
-  const hasFilter = !!(userId || channelId || actionTyp || (errMode && errCds.length > 0));
+  const hasFilter = !!(userId || channelId || actionTyp);
   const clearFilters = () => {
     setUserId("");
     setChannelId("");
     setActionTyp("");
-    setErrMode(null);
-    setErrCds([]);
-    load({
-      ...computeFilter(),
-      userId: undefined,
-      channelId: undefined,
-      actionTyp: undefined,
-      errMode: undefined,
-      errCds: undefined,
-    });
+    load({ ...computeFilter(), userId: undefined, channelId: undefined, actionTyp: undefined });
   };
 
-  const onErrFilterChange = (mode: ErrFilterMode, codes: string[]) => {
-    setErrMode(mode);
-    setErrCds(codes);
-    load({
-      ...computeFilter(),
-      errMode: mode ?? undefined,
-      errCds: codes.length > 0 ? codes : undefined,
-    });
+  // 에러 코드 제외: Top Errors 항목을 클릭해서 더하고, 칩의 × 로 해제한다.
+  const addExclude = (code: string) => {
+    if (excludeErrCds.includes(code)) return;
+    const next = [...excludeErrCds, code];
+    setExcludeErrCds(next);
+    load({ ...computeFilter(), excludeErrCds: next });
+  };
+  const removeExclude = (code: string) => {
+    const next = excludeErrCds.filter((c) => c !== code);
+    setExcludeErrCds(next);
+    load({ ...computeFilter(), excludeErrCds: next.length > 0 ? next : undefined });
+  };
+  const clearExcludes = () => {
+    setExcludeErrCds([]);
+    load({ ...computeFilter(), excludeErrCds: undefined });
   };
 
   return (
@@ -248,12 +241,6 @@ export default function DashboardPage() {
               <option key={opt} value={opt}>{opt}</option>
             ))}
           </select>
-          <ErrCodeFilter
-            options={stats?.allErrCds ?? []}
-            mode={errMode}
-            selected={errCds}
-            onChange={onErrFilterChange}
-          />
           {hasFilter && (
             <button type="button" className="btn ghost" onClick={clearFilters}>
               필터 초기화
@@ -262,6 +249,37 @@ export default function DashboardPage() {
           <button type="submit" className="btn primary">조회</button>
         </form>
       </div>
+
+      {excludeErrCds.length > 0 && (
+        <div className="exclude-bar" role="status" aria-live="polite">
+          <span className="exclude-bar-label">
+            <span className="exclude-bar-icon" aria-hidden>⊘</span>
+            집계에서 제외
+            {stats && stats.excludedTraceCount > 0 && (
+              <span className="exclude-bar-count">
+                trace {stats.excludedTraceCount.toLocaleString()}건
+              </span>
+            )}
+          </span>
+          <div className="exclude-chips">
+            {excludeErrCds.map((code) => (
+              <button
+                key={code}
+                type="button"
+                className="exclude-chip"
+                onClick={() => removeExclude(code)}
+                title={`${code} — 클릭해서 다시 포함`}
+              >
+                <span className="exclude-chip-code">{code}</span>
+                <span className="exclude-chip-x" aria-hidden>×</span>
+              </button>
+            ))}
+          </div>
+          <button type="button" className="btn ghost" onClick={clearExcludes}>
+            모두 해제
+          </button>
+        </div>
+      )}
 
       {loading && <div className="dash-banner loading">집계 중…</div>}
       {err && <div className="dash-banner err">불러오기 실패: {err}</div>}
@@ -315,10 +333,19 @@ export default function DashboardPage() {
             <section className="dash-card">
               <div className="dash-card-head">
                 <span className="dash-card-title">주요 에러</span>
-                <span className="dash-card-sub">ERR_CD 빈도 top {stats.topErrors.length || 0}</span>
+                <span className="dash-card-sub">
+                  ERR_CD 빈도 top {stats.topErrors.length || 0} · 클릭해서 집계에서 제외
+                </span>
               </div>
               <div className="dash-card-body">
-                <TopList items={stats.topErrors} totalForPct={stats.rowCount} emptyText="에러 없음 ✓" tone="err" />
+                <TopList
+                  items={stats.topErrors}
+                  totalForPct={stats.rowCount}
+                  emptyText="에러 없음 ✓"
+                  tone="err"
+                  onItemClick={addExclude}
+                  itemActionLabel="클릭해서 집계에서 제외"
+                />
               </div>
             </section>
           </div>

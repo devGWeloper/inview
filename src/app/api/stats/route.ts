@@ -9,25 +9,24 @@ import {
   TopItem,
   TraceFilter,
   TraceRow,
-  TraceStatus,
 } from "@/lib/types";
 import { logger, reqContext } from "@/lib/logger";
-import { classifyPendingByCubeResp } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
+import { classifyPendingByCubeResp, hasSeasoningFailure, SEASONING_FAIL_CODE } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
 
 export const dynamic = "force-dynamic";
 
-// /api/traces 의 classify 와 동일한 규칙 (ERR_CD 컨벤션). 작아서 인라인 유지.
-function classify(rows: TraceRow[], allComplete: boolean): TraceStatus {
-  const errs = rows.filter((r) => !!r.errCd);
+// 대시보드 집계는 ERROR/FAIL 구분 없이 fail 로 통합한다 (트레이스 목록 쪽 classify 와 의도적으로 다름).
+type DashStatus = "ok" | "fail" | "pending";
+
+function classify(rows: TraceRow[], allComplete: boolean): DashStatus {
+  const hasErr = rows.some((r) => !!r.errCd);
   // TEMP(ONEOIS 미연결): pending 대신 CUBE RESP 로 ok/fail 판정 — tempStatus.ts 참고
-  if (errs.length === 0) return allComplete ? "ok" : classifyPendingByCubeResp(rows);
-  let sawError = false;
-  for (const r of errs) {
-    const code = r.errCd!;
-    if (code.startsWith("FAIL_")) continue;
-    sawError = true;
+  if (!hasErr) {
+    if (allComplete) return "ok";
+    const t = classifyPendingByCubeResp(rows);
+    return t === "ok" ? "ok" : "fail";
   }
-  return sawError ? "error" : "fail";
+  return "fail";
 }
 
 type Granularity = "5m" | "1h" | "1d";
@@ -111,16 +110,16 @@ export async function GET(req: NextRequest) {
       byTrace.get(r.traceId)!.push(r);
     }
 
-    const totals = { total: 0, ok: 0, fail: 0, error: 0, pending: 0 };
+    const totals = { total: 0, ok: 0, fail: 0, pending: 0 };
     const userCount = new Map<string, number>();
     const errCount = new Map<string, number>();
     const channelAcc = new Map<string, DimensionStats>();
     const actionAcc = new Map<string, DimensionStats>();
     const NONE = "(none)";
-    const dimBump = (acc: Map<string, DimensionStats>, key: string, status: TraceStatus) => {
+    const dimBump = (acc: Map<string, DimensionStats>, key: string, status: DashStatus) => {
       let s = acc.get(key);
       if (!s) {
-        s = { key, total: 0, ok: 0, fail: 0, error: 0, pending: 0 };
+        s = { key, total: 0, ok: 0, fail: 0, pending: 0 };
         acc.set(key, s);
       }
       s.total += 1;
@@ -156,6 +155,10 @@ export async function GET(req: NextRequest) {
         if (!r.errCd) continue;
         errCount.set(r.errCd, (errCount.get(r.errCd) ?? 0) + 1);
       }
+      // TEMP(ONEOIS 미연결): Seasoning 실패는 실제 errCd 가 없으므로 가상 코드로 topErrors 에 반영
+      if (hasSeasoningFailure(list)) {
+        errCount.set(SEASONING_FAIL_CODE, (errCount.get(SEASONING_FAIL_CODE) ?? 0) + 1);
+      }
 
       // 트레이스 시작 시각 → 버킷
       const recvTimes = list
@@ -170,7 +173,7 @@ export async function GET(req: NextRequest) {
         const key = floorToBucket(start, g);
         let b = buckets.get(key);
         if (!b) {
-          b = { ts: isoNoTz(key), ok: 0, fail: 0, error: 0, pending: 0 };
+          b = { ts: isoNoTz(key), ok: 0, fail: 0, pending: 0 };
           buckets.set(key, b);
         }
         b[status] += 1;
@@ -197,26 +200,23 @@ export async function GET(req: NextRequest) {
       const endD = new Date(endBucket);
       while (d.getTime() <= endD.getTime()) {
         const k = d.getTime();
-        bucketArr.push(buckets.get(k) ?? { ts: isoNoTz(k), ok: 0, fail: 0, error: 0, pending: 0 });
+        bucketArr.push(buckets.get(k) ?? { ts: isoNoTz(k), ok: 0, fail: 0, pending: 0 });
         d.setDate(d.getDate() + 1);
       }
     } else {
       for (let k = startBucket; k <= endBucket; k += step) {
-        bucketArr.push(buckets.get(k) ?? { ts: isoNoTz(k), ok: 0, fail: 0, error: 0, pending: 0 });
+        bucketArr.push(buckets.get(k) ?? { ts: isoNoTz(k), ok: 0, fail: 0, pending: 0 });
       }
     }
 
-    // ── 레이어별 행 단위 집계
-    const layerAcc = new Map<LayerKey, { total: number; err: number; fail: number; ok: number; rt: number[] }>();
-    for (const l of LAYER_ORDER) layerAcc.set(l, { total: 0, err: 0, fail: 0, ok: 0, rt: [] });
+    // ── 레이어별 행 단위 집계 (ERROR/FAIL 구분 없이 fail 로 통합)
+    const layerAcc = new Map<LayerKey, { total: number; fail: number; ok: number; rt: number[] }>();
+    for (const l of LAYER_ORDER) layerAcc.set(l, { total: 0, fail: 0, ok: 0, rt: [] });
     for (const r of rows) {
       const a = layerAcc.get(r.layer);
       if (!a) continue;
       a.total += 1;
-      if (r.errCd) {
-        if (r.errCd.startsWith("FAIL_")) a.fail += 1;
-        else a.err += 1;
-      }
+      if (r.errCd) a.fail += 1;
       if (r.sendCompltYn === "Y" && !r.errCd) a.ok += 1;
       const s = parseTs(r.sendTm);
       const e = parseTs(r.respTm);
@@ -231,7 +231,6 @@ export async function GET(req: NextRequest) {
       return {
         layer: l,
         total: a.total,
-        errCount: a.err,
         failCount: a.fail,
         okRows: a.ok,
         avgRespMs: avg,

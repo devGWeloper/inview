@@ -78,11 +78,19 @@ For layers that make multiple downstream calls in one trace (e.g. GAIA → MCP t
 - 그 외 → `ok`(성공으로 간주)
 
 **구현 위치**:
-- `src/lib/tempStatus.ts` — `classifyPendingByCubeResp(rows)` 헬퍼 + `SEASONING_FAIL_PHRASE` 상수 (이 파일 전체가 임시 코드)
-- `src/app/api/traces/route.ts` 와 `src/app/api/stats/route.ts` 의 `classify()` 내 `// TEMP(ONEOIS 미연결)` 주석 라인에서 호출
+- `src/lib/tempStatus.ts` — 아래 export 들이 모두 임시 코드 (파일 전체 삭제 대상):
+  - `SEASONING_FAIL_PHRASE` — CUBE RESP 에서 검색할 문구
+  - `SEASONING_FAIL_CODE` (`"FAIL_SEASONING"`) — Top Errors 에 노출할 가상 에러 코드
+  - `hasSeasoningFailure(rows)` — CUBE RESP 에 위 문구 포함 여부
+  - `classifyPendingByCubeResp(rows)` — pending 을 ok/fail 로 대체 판정
+- `src/app/api/traces/route.ts` 와 `src/app/api/stats/route.ts` 의 `classify()` 내 `// TEMP(ONEOIS 미연결)` 블록 — pending 분기를 `classifyPendingByCubeResp` 로 교체
+- `src/app/api/stats/route.ts` 의 트레이스 루프 내 `// TEMP(ONEOIS 미연결)` 블록 — `hasSeasoningFailure(list)` 시 `errCount` 에 `SEASONING_FAIL_CODE` 를 +1 해서 Top Errors 리스트에 노출
+
+> ⚠️ 알려진 갭(미보정): 위 가상 코드는 **트레이스 단위**(도넛/시계열/Top Errors/byChannel/byAction)에만 반영된다. **행 단위** 집계인 `layers[].failCount` / `errCount` / `okRows` (LayerBars) 는 여전히 보정되지 않아, Seasoning 실패 트레이스의 CUBE 행이 `okRows` 로 잡힐 수 있다. 의도된 트레이드오프이며, 필요해지면 같은 패턴으로 보정 가능.
 
 **ONEOIS DB 연결이 완료되면 원복 방법**:
 1. `src/lib/tempStatus.ts` 파일 삭제
-2. 두 route 파일의 `import { classifyPendingByCubeResp } ...` 라인 제거
+2. 두 route 파일의 `import { ... } from "@/lib/tempStatus"` 라인 제거
 3. 두 `classify()` 의 `// TEMP(ONEOIS 미연결)` 블록을 원래 코드로 복원:
    `if (errs.length === 0) return allComplete ? "ok" : "pending";`
+4. `src/app/api/stats/route.ts` 의 트레이스 루프에서 Seasoning Top Errors 보정 블록 삭제

@@ -58,8 +58,7 @@ export function StatusDonut({ stats }: { stats: StatsResponse }) {
 
   const segs: Segment[] = useMemo(() => ([
     { key: "ok",      label: "OK",      count: totals.ok,      color: "#067647" },
-    { key: "fail",    label: "FAIL",    count: totals.fail,    color: "#c2410c" },
-    { key: "error",   label: "ERROR",   count: totals.error,   color: "#b42318" },
+    { key: "fail",    label: "FAIL",    count: totals.fail,    color: "#b42318" },
     { key: "pending", label: "PENDING", count: totals.pending, color: "#8a94a6" },
   ]), [totals]);
 

@@ -22,7 +22,6 @@ export function DimensionBreakdown({
       {items.map((it) => {
         const okPct   = it.total > 0 ? (it.ok    / it.total) * 100 : 0;
         const failPct = it.total > 0 ? (it.fail  / it.total) * 100 : 0;
-        const errPct  = it.total > 0 ? (it.error / it.total) * 100 : 0;
         const pendPct = it.total > 0 ? (it.pending / it.total) * 100 : 0;
         const share   = grandTotal > 0 ? (it.total / grandTotal) * 100 : 0;
         const wBar    = (it.total / maxTotal) * 100;
@@ -50,13 +49,11 @@ export function DimensionBreakdown({
             <div className="dim-stack" aria-hidden>
               {okPct > 0   && <span className="lbs ok"   style={{ width: `${okPct}%` }}   title={`OK ${it.ok}`} />}
               {failPct > 0 && <span className="lbs fail" style={{ width: `${failPct}%` }} title={`FAIL ${it.fail}`} />}
-              {errPct > 0  && <span className="lbs err"  style={{ width: `${errPct}%` }}  title={`ERROR ${it.error}`} />}
               {pendPct > 0 && <span className="lbs pend" style={{ width: `${pendPct}%` }} title={`PENDING ${it.pending}`} />}
             </div>
             <div className="dim-legend">
               <span className="lbs-l ok">OK {it.ok}</span>
               <span className="lbs-l fail">FAIL {it.fail}</span>
-              <span className="lbs-l err">ERR {it.error}</span>
               {it.pending > 0 && <span className="lbs-l pend">PND {it.pending}</span>}
             </div>
           </li>

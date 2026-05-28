@@ -15,8 +15,7 @@ import { LAYER_COLOR, LAYER_LABEL, LayerKey, StatsResponse } from "@/lib/types";
 
 const STATUS_COLOR = {
   ok:   "#067647",
-  fail: "#c2410c",
-  err:  "#b42318",
+  fail: "#b42318",
 } as const;
 
 function fmtMs(ms: number | null): string {
@@ -31,7 +30,6 @@ type Row = {
   color: string;
   ok: number;
   fail: number;
-  err: number;
   total: number;
   avgRespMs: number | null;
   totalLabel: string;
@@ -62,11 +60,6 @@ function LayerTooltip({ active, payload }: any) {
           <span className="ts-tooltip-key">FAIL</span>
           <span className="ts-tooltip-val">{row.fail.toLocaleString()} ({pct(row.fail).toFixed(1)}%)</span>
         </div>
-        <div className="ts-tooltip-row">
-          <span className="ts-tooltip-swatch" style={{ background: STATUS_COLOR.err }} />
-          <span className="ts-tooltip-key">ERR</span>
-          <span className="ts-tooltip-val">{row.err.toLocaleString()} ({pct(row.err).toFixed(1)}%)</span>
-        </div>
         <div className="ts-tooltip-row total">
           <span className="ts-tooltip-key">AVG RESP</span>
           <span className="ts-tooltip-val">{fmtMs(row.avgRespMs)}</span>
@@ -83,7 +76,6 @@ export function LayerBars({ stats }: { stats: StatsResponse }) {
     color: LAYER_COLOR[l.layer],
     ok: l.okRows,
     fail: l.failCount,
-    err: l.errCount,
     total: l.total,
     avgRespMs: l.avgRespMs,
     totalLabel: `${l.total.toLocaleString()} · ${fmtMs(l.avgRespMs)}`,
@@ -96,7 +88,6 @@ export function LayerBars({ stats }: { stats: StatsResponse }) {
       <div className="layer-bars-legend">
         <span className="ts-legend-item"><span className="legend-swatch" style={{ background: STATUS_COLOR.ok }} />OK</span>
         <span className="ts-legend-item"><span className="legend-swatch" style={{ background: STATUS_COLOR.fail }} />FAIL</span>
-        <span className="ts-legend-item"><span className="legend-swatch" style={{ background: STATUS_COLOR.err }} />ERROR</span>
         <span className="ts-legend-spacer" />
         <span className="ts-meta">stacked rows · avg resp on hover</span>
       </div>
@@ -139,11 +130,10 @@ export function LayerBars({ stats }: { stats: StatsResponse }) {
             cursor={{ fill: "var(--accent-soft)", opacity: 0.4 }}
           />
           <Bar dataKey="ok"   stackId="s" fill={STATUS_COLOR.ok}   isAnimationActive animationDuration={500} />
-          <Bar dataKey="fail" stackId="s" fill={STATUS_COLOR.fail} isAnimationActive animationDuration={500} />
           <Bar
-            dataKey="err"
+            dataKey="fail"
             stackId="s"
-            fill={STATUS_COLOR.err}
+            fill={STATUS_COLOR.fail}
             isAnimationActive
             animationDuration={500}
             radius={[0, 4, 4, 0]}

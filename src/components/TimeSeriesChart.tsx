@@ -15,20 +15,18 @@ import {
 } from "recharts";
 import { StatsResponse, TimeBucket } from "@/lib/types";
 
-const STATUS_KEYS = ["ok", "fail", "error", "pending"] as const;
+const STATUS_KEYS = ["ok", "fail", "pending"] as const;
 type StatusKey = typeof STATUS_KEYS[number];
 
 const STATUS_COLOR: Record<StatusKey, string> = {
   ok:      "#067647",
-  fail:    "#c2410c",
-  error:   "#b42318",
+  fail:    "#b42318",
   pending: "#8a94a6",
 };
 
 const STATUS_LABEL: Record<StatusKey, string> = {
   ok:      "OK",
   fail:    "FAIL",
-  error:   "ERROR",
   pending: "PENDING",
 };
 
@@ -82,7 +80,7 @@ function CustomTooltip({
 export function TimeSeriesChart({ stats }: { stats: StatsResponse }) {
   const granularity = stats.granularity;
   const [hidden, setHidden] = useState<Record<StatusKey, boolean>>({
-    ok: false, fail: false, error: false, pending: false,
+    ok: false, fail: false, pending: false,
   });
 
   const data: Row[] = useMemo(() => {
@@ -91,9 +89,8 @@ export function TimeSeriesChart({ stats }: { stats: StatsResponse }) {
       tick: fmtTick(b.ts, granularity),
       ok: b.ok,
       fail: b.fail,
-      error: b.error,
       pending: b.pending,
-      total: b.ok + b.fail + b.error + b.pending,
+      total: b.ok + b.fail + b.pending,
     }));
   }, [stats.buckets, granularity]);
 
@@ -153,11 +150,17 @@ export function TimeSeriesChart({ stats }: { stats: StatsResponse }) {
                 </linearGradient>
               ))}
             </defs>
-            <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
+            <CartesianGrid
+              stroke="var(--border-strong)"
+              strokeOpacity={0.55}
+              strokeWidth={1}
+              vertical
+              horizontal
+            />
             <XAxis
               dataKey="tick"
               tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}
-              tickLine={false}
+              tickLine={{ stroke: "var(--border-strong)" }}
               axisLine={{ stroke: "var(--border-strong)" }}
               tickMargin={8}
               height={32}
@@ -165,8 +168,8 @@ export function TimeSeriesChart({ stats }: { stats: StatsResponse }) {
             />
             <YAxis
               tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}
-              tickLine={false}
-              axisLine={false}
+              tickLine={{ stroke: "var(--border-strong)" }}
+              axisLine={{ stroke: "var(--border-strong)" }}
               width={52}
               allowDecimals={false}
               tickFormatter={(v) => v.toLocaleString()}

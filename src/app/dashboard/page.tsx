@@ -251,10 +251,10 @@ export default function DashboardPage() {
                   <span className="aux-pill-key">성공</span>
                   <span className="aux-pill-val">{stats.totals.ok.toLocaleString()}</span>
                 </span>
-                {(stats.totals.fail + stats.totals.error) > 0 && (
+                {stats.totals.fail > 0 && (
                   <span className="aux-pill err">
                     <span className="aux-pill-key">실패</span>
-                    <span className="aux-pill-val">{(stats.totals.fail + stats.totals.error).toLocaleString()}</span>
+                    <span className="aux-pill-val">{stats.totals.fail.toLocaleString()}</span>
                   </span>
                 )}
               </div>

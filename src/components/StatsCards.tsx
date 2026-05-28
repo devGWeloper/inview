@@ -43,12 +43,11 @@ function Sparkline({
 export function StatsCards({ stats }: { stats: StatsResponse }) {
   const { totals, avgLatencyMs, buckets } = stats;
   const total = totals.total;
-  const failures = totals.fail + totals.error;
-  const successRate = total > 0 ? (totals.ok / total) * 100 : 0;
+  const failures = totals.fail;
 
-  const totalSpark   = buckets.map((b: TimeBucket) => b.ok + b.fail + b.error + b.pending);
+  const totalSpark   = buckets.map((b: TimeBucket) => b.ok + b.fail + b.pending);
   const okSpark      = buckets.map((b: TimeBucket) => b.ok);
-  const failSpark    = buckets.map((b: TimeBucket) => b.fail + b.error);
+  const failSpark    = buckets.map((b: TimeBucket) => b.fail);
   const peakValue    = Math.max(0, ...totalSpark);
 
   return (
@@ -72,7 +71,7 @@ export function StatsCards({ stats }: { stats: StatsResponse }) {
       <HeroCard
         title="Failures"
         value={failures.toLocaleString()}
-        sub={`${totals.fail.toLocaleString()} fail · ${totals.error.toLocaleString()} error`}
+        sub={`${pct(failures, total)} of ${total.toLocaleString()}`}
         spark={failSpark}
         color="var(--err)"
         tone={failures > 0 ? "err" : "default"}

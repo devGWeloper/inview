@@ -104,21 +104,20 @@ export interface DimensionStats {
   total: number;
   ok: number;
   fail: number;
-  error: number;
   pending: number;
 }
 
+// 대시보드 집계는 ERROR_/FAIL_ 구분 없이 모두 fail 로 통합한다.
+// (라우트 단의 TraceStatus 는 ERROR/FAIL 을 구분하지만 dashboard 카드/차트는 OK·FAIL·PENDING 3분류만 사용)
 export interface StatusCounts {
   ok: number;
   fail: number;
-  error: number;
   pending: number;
 }
 
 export interface LayerStats {
   layer: LayerKey;
   total: number;
-  errCount: number;
   failCount: number;
   okRows: number;
   avgRespMs: number | null;
@@ -129,7 +128,6 @@ export interface TimeBucket {
   ts: string;
   ok: number;
   fail: number;
-  error: number;
   pending: number;
 }
 

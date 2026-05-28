@@ -1061,24 +1061,24 @@ a:hover { text-decoration: underline; }
 .ts-legend {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 13px;
-  color: var(--text-3);
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text-2);
   flex-wrap: wrap;
 }
 .ts-legend-item {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; align-items: center; gap: 7px;
   font-weight: 600;
   letter-spacing: 0.4px;
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-2);
-  padding: 4px 10px;
+  padding: 5px 11px;
   border-radius: 999px;
   cursor: pointer;
   transition: background .12s, color .12s, opacity .12s;
   font-family: var(--sans);
-  font-size: 12.5px;
+  font-size: 13.5px;
 }
 .ts-legend-item:hover { background: var(--surface-2); }
 .ts-legend-item.off {
@@ -1088,8 +1088,9 @@ a:hover { text-decoration: underline; }
 .ts-legend-spacer { flex: 1; }
 .ts-meta {
   font-family: var(--mono);
-  color: var(--text-3);
-  font-size: 12.5px;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
 }
 .ts-chart {
   background:
@@ -1109,7 +1110,7 @@ a:hover { text-decoration: underline; }
   min-width: 180px;
 }
 .ts-tooltip-head {
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 700;
   color: var(--text);
   font-family: var(--mono);
@@ -1122,14 +1123,14 @@ a:hover { text-decoration: underline; }
 .ts-tooltip-body {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
 }
 .ts-tooltip-row {
   display: grid;
   grid-template-columns: 12px auto 1fr;
   gap: 8px;
   align-items: center;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 .ts-tooltip-row.total {
   margin-top: 5px;
@@ -1147,10 +1148,10 @@ a:hover { text-decoration: underline; }
   display: inline-block;
 }
 .ts-tooltip-key {
-  color: var(--text-3);
+  color: var(--text-2);
   font-weight: 600;
   letter-spacing: 0.4px;
-  font-size: 11.5px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 .ts-tooltip-val {

@@ -156,16 +156,18 @@ export function TimeSeriesChart({ stats }: { stats: StatsResponse }) {
             <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
             <XAxis
               dataKey="tick"
-              tick={{ fill: "var(--text-3)", fontSize: 11, fontFamily: "var(--mono)" }}
+              tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}
               tickLine={false}
               axisLine={{ stroke: "var(--border-strong)" }}
-              minTickGap={24}
+              tickMargin={8}
+              height={32}
+              minTickGap={28}
             />
             <YAxis
-              tick={{ fill: "var(--text-3)", fontSize: 11, fontFamily: "var(--mono)" }}
+              tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}
               tickLine={false}
               axisLine={false}
-              width={44}
+              width={52}
               allowDecimals={false}
               tickFormatter={(v) => v.toLocaleString()}
             />
@@ -182,9 +184,9 @@ export function TimeSeriesChart({ stats }: { stats: StatsResponse }) {
                   value: `peak ${peakVal.toLocaleString()}${peakTs ? ` · ${fmtFullTs(peakTs, granularity)}` : ""}`,
                   position: "insideTopRight",
                   fill: "var(--text)",
-                  fontSize: 11,
+                  fontSize: 12.5,
                   fontFamily: "var(--mono)",
-                  fontWeight: 600,
+                  fontWeight: 700,
                 }}
               />
             )}

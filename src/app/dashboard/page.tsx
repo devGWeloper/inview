@@ -125,12 +125,14 @@ export default function DashboardPage() {
   };
 
   const onSelectChannel = (k: string) => {
-    setChannelId(k);
-    load({ ...computeFilter(), channelId: k });
+    const next = channelId === k ? "" : k;
+    setChannelId(next);
+    load({ ...computeFilter(), channelId: next || undefined });
   };
   const onSelectAction = (k: string) => {
-    setActionTyp(k);
-    load({ ...computeFilter(), actionTyp: k });
+    const next = actionTyp === k ? "" : k;
+    setActionTyp(next);
+    load({ ...computeFilter(), actionTyp: next || undefined });
   };
 
   const hasFilter = !!(userId || channelId || actionTyp);

@@ -35,7 +35,7 @@ export function DimensionBreakdown({
             onClick={onSelect && !isNone ? () => onSelect(it.key) : undefined}
             role={onSelect && !isNone ? "button" : undefined}
             tabIndex={onSelect && !isNone ? 0 : undefined}
-            title={onSelect && !isNone ? `클릭하여 ${it.key} 로 필터링` : it.key}
+            title={onSelect && !isNone ? (active ? `클릭하여 ${it.key} 필터 해제` : `클릭하여 ${it.key} 로 필터링`) : it.key}
           >
             <div className="dim-row-head">
               <span className="dim-key">{it.key}</span>

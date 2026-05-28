@@ -11,7 +11,7 @@ import {
   TraceRow,
 } from "@/lib/types";
 import { logger, reqContext } from "@/lib/logger";
-import { classifyPendingByCubeResp, hasSeasoningFailure, SEASONING_FAIL_CODE } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
+import { classifyPendingByGaiaResp, hasSeasoningFailure, SEASONING_FAIL_CODE } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
 
 export const dynamic = "force-dynamic";
 
@@ -20,10 +20,10 @@ type DashStatus = "ok" | "fail" | "pending";
 
 function classify(rows: TraceRow[], allComplete: boolean): DashStatus {
   const hasErr = rows.some((r) => !!r.errCd);
-  // TEMP(ONEOIS 미연결): pending 대신 CUBE RESP 로 ok/fail 판정 — tempStatus.ts 참고
+  // TEMP(ONEOIS 미연결): pending 대신 GAIA RESP 로 ok/fail 판정 — tempStatus.ts 참고
   if (!hasErr) {
     if (allComplete) return "ok";
-    const t = classifyPendingByCubeResp(rows);
+    const t = classifyPendingByGaiaResp(rows);
     return t === "ok" ? "ok" : "fail";
   }
   return "fail";

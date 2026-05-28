@@ -1,4 +1,23 @@
-import { LAYER_COLOR, LAYER_LABEL, StatsResponse } from "@/lib/types";
+"use client";
+
+import { useMemo } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  LabelList,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { LAYER_COLOR, LAYER_LABEL, LayerKey, StatsResponse } from "@/lib/types";
+
+const STATUS_COLOR = {
+  ok:   "#067647",
+  fail: "#c2410c",
+  err:  "#b42318",
+} as const;
 
 function fmtMs(ms: number | null): string {
   if (ms === null) return "—";
@@ -6,44 +25,142 @@ function fmtMs(ms: number | null): string {
   return `${(ms / 1000).toFixed(2)} s`;
 }
 
-export function LayerBars({ stats }: { stats: StatsResponse }) {
-  const maxTotal = Math.max(1, ...stats.layers.map((l) => l.total));
+type Row = {
+  layer: LayerKey;
+  name: string;
+  color: string;
+  ok: number;
+  fail: number;
+  err: number;
+  total: number;
+  avgRespMs: number | null;
+  totalLabel: string;
+};
+
+function LayerTooltip({ active, payload }: any) {
+  if (!active || !payload || payload.length === 0) return null;
+  const row: Row = payload[0].payload;
+  const pct = (v: number) => row.total > 0 ? (v / row.total) * 100 : 0;
   return (
-    <div className="layer-bars">
-      {stats.layers.map((l) => {
-        const okPct   = l.total > 0 ? (l.okRows   / l.total) * 100 : 0;
-        const failPct = l.total > 0 ? (l.failCount / l.total) * 100 : 0;
-        const errPct  = l.total > 0 ? (l.errCount  / l.total) * 100 : 0;
-        const barW    = (l.total / maxTotal) * 100;
-        return (
-          <div key={l.layer} className="layer-bar-row">
-            <div className="layer-bar-head">
-              <span className="layer-bar-name">
-                <span className="layer-bar-chip" style={{ background: LAYER_COLOR[l.layer] }} />
-                {LAYER_LABEL[l.layer]}
-              </span>
-              <span className="layer-bar-stats">
-                <span className="layer-bar-total">{l.total.toLocaleString()}</span>
-                <span className="layer-bar-sep">·</span>
-                <span className="layer-bar-rt">avg {fmtMs(l.avgRespMs)}</span>
-              </span>
-            </div>
-            <div className="layer-bar-track" title={`${l.total} rows`}>
-              <div className="layer-bar-fill" style={{ width: `${barW}%`, background: LAYER_COLOR[l.layer] }} />
-            </div>
-            <div className="layer-bar-stack" aria-hidden>
-              {okPct > 0   && <span className="lbs ok"   style={{ width: `${okPct}%` }}   title={`OK ${l.okRows} (${okPct.toFixed(1)}%)`} />}
-              {failPct > 0 && <span className="lbs fail" style={{ width: `${failPct}%` }} title={`FAIL ${l.failCount} (${failPct.toFixed(1)}%)`} />}
-              {errPct > 0  && <span className="lbs err"  style={{ width: `${errPct}%` }}  title={`ERROR ${l.errCount} (${errPct.toFixed(1)}%)`} />}
-            </div>
-            <div className="layer-bar-legend">
-              <span className="lbs-l ok">OK {l.okRows} <em>({okPct.toFixed(1)}%)</em></span>
-              <span className="lbs-l fail">FAIL {l.failCount} <em>({failPct.toFixed(1)}%)</em></span>
-              <span className="lbs-l err">ERR {l.errCount} <em>({errPct.toFixed(1)}%)</em></span>
-            </div>
-          </div>
-        );
-      })}
+    <div className="ts-tooltip">
+      <div className="ts-tooltip-head">
+        <span className="legend-swatch" style={{ background: row.color, marginRight: 6 }} />
+        {row.name}
+      </div>
+      <div className="ts-tooltip-body">
+        <div className="ts-tooltip-row">
+          <span className="ts-tooltip-key">TOTAL</span>
+          <span className="ts-tooltip-val">{row.total.toLocaleString()}</span>
+        </div>
+        <div className="ts-tooltip-row">
+          <span className="ts-tooltip-swatch" style={{ background: STATUS_COLOR.ok }} />
+          <span className="ts-tooltip-key">OK</span>
+          <span className="ts-tooltip-val">{row.ok.toLocaleString()} ({pct(row.ok).toFixed(1)}%)</span>
+        </div>
+        <div className="ts-tooltip-row">
+          <span className="ts-tooltip-swatch" style={{ background: STATUS_COLOR.fail }} />
+          <span className="ts-tooltip-key">FAIL</span>
+          <span className="ts-tooltip-val">{row.fail.toLocaleString()} ({pct(row.fail).toFixed(1)}%)</span>
+        </div>
+        <div className="ts-tooltip-row">
+          <span className="ts-tooltip-swatch" style={{ background: STATUS_COLOR.err }} />
+          <span className="ts-tooltip-key">ERR</span>
+          <span className="ts-tooltip-val">{row.err.toLocaleString()} ({pct(row.err).toFixed(1)}%)</span>
+        </div>
+        <div className="ts-tooltip-row total">
+          <span className="ts-tooltip-key">AVG RESP</span>
+          <span className="ts-tooltip-val">{fmtMs(row.avgRespMs)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function LayerBars({ stats }: { stats: StatsResponse }) {
+  const data: Row[] = useMemo(() => stats.layers.map((l) => ({
+    layer: l.layer,
+    name: LAYER_LABEL[l.layer],
+    color: LAYER_COLOR[l.layer],
+    ok: l.okRows,
+    fail: l.failCount,
+    err: l.errCount,
+    total: l.total,
+    avgRespMs: l.avgRespMs,
+    totalLabel: `${l.total.toLocaleString()} · ${fmtMs(l.avgRespMs)}`,
+  })), [stats.layers]);
+
+  const height = Math.max(180, data.length * 56 + 28);
+
+  return (
+    <div className="layer-bars-chart">
+      <div className="layer-bars-legend">
+        <span className="ts-legend-item"><span className="legend-swatch" style={{ background: STATUS_COLOR.ok }} />OK</span>
+        <span className="ts-legend-item"><span className="legend-swatch" style={{ background: STATUS_COLOR.fail }} />FAIL</span>
+        <span className="ts-legend-item"><span className="legend-swatch" style={{ background: STATUS_COLOR.err }} />ERROR</span>
+        <span className="ts-legend-spacer" />
+        <span className="ts-meta">stacked rows · avg resp on hover</span>
+      </div>
+      <ResponsiveContainer width="100%" height={height}>
+        <BarChart
+          data={data}
+          layout="vertical"
+          margin={{ top: 8, right: 36, left: 8, bottom: 8 }}
+          barCategoryGap={14}
+        >
+          <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" horizontal={false} />
+          <XAxis
+            type="number"
+            tick={{ fill: "var(--text-3)", fontSize: 11, fontFamily: "var(--mono)" }}
+            tickLine={false}
+            axisLine={{ stroke: "var(--border-strong)" }}
+            allowDecimals={false}
+            tickFormatter={(v) => v.toLocaleString()}
+          />
+          <YAxis
+            type="category"
+            dataKey="name"
+            tick={(props: any) => {
+              const { x, y, payload, index } = props;
+              const row = data[index];
+              return (
+                <g transform={`translate(${x},${y})`}>
+                  <rect x={-110} y={-9} width={4} height={18} rx={2} fill={row?.color ?? "var(--text-muted)"} />
+                  <text x={-100} y={4} fill="var(--text)" fontSize={13} fontWeight={600}>{payload.value}</text>
+                </g>
+              );
+            }}
+            width={120}
+            tickLine={false}
+            axisLine={false}
+            interval={0}
+          />
+          <Tooltip
+            content={<LayerTooltip />}
+            cursor={{ fill: "var(--accent-soft)", opacity: 0.4 }}
+          />
+          <Bar dataKey="ok"   stackId="s" fill={STATUS_COLOR.ok}   isAnimationActive animationDuration={500} />
+          <Bar dataKey="fail" stackId="s" fill={STATUS_COLOR.fail} isAnimationActive animationDuration={500} />
+          <Bar
+            dataKey="err"
+            stackId="s"
+            fill={STATUS_COLOR.err}
+            isAnimationActive
+            animationDuration={500}
+            radius={[0, 4, 4, 0]}
+          >
+            <LabelList
+              dataKey="totalLabel"
+              position="right"
+              style={{
+                fill: "var(--text-2)",
+                fontSize: 11,
+                fontFamily: "var(--mono)",
+                fontWeight: 600,
+              }}
+            />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }

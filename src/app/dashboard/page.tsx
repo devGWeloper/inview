@@ -41,6 +41,22 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [actionTypeOptions, setActionTypeOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/action-types", { cache: "no-store" });
+        if (!res.ok) return;
+        const data: { values: string[] } = await res.json();
+        if (alive) setActionTypeOptions(data.values ?? []);
+      } catch {
+        /* ignore — falls back to empty options, user can still type via 직접입력 if added */
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   const computeFilter = useCallback((): StatsFilter => {
     const base = {
@@ -185,13 +201,21 @@ export default function DashboardPage() {
             value={channelId}
             onChange={(e) => setChannelId(e.target.value)}
           />
-          <input
-            type="text"
-            className="user-input"
-            placeholder="ACTION_TYP"
+          <select
+            className="user-input user-select"
             value={actionTyp}
-            onChange={(e) => setActionTyp(e.target.value)}
-          />
+            onChange={(e) => {
+              const v = e.target.value;
+              setActionTyp(v);
+              load({ ...computeFilter(), actionTyp: v || undefined });
+            }}
+            aria-label="ACTION_TYP"
+          >
+            <option value="">ACTION_TYP (전체)</option>
+            {actionTypeOptions.map((opt) => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
           {hasFilter && (
             <button type="button" className="btn ghost" onClick={clearFilters}>
               필터 초기화

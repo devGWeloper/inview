@@ -1,72 +1,121 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Cell, Pie, PieChart, ResponsiveContainer, Sector, Tooltip } from "recharts";
 import { StatsResponse } from "@/lib/types";
 
 type Segment = { key: string; label: string; count: number; color: string };
 
-/**
- * SVG 도넛 세그먼트 path 계산.
- * cx, cy: center, rOuter: outer radius, rInner: inner radius
- * a0, a1: start/end angle in radians (0 = 12시 방향)
- */
-function arcPath(cx: number, cy: number, rOuter: number, rInner: number, a0: number, a1: number): string {
-  const large = a1 - a0 > Math.PI ? 1 : 0;
-  const sx0 = cx + rOuter * Math.sin(a0);
-  const sy0 = cy - rOuter * Math.cos(a0);
-  const sx1 = cx + rOuter * Math.sin(a1);
-  const sy1 = cy - rOuter * Math.cos(a1);
-  const ix0 = cx + rInner * Math.sin(a0);
-  const iy0 = cy - rInner * Math.cos(a0);
-  const ix1 = cx + rInner * Math.sin(a1);
-  const iy1 = cy - rInner * Math.cos(a1);
-  return [
-    `M ${sx0} ${sy0}`,
-    `A ${rOuter} ${rOuter} 0 ${large} 1 ${sx1} ${sy1}`,
-    `L ${ix1} ${iy1}`,
-    `A ${rInner} ${rInner} 0 ${large} 0 ${ix0} ${iy0}`,
-    "Z",
-  ].join(" ");
+const SIZE = 220;
+
+function renderActiveShape(props: any) {
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
+  return (
+    <g>
+      <Sector
+        cx={cx}
+        cy={cy}
+        innerRadius={innerRadius}
+        outerRadius={outerRadius + 6}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        fill={fill}
+        stroke="var(--surface)"
+        strokeWidth={2}
+      />
+    </g>
+  );
+}
+
+function DonutTooltip({ active, payload, total }: any) {
+  if (!active || !payload || payload.length === 0) return null;
+  const seg: Segment = payload[0].payload;
+  const pct = total > 0 ? (seg.count / total) * 100 : 0;
+  return (
+    <div className="ts-tooltip">
+      <div className="ts-tooltip-head">
+        <span className="legend-swatch" style={{ background: seg.color, marginRight: 6 }} />
+        {seg.label}
+      </div>
+      <div className="ts-tooltip-body">
+        <div className="ts-tooltip-row">
+          <span className="ts-tooltip-key">COUNT</span>
+          <span className="ts-tooltip-val">{seg.count.toLocaleString()}</span>
+        </div>
+        <div className="ts-tooltip-row">
+          <span className="ts-tooltip-key">SHARE</span>
+          <span className="ts-tooltip-val">{pct.toFixed(1)}%</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function StatusDonut({ stats }: { stats: StatsResponse }) {
   const { totals } = stats;
   const total = totals.total;
-  const segs: Segment[] = [
-    { key: "ok",      label: "OK",      count: totals.ok,      color: "var(--ok)"   },
-    { key: "fail",    label: "FAIL",    count: totals.fail,    color: "var(--fail)" },
-    { key: "error",   label: "ERROR",   count: totals.error,   color: "var(--err)"  },
-    { key: "pending", label: "PENDING", count: totals.pending, color: "var(--text-muted)" },
-  ];
+  const [hoverKey, setHoverKey] = useState<string | null>(null);
 
-  const size = 200;
-  const cx = size / 2;
-  const cy = size / 2;
-  const rOuter = 90;
-  const rInner = 58;
+  const segs: Segment[] = useMemo(() => ([
+    { key: "ok",      label: "OK",      count: totals.ok,      color: "#067647" },
+    { key: "fail",    label: "FAIL",    count: totals.fail,    color: "#c2410c" },
+    { key: "error",   label: "ERROR",   count: totals.error,   color: "#b42318" },
+    { key: "pending", label: "PENDING", count: totals.pending, color: "#8a94a6" },
+  ]), [totals]);
 
-  let acc = 0;
-  const paths = segs.map((s) => {
-    if (s.count <= 0) return null;
-    const a0 = (acc / Math.max(1, total)) * 2 * Math.PI;
-    acc += s.count;
-    const a1 = (acc / Math.max(1, total)) * 2 * Math.PI;
-    return { key: s.key, color: s.color, d: arcPath(cx, cy, rOuter, rInner, a0, a1) };
-  });
-
+  const visible = segs.filter((s) => s.count > 0);
   const okPct = total > 0 ? (totals.ok / total) * 100 : 0;
+  const pieData = visible.length > 0
+    ? visible
+    : [{ key: "empty", label: "—", count: 1, color: "var(--surface-3)" }];
+
+  const pieProps: any = {
+    data: pieData,
+    dataKey: "count",
+    nameKey: "label",
+    cx: "50%",
+    cy: "50%",
+    innerRadius: 62,
+    outerRadius: 92,
+    paddingAngle: visible.length > 1 ? 2 : 0,
+    stroke: "var(--surface)",
+    strokeWidth: 2,
+    activeShape: renderActiveShape,
+    onMouseEnter: (entry: any) => setHoverKey(entry?.key ?? null),
+    onMouseLeave: () => setHoverKey(null),
+    isAnimationActive: true,
+    animationDuration: 550,
+  };
 
   return (
     <div className="donut-wrap">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="status distribution">
-        <circle cx={cx} cy={cy} r={rOuter} fill="var(--surface-3)" />
-        <circle cx={cx} cy={cy} r={rInner} fill="var(--surface)" />
-        {paths.map((p) => p && <path key={p.key} d={p.d} fill={p.color} />)}
-        <text x={cx} y={cy - 6} textAnchor="middle" className="donut-center-pct">{okPct.toFixed(1)}%</text>
-        <text x={cx} y={cy + 14} textAnchor="middle" className="donut-center-label">success</text>
-      </svg>
+      <div className="donut-chart" style={{ width: SIZE, height: SIZE, position: "relative" }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie {...pieProps}>
+              {pieData.map((s, i) => (
+                <Cell key={i} fill={s.color} />
+              ))}
+            </Pie>
+            <Tooltip content={<DonutTooltip total={total} />} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="donut-center" aria-hidden>
+          <div className="donut-center-pct">{okPct.toFixed(1)}%</div>
+          <div className="donut-center-label">success</div>
+        </div>
+      </div>
       <div className="donut-legend">
         {segs.map((s) => {
           const p = total > 0 ? (s.count / total) * 100 : 0;
+          const isActive = hoverKey === s.key;
           return (
-            <div key={s.key} className="donut-legend-row">
+            <div
+              key={s.key}
+              className={"donut-legend-row" + (isActive ? " active" : "")}
+              onMouseEnter={() => setHoverKey(s.key)}
+              onMouseLeave={() => setHoverKey(null)}
+            >
               <span className="legend-swatch" style={{ background: s.color }} />
               <span className="legend-label">{s.label}</span>
               <span className="legend-count">{s.count.toLocaleString()}</span>

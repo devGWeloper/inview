@@ -19,7 +19,8 @@
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('keys:', list\\(d.keys\\(\\)\\)\\); print\\('byChannel:', d['byChannel']\\); print\\('byAction:', d['byAction']\\)\")",
       "Bash(curl *)",
       "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 5174 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }')",
-      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('keys:', sorted\\(d.keys\\(\\)\\)\\)\")"
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('keys:', sorted\\(d.keys\\(\\)\\)\\)\")",
+      "Bash(npm ls *)"
     ]
   }
 }

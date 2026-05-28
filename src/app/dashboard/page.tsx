@@ -250,37 +250,6 @@ export default function DashboardPage() {
         </form>
       </div>
 
-      {excludeErrCds.length > 0 && (
-        <div className="exclude-bar" role="status" aria-live="polite">
-          <span className="exclude-bar-label">
-            <span className="exclude-bar-icon" aria-hidden>⊘</span>
-            집계에서 제외
-            {stats && stats.excludedTraceCount > 0 && (
-              <span className="exclude-bar-count">
-                trace {stats.excludedTraceCount.toLocaleString()}건
-              </span>
-            )}
-          </span>
-          <div className="exclude-chips">
-            {excludeErrCds.map((code) => (
-              <button
-                key={code}
-                type="button"
-                className="exclude-chip"
-                onClick={() => removeExclude(code)}
-                title={`${code} — 클릭해서 다시 포함`}
-              >
-                <span className="exclude-chip-code">{code}</span>
-                <span className="exclude-chip-x" aria-hidden>×</span>
-              </button>
-            ))}
-          </div>
-          <button type="button" className="btn ghost" onClick={clearExcludes}>
-            모두 해제
-          </button>
-        </div>
-      )}
-
       {loading && <div className="dash-banner loading">집계 중…</div>}
       {err && <div className="dash-banner err">불러오기 실패: {err}</div>}
 
@@ -317,6 +286,37 @@ export default function DashboardPage() {
               <TimeSeriesChart stats={stats} />
             </div>
           </section>
+
+          {excludeErrCds.length > 0 && (
+            <div className="exclude-bar" role="status" aria-live="polite">
+              <span className="exclude-bar-label">
+                <span className="exclude-bar-icon" aria-hidden>⊘</span>
+                집계에서 제외
+                {stats.excludedTraceCount > 0 && (
+                  <span className="exclude-bar-count">
+                    trace {stats.excludedTraceCount.toLocaleString()}건
+                  </span>
+                )}
+              </span>
+              <div className="exclude-chips">
+                {excludeErrCds.map((code) => (
+                  <button
+                    key={code}
+                    type="button"
+                    className="exclude-chip"
+                    onClick={() => removeExclude(code)}
+                    title={`${code} — 클릭해서 다시 포함`}
+                  >
+                    <span className="exclude-chip-code">{code}</span>
+                    <span className="exclude-chip-x" aria-hidden>×</span>
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="btn ghost" onClick={clearExcludes}>
+                모두 해제
+              </button>
+            </div>
+          )}
 
           {/* 3. 상태 분포 + 상위 에러 — 의사결정에 바로 쓰이는 보조 정보 */}
           <div className="dash-row split">

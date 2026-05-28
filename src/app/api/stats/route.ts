@@ -18,15 +18,38 @@ export const dynamic = "force-dynamic";
 // 대시보드 집계는 ERROR/FAIL 구분 없이 fail 로 통합한다 (트레이스 목록 쪽 classify 와 의도적으로 다름).
 type DashStatus = "ok" | "fail" | "pending";
 
-function classify(rows: TraceRow[], allComplete: boolean): DashStatus {
-  const hasErr = rows.some((r) => !!r.errCd);
+/**
+ * 에러 필터 적용 여부를 판단하는 predicate 를 만든다.
+ *   include 모드: codes 에 포함된 코드만 카운트 (그 외는 ignored)
+ *   exclude 모드: codes 에 포함된 코드는 ignored
+ *   그 외 (mode=null, codes 비어있음): 아무것도 ignored 가 아님
+ *
+ * ignored 처리 정책: 에러가 없는 것처럼 취급 (A안) — 트레이스 단위 집계에서 OK 로 카운트되고,
+ * topErrors / 레이어 failCount 에서도 빠진다.
+ */
+function makeErrFilter(mode: "include" | "exclude" | null, codes: string[]) {
+  const active = mode !== null && codes.length > 0;
+  const set = new Set(codes);
+  return (code: string | null | undefined): boolean => {
+    if (!active || !code) return false;
+    const inSet = set.has(code);
+    return mode === "include" ? !inSet : inSet;
+  };
+}
+
+function classify(
+  rows: TraceRow[],
+  allComplete: boolean,
+  isIgnored: (code: string | null) => boolean,
+): DashStatus {
+  const hasRealErr = rows.some((r) => r.errCd && !isIgnored(r.errCd));
+  if (hasRealErr) return "fail";
   // TEMP(ONEOIS 미연결): pending 대신 CUBE RESP 로 ok/fail 판정 — tempStatus.ts 참고
-  if (!hasErr) {
-    if (allComplete) return "ok";
-    const t = classifyPendingByCubeResp(rows);
-    return t === "ok" ? "ok" : "fail";
-  }
-  return "fail";
+  if (allComplete) return "ok";
+  // Seasoning 도 필터에서 ignored 라면 ok 로 간주
+  if (isIgnored(SEASONING_FAIL_CODE)) return "ok";
+  const t = classifyPendingByCubeResp(rows);
+  return t === "ok" ? "ok" : "fail";
 }
 
 type Granularity = "5m" | "1h" | "1d";
@@ -85,6 +108,17 @@ export async function GET(req: NextRequest) {
   const channelId = sp.get("channelId") || undefined;
   const actionTyp = sp.get("actionTyp") || undefined;
 
+  // 에러 필터 파라미터: errMode=(include|exclude), errCds=CSV
+  const rawMode = sp.get("errMode");
+  const errMode: "include" | "exclude" | null =
+    rawMode === "include" || rawMode === "exclude" ? rawMode : null;
+  const errCds = (sp.get("errCds") || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  const effectiveMode = errCds.length > 0 ? errMode : null;
+  const isIgnored = makeErrFilter(effectiveMode, errCds);
+
   // 기본: 최근 24시간
   const effectiveFromMs = dateFrom ? Date.parse(dateFrom) : now - 24 * 3_600_000;
   const effectiveToMs = dateTo ? Date.parse(dateTo) : now;
@@ -132,12 +166,16 @@ export async function GET(req: NextRequest) {
     let latencySum = 0;
     let latencyN = 0;
 
+    // 필터 적용 전, 데이터에 존재하는 모든 에러 코드를 수집해서 UI 의 옵션 소스로 노출.
+    // 가상 코드(FAIL_SEASONING)는 실제 데이터에 Seasoning 실패가 있을 때만 포함.
+    const allErrCdSet = new Set<string>();
+
     for (const [, list] of byTrace) {
       totals.total += 1;
       const layerSet = new Set(list.map((r) => r.layer));
       const allComplete =
         layerSet.size === LAYER_ORDER.length && list.every((r) => r.sendCompltYn === "Y");
-      const status = classify(list, allComplete);
+      const status = classify(list, allComplete, isIgnored);
       totals[status] += 1;
 
       // user
@@ -150,14 +188,20 @@ export async function GET(req: NextRequest) {
       dimBump(channelAcc, ch, status);
       dimBump(actionAcc, at, status);
 
-      // top errors (FAIL/ERROR 모두 포함, 단 에러 코드 기준)
+      // top errors (FAIL/ERROR 모두 포함, 단 에러 코드 기준).
+      // ignored 코드는 카운트 제외 + allErrCds 에는 필터 적용 전 코드 모두 수집.
       for (const r of list) {
         if (!r.errCd) continue;
+        allErrCdSet.add(r.errCd);
+        if (isIgnored(r.errCd)) continue;
         errCount.set(r.errCd, (errCount.get(r.errCd) ?? 0) + 1);
       }
       // TEMP(ONEOIS 미연결): Seasoning 실패는 실제 errCd 가 없으므로 가상 코드로 topErrors 에 반영
       if (hasSeasoningFailure(list)) {
-        errCount.set(SEASONING_FAIL_CODE, (errCount.get(SEASONING_FAIL_CODE) ?? 0) + 1);
+        allErrCdSet.add(SEASONING_FAIL_CODE);
+        if (!isIgnored(SEASONING_FAIL_CODE)) {
+          errCount.set(SEASONING_FAIL_CODE, (errCount.get(SEASONING_FAIL_CODE) ?? 0) + 1);
+        }
       }
 
       // 트레이스 시작 시각 → 버킷
@@ -216,8 +260,9 @@ export async function GET(req: NextRequest) {
       const a = layerAcc.get(r.layer);
       if (!a) continue;
       a.total += 1;
-      if (r.errCd) a.fail += 1;
-      if (r.sendCompltYn === "Y" && !r.errCd) a.ok += 1;
+      const errCounts = !!r.errCd && !isIgnored(r.errCd);
+      if (errCounts) a.fail += 1;
+      if (r.sendCompltYn === "Y" && !errCounts) a.ok += 1;
       const s = parseTs(r.sendTm);
       const e = parseTs(r.respTm);
       if (s !== null && e !== null) {
@@ -249,6 +294,8 @@ export async function GET(req: NextRequest) {
       byChannel: Array.from(channelAcc.values()).sort((a, b) => b.total - a.total),
       byAction: Array.from(actionAcc.values()).sort((a, b) => b.total - a.total),
       rowCount: rows.length,
+      allErrCds: Array.from(allErrCdSet).sort((a, b) => a.localeCompare(b)),
+      errFilter: { mode: effectiveMode, codes: effectiveMode ? errCds : [] },
     };
 
     logger.info("GET /api/stats done", {

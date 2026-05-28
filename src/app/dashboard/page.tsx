@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { DimensionBreakdown } from "@/components/DimensionBreakdown";
+import { ErrCodeFilter, ErrFilterMode } from "@/components/ErrCodeFilter";
 import { LayerBars } from "@/components/LayerBars";
 import { StatsCards } from "@/components/StatsCards";
 import { StatusDonut } from "@/components/StatusDonut";
@@ -37,6 +38,8 @@ export default function DashboardPage() {
   const [actionTyp, setActionTyp] = useState("");
   const [customFrom, setCustomFrom] = useState<string>("");
   const [customTo, setCustomTo] = useState<string>("");
+  const [errMode, setErrMode] = useState<ErrFilterMode>(null);
+  const [errCds, setErrCds] = useState<string[]>([]);
 
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -59,10 +62,12 @@ export default function DashboardPage() {
   }, []);
 
   const computeFilter = useCallback((): StatsFilter => {
-    const base = {
+    const base: StatsFilter = {
       userId: userId || undefined,
       channelId: channelId || undefined,
       actionTyp: actionTyp || undefined,
+      errMode: errMode ?? undefined,
+      errCds: errCds.length > 0 ? errCds : undefined,
     };
     if (preset === "custom") {
       return {
@@ -78,7 +83,7 @@ export default function DashboardPage() {
       dateFrom: toLocalInput(now - p.hours * 3_600_000) + ":00",
       dateTo:   toLocalInput(now) + ":00",
     };
-  }, [preset, customFrom, customTo, userId, channelId, actionTyp]);
+  }, [preset, customFrom, customTo, userId, channelId, actionTyp, errMode, errCds]);
 
   const load = useCallback(async (f: StatsFilter) => {
     setLoading(true);
@@ -90,6 +95,10 @@ export default function DashboardPage() {
       if (f.userId)    q.set("userId",    f.userId);
       if (f.channelId) q.set("channelId", f.channelId);
       if (f.actionTyp) q.set("actionTyp", f.actionTyp);
+      if (f.errMode && f.errCds && f.errCds.length > 0) {
+        q.set("errMode", f.errMode);
+        q.set("errCds", f.errCds.join(","));
+      }
       const res = await fetch(`/api/stats?${q.toString()}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: StatsResponse = await res.json();
@@ -120,6 +129,8 @@ export default function DashboardPage() {
         userId: userId || undefined,
         channelId: channelId || undefined,
         actionTyp: actionTyp || undefined,
+        errMode: errMode ?? undefined,
+        errCds: errCds.length > 0 ? errCds : undefined,
       });
     }
   };
@@ -135,12 +146,31 @@ export default function DashboardPage() {
     load({ ...computeFilter(), actionTyp: next || undefined });
   };
 
-  const hasFilter = !!(userId || channelId || actionTyp);
+  const hasFilter = !!(userId || channelId || actionTyp || (errMode && errCds.length > 0));
   const clearFilters = () => {
     setUserId("");
     setChannelId("");
     setActionTyp("");
-    load({ ...computeFilter(), userId: undefined, channelId: undefined, actionTyp: undefined });
+    setErrMode(null);
+    setErrCds([]);
+    load({
+      ...computeFilter(),
+      userId: undefined,
+      channelId: undefined,
+      actionTyp: undefined,
+      errMode: undefined,
+      errCds: undefined,
+    });
+  };
+
+  const onErrFilterChange = (mode: ErrFilterMode, codes: string[]) => {
+    setErrMode(mode);
+    setErrCds(codes);
+    load({
+      ...computeFilter(),
+      errMode: mode ?? undefined,
+      errCds: codes.length > 0 ? codes : undefined,
+    });
   };
 
   return (
@@ -218,6 +248,12 @@ export default function DashboardPage() {
               <option key={opt} value={opt}>{opt}</option>
             ))}
           </select>
+          <ErrCodeFilter
+            options={stats?.allErrCds ?? []}
+            mode={errMode}
+            selected={errCds}
+            onChange={onErrFilterChange}
+          />
           {hasFilter && (
             <button type="button" className="btn ghost" onClick={clearFilters}>
               필터 초기화

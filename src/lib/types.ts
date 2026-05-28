@@ -96,6 +96,10 @@ export interface StatsFilter {
   userId?: string;
   channelId?: string;
   actionTyp?: string;
+  /** 에러 코드 필터 모드: 'include' = errCds 만 카운트, 'exclude' = errCds 제외 후 카운트. undefined = 무필터 */
+  errMode?: "include" | "exclude";
+  /** errMode 와 함께 사용. 빈 배열이면 필터 미적용으로 간주 */
+  errCds?: string[];
 }
 
 export interface DimensionStats {
@@ -158,4 +162,8 @@ export interface StatsResponse {
   byAction: DimensionStats[];
   /** 트레이스 행 데이터를 가져온 전체 행 수 */
   rowCount: number;
+  /** 현재 기간 내 데이터에 존재하는 모든 에러 코드 (필터 미적용 기준). UI 의 에러 필터 옵션 소스 */
+  allErrCds: string[];
+  /** 실제로 적용된 에러 필터 (echo). UI 동기화를 단순화하기 위함 */
+  errFilter: { mode: "include" | "exclude" | null; codes: string[] };
 }

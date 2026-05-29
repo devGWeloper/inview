@@ -43,8 +43,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="right">
               <span>TraceX</span>
               <span className="ver">v{pkg.version}</span>
-              <span className="sep" aria-hidden />
-              <span>Internal use only</span>
             </div>
           </footer>
         </div>

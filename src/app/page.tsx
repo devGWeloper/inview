@@ -74,8 +74,9 @@ export default function Page() {
       const q = new URLSearchParams();
       if (f.traceId) q.set("traceId", f.traceId);
       if (f.userId) q.set("userId", f.userId);
-      if (f.dateFrom) q.set("dateFrom", f.dateFrom);
-      if (f.dateTo) q.set("dateTo", f.dateTo);
+      // date input은 YYYY-MM-DD만 주므로 서버 포맷(YYYY-MM-DDTHH:mm:ss)으로 보강
+      if (f.dateFrom) q.set("dateFrom", f.dateFrom.length === 10 ? `${f.dateFrom}T00:00:00` : f.dateFrom);
+      if (f.dateTo)   q.set("dateTo",   f.dateTo.length   === 10 ? `${f.dateTo}T23:59:59`   : f.dateTo);
       if (f.onlyError) q.set("onlyError", "true");
       const res = await fetch(`/api/traces?${q.toString()}`, { cache: "no-store" });
       const data: TraceListResponse = await res.json();
@@ -139,48 +140,47 @@ export default function Page() {
 
           <div className="filter">
             <form onSubmit={onSubmit}>
-              <div className="filter-grid">
-                <label>
-                  TRACE_ID
+              <div className="filter-row">
+                <input
+                  className="f-input f-trace"
+                  type="text"
+                  placeholder="TRACE_ID"
+                  aria-label="TRACE_ID"
+                  value={filter.traceId ?? ""}
+                  onChange={(e) => setFilter({ ...filter, traceId: e.target.value || undefined })}
+                />
+                <input
+                  className="f-input f-user"
+                  type="text"
+                  placeholder="USER_ID"
+                  aria-label="USER_ID"
+                  value={filter.userId ?? ""}
+                  onChange={(e) => setFilter({ ...filter, userId: e.target.value || undefined })}
+                />
+                <div className="f-daterange" role="group" aria-label="기간">
                   <input
-                    type="text"
-                    value={filter.traceId ?? ""}
-                    onChange={(e) => setFilter({ ...filter, traceId: e.target.value || undefined })}
-                  />
-                </label>
-                <label>
-                  USER_ID
-                  <input
-                    type="text"
-                    value={filter.userId ?? ""}
-                    onChange={(e) => setFilter({ ...filter, userId: e.target.value || undefined })}
-                  />
-                </label>
-                <label>
-                  FROM
-                  <input
-                    type="datetime-local"
-                    value={filter.dateFrom ?? ""}
+                    className="f-input f-date"
+                    type="date"
+                    aria-label="FROM"
+                    value={filter.dateFrom?.slice(0, 10) ?? ""}
                     onChange={(e) => setFilter({ ...filter, dateFrom: e.target.value || undefined })}
                   />
-                </label>
-                <label>
-                  TO
+                  <span className="f-tilde" aria-hidden>~</span>
                   <input
-                    type="datetime-local"
-                    value={filter.dateTo ?? ""}
+                    className="f-input f-date"
+                    type="date"
+                    aria-label="TO"
+                    value={filter.dateTo?.slice(0, 10) ?? ""}
                     onChange={(e) => setFilter({ ...filter, dateTo: e.target.value || undefined })}
                   />
-                </label>
-              </div>
-              <div className="filter-actions">
+                </div>
                 <label className="check">
                   <input
                     type="checkbox"
                     checked={!!filter.onlyError}
                     onChange={(e) => setFilter({ ...filter, onlyError: e.target.checked || undefined })}
                   />
-                  오류만 표시
+                  오류만
                 </label>
                 <button type="button" className="btn" onClick={onReset}>초기화</button>
                 <button type="submit" className="btn primary">조회</button>

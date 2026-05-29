@@ -50,7 +50,7 @@ a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 /* ---------------- shell ---------------- */
-.app { min-height: 100vh; display: flex; flex-direction: column; }
+.app { height: 100dvh; min-height: 100dvh; display: flex; flex-direction: column; }
 
 .topbar {
   height: 56px;
@@ -97,6 +97,7 @@ a:hover { text-decoration: underline; }
   min-height: 0;
 }
 @media (max-width: 1180px) {
+  .app { height: auto; }
   .layout {
     grid-template-columns: 1fr;
     gap: 14px;

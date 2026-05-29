@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import pkg from "../../package.json";
 import { TabNav } from "@/components/TabNav";
 import { connectedLayerCount, getAppEnv } from "@/lib/db";
 import { LAYER_ORDER } from "@/lib/types";
@@ -33,6 +34,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
           </header>
           {children}
+          <footer className="statusbar">
+            <div className="left">
+              <span>© 2026 SK hynix</span>
+              <span className="sep" aria-hidden />
+              <span>eWorks Agent</span>
+            </div>
+            <div className="right">
+              <span>TraceX</span>
+              <span className="ver">v{pkg.version}</span>
+              <span className="sep" aria-hidden />
+              <span>Internal use only</span>
+            </div>
+          </footer>
         </div>
       </body>
     </html>

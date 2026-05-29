@@ -21,7 +21,8 @@
       "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 5174 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }')",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('keys:', sorted\\(d.keys\\(\\)\\)\\)\")",
       "Bash(npm ls *)",
-      "Bash(echo \"EXIT=$?\")"
+      "Bash(echo \"EXIT=$?\")",
+      "PowerShell(\\(Get-Content C:\\\\Users\\\\10333\\\\Desktop\\\\AI\\\\inview\\\\src\\\\app\\\\globals.css | Measure-Object -Line\\).Lines)"
     ]
   }
 }

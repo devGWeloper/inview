@@ -14,8 +14,8 @@ function TaskCard({ task }: { task: WorkTask }) {
 }
 
 /**
- * 이억수 TL 이 하는 일 — 정형/비정형 구분 없이 하나로 통합해 보여주는 영역.
- * (데이터 모델은 formalTasks/informalTasks 로 나뉘어 있지만 표시할 때 합친다.)
+ * 이억수 TL 이 하는 일 — 단일 목록(profile.tasks)을 카드 그리드로 보여주는 영역.
+ * 표시 순서 = 배열 순서 (관리자 페이지에서 드래그로 변경).
  */
 export function WorkShowcase({ profile }: { profile: AgentProfile }) {
   const tasks: WorkTask[] = profile.tasks;

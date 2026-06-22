@@ -77,6 +77,15 @@ export default function AdminPage() {
   function removeTask(idx: number) {
     setProfile((p) => (p ? { ...p, tasks: p.tasks.filter((_, i) => i !== idx) } : p));
   }
+  function moveTask(from: number, to: number) {
+    setProfile((p) => {
+      if (!p || from === to) return p;
+      const list = [...p.tasks];
+      const [moved] = list.splice(from, 1);
+      list.splice(to, 0, moved);
+      return { ...p, tasks: list };
+    });
+  }
 
   async function onSave(e: React.FormEvent) {
     e.preventDefault();
@@ -207,6 +216,7 @@ export default function AdminPage() {
           onChange={(i, f, v) => setTask(i, f, v)}
           onAdd={() => addTask()}
           onRemove={(i) => removeTask(i)}
+          onMove={moveTask}
         />
 
         <div className="admin-footer">
@@ -229,20 +239,53 @@ function Field({ label, wide, children }: { label: string; wide?: boolean; child
 }
 
 function TaskEditor({
-  legend, tasks, onChange, onAdd, onRemove,
+  legend, tasks, onChange, onAdd, onRemove, onMove,
 }: {
   legend: string;
   tasks: WorkTask[];
   onChange: (idx: number, field: keyof WorkTask, value: string) => void;
   onAdd: () => void;
   onRemove: (idx: number) => void;
+  onMove: (from: number, to: number) => void;
 }) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+
+  function onDrop(target: number) {
+    if (dragIdx !== null) onMove(dragIdx, target);
+    setDragIdx(null);
+    setOverIdx(null);
+  }
+
   return (
     <fieldset className="admin-section">
       <legend>{legend}</legend>
+      <p className="admin-hint admin-hint-top">
+        ⠿ 핸들을 잡고 끌어 순서를 바꿀 수 있습니다. 이 순서대로 /agent 에 표시됩니다.
+      </p>
       <div className="admin-tasks">
         {tasks.map((t, i) => (
-          <div className="admin-task" key={i}>
+          <div
+            className={
+              "admin-task" +
+              (dragIdx === i ? " dragging" : "") +
+              (overIdx === i && dragIdx !== i ? " drop-target" : "")
+            }
+            key={i}
+            onDragOver={(e) => { e.preventDefault(); if (overIdx !== i) setOverIdx(i); }}
+            onDrop={() => onDrop(i)}
+          >
+            <span
+              className="admin-task-handle"
+              draggable
+              onDragStart={() => setDragIdx(i)}
+              onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
+              title="끌어서 순서 변경"
+              aria-label="순서 변경 핸들"
+            >
+              ⠿
+            </span>
+            <span className="admin-task-no">{i + 1}</span>
             <input className="admin-task-icon" value={t.icon} onChange={(e) => onChange(i, "icon", e.target.value)} aria-label="아이콘" />
             <div className="admin-task-fields">
               <input value={t.title} onChange={(e) => onChange(i, "title", e.target.value)} placeholder="제목" />

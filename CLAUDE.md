@@ -68,6 +68,16 @@ For layers that make multiple downstream calls in one trace (e.g. GAIA → MCP t
 
 `@/*` → `./src/*` (configured in `tsconfig.json`).
 
+### Agent 프로필 (이억수 TL) — `/agent`, `/admin`
+
+트레이스 뷰어와는 별개의 부가 기능. 팀의 AI 에이전트를 소개하는 프로필 카드 + "하는 일" 목록.
+
+- **데이터 모델**: `AgentProfile` (`src/lib/types.ts`). 업무는 정형/비정형 구분 없는 **단일 `tasks: WorkTask[]`** 배열 (배열 순서 = 표시 순서). `DEFAULT_PROFILE` 가 기본값.
+- **영속 저장**: `src/lib/profile.ts` → `data/agent-profile.json` (DB 아님, gitignore 됨). `normalizeProfile()` 가 부분/구버전 데이터를 항상 완전한 객체로 보정하며, 구버전의 `formalTasks`/`informalTasks` 는 읽을 때 `tasks` 로 자동 병합(마이그레이션).
+- **API**: `GET/PUT /api/profile`. PUT 은 헤더 `x-admin-password` 가 `ADMIN_PASSWORD`(`src/lib/adminAuth.ts`, 하드코딩 `"admin"`)와 일치해야 저장. ⚠️ 클라이언트 번들에도 노출되는 **단순 게이트** — 실제 보안 아님.
+- **화면**: `/agent`(서버 컴포넌트, `ProfileCard` + `WorkShowcase`), 대시보드 상단 `ProfileStrip`(클라이언트), `/admin`(비밀번호 게이트 후 편집 폼, 업무 순서 드래그앤드롭). 사진은 `public/` 에 올리고 `avatarImage` 에 `/파일명` 지정(없거나 로드 실패 시 `avatar` 이모지로 폴백, `AgentAvatar`).
+- **FTE 성과 지표**: `src/lib/fte.ts` `computeFteStats()` 가 **실데이터로 계산**한다. `db.ts.monthlySeaSuccess()` 가 CUBE 에서 2026-01-01~현재 'SEA 성공'(에러 없고 CUBE RESP 에 'Seasoning 실패' 문구 없는 트레이스) 수를 월별 집계 → 연간 FTE `= 누적 × 60 ÷ 65,984`, 월별 FTE `= 월 × 60 ÷ 65,984 × 12`(연환산). FTE 1 = 1인·1년. CUBE 미연결이면 `null` → 카드는 `profile.fte`(수동 폴백) 표시 + 차트는 안내 문구. 차트(`FteChart`)는 최근 12개월만 노출. **위 TEMPORARY WORKAROUND 의 `SEASONING_FAIL_PHRASE` 에 의존**(원복 시 5번 항목 참고).
+
 ## ⚠️ TEMPORARY WORKAROUND — ONEOIS 미연결 status 보정 (제거 예정)
 
 **배경**: ONEOIS 레이어의 DB 연결이 아직 없어 모든 트레이스가 `allComplete=false`가 되고,
@@ -94,3 +104,6 @@ For layers that make multiple downstream calls in one trace (e.g. GAIA → MCP t
 3. 두 `classify()` 의 `// TEMP(ONEOIS 미연결)` 블록을 원래 코드로 복원:
    `if (errs.length === 0) return allComplete ? "ok" : "pending";`
 4. `src/app/api/stats/route.ts` 의 트레이스 루프에서 Seasoning Top Errors 보정 블록 삭제
+5. ⚠️ `src/lib/db.ts` 의 `monthlySeaSuccess()`(FTE 집계)도 `SEASONING_FAIL_PHRASE` 를 import 한다.
+   tempStatus.ts 를 지우면 빌드가 깨지므로, 'SEA 성공' 정의를 ONEOIS 포함 정식 기준
+   (allComplete + errCd 없음)으로 다시 잡고 import 를 정리할 것. (아래 "Agent 프로필" 참고)

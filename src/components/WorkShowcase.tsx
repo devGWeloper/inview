@@ -18,7 +18,7 @@ function TaskCard({ task }: { task: WorkTask }) {
  * (데이터 모델은 formalTasks/informalTasks 로 나뉘어 있지만 표시할 때 합친다.)
  */
 export function WorkShowcase({ profile }: { profile: AgentProfile }) {
-  const tasks: WorkTask[] = [...profile.formalTasks, ...profile.informalTasks];
+  const tasks: WorkTask[] = profile.tasks;
 
   return (
     <section className="work-showcase">

@@ -109,15 +109,21 @@ export function ProfileCard({
         <span className="agent-live-widget-emoji" aria-hidden>🧂</span>
       </div>
 
-      {/* 역량 강화 로드맵 */}
+      {/* 역량 강화 로드맵 — 번호가 있는 세로 타임라인 */}
       <div className="agent-roadmap">
-        <div className="agent-roadmap-title">역량 강화 로드맵</div>
+        <div className="agent-roadmap-title">
+          <span className="agent-roadmap-title-ico" aria-hidden>🚀</span>
+          역량 강화 로드맵
+        </div>
         {roadmapItems.length === 0 ? (
           <div className="agent-roadmap-empty">아직 등록된 로드맵이 없습니다. ADMIN에서 입력하세요.</div>
         ) : (
-          <ol className="agent-roadmap-list">
+          <ol className="roadmap">
             {roadmapItems.map((item, i) => (
-              <li key={i}>{item}</li>
+              <li className="roadmap-step" key={i}>
+                <span className="roadmap-num">{i + 1}</span>
+                <span className="roadmap-body">{item}</span>
+              </li>
             ))}
           </ol>
         )}

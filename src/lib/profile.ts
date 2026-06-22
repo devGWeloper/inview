@@ -61,9 +61,19 @@ export function normalizeProfile(raw: unknown): AgentProfile {
     avatar:       str("avatar", DEFAULT_PROFILE.avatar),
     avatarImage:  str("avatarImage", DEFAULT_PROFILE.avatarImage),
     roadmap:      str("roadmap", DEFAULT_PROFILE.roadmap),
-    formalTasks:   sanitizeTasks(r.formalTasks)   ?? DEFAULT_PROFILE.formalTasks,
-    informalTasks: sanitizeTasks(r.informalTasks) ?? DEFAULT_PROFILE.informalTasks,
+    tasks:        normalizeTasks(r),
   };
+}
+
+// tasks 정규화. 구버전 저장 파일은 formalTasks/informalTasks 로 나뉘어 있으므로
+// tasks 가 없으면 둘을 합쳐 마이그레이션한다.
+function normalizeTasks(r: Record<string, unknown>): WorkTask[] {
+  const unified = sanitizeTasks(r.tasks);
+  if (unified) return unified;
+  const formal = sanitizeTasks(r.formalTasks) ?? [];
+  const informal = sanitizeTasks(r.informalTasks) ?? [];
+  const merged = [...formal, ...informal];
+  return merged.length > 0 ? merged : DEFAULT_PROFILE.tasks;
 }
 
 export function readProfile(): AgentProfile {

@@ -5,8 +5,6 @@ import Link from "next/link";
 import { AgentProfile, WorkTask } from "@/lib/types";
 import { ADMIN_PASSWORD, ADMIN_PASSWORD_HEADER } from "@/lib/adminAuth";
 
-type TaskKey = "formalTasks" | "informalTasks";
-
 const EMPTY_TASK: WorkTask = { icon: "•", title: "", desc: "" };
 const UNLOCK_KEY = "admin-unlocked";
 
@@ -64,20 +62,20 @@ export default function AdminPage() {
     setProfile((p) => (p ? { ...p, [key]: value } : p));
   }
 
-  function setTask(key: TaskKey, idx: number, field: keyof WorkTask, value: string) {
+  function setTask(idx: number, field: keyof WorkTask, value: string) {
     setProfile((p) => {
       if (!p) return p;
-      const list = p[key].map((t, i) =>
+      const list = p.tasks.map((t, i) =>
         i === idx ? { ...t, [field]: field === "metric" && value === "" ? undefined : value } : t
       );
-      return { ...p, [key]: list };
+      return { ...p, tasks: list };
     });
   }
-  function addTask(key: TaskKey) {
-    setProfile((p) => (p ? { ...p, [key]: [...p[key], { ...EMPTY_TASK }] } : p));
+  function addTask() {
+    setProfile((p) => (p ? { ...p, tasks: [...p.tasks, { ...EMPTY_TASK }] } : p));
   }
-  function removeTask(key: TaskKey, idx: number) {
-    setProfile((p) => (p ? { ...p, [key]: p[key].filter((_, i) => i !== idx) } : p));
+  function removeTask(idx: number) {
+    setProfile((p) => (p ? { ...p, tasks: p.tasks.filter((_, i) => i !== idx) } : p));
   }
 
   async function onSave(e: React.FormEvent) {
@@ -204,18 +202,11 @@ export default function AdminPage() {
         </fieldset>
 
         <TaskEditor
-          legend="정형업무"
-          tasks={profile.formalTasks}
-          onChange={(i, f, v) => setTask("formalTasks", i, f, v)}
-          onAdd={() => addTask("formalTasks")}
-          onRemove={(i) => removeTask("formalTasks", i)}
-        />
-        <TaskEditor
-          legend="비정형업무"
-          tasks={profile.informalTasks}
-          onChange={(i, f, v) => setTask("informalTasks", i, f, v)}
-          onAdd={() => addTask("informalTasks")}
-          onRemove={(i) => removeTask("informalTasks", i)}
+          legend="하는 일"
+          tasks={profile.tasks}
+          onChange={(i, f, v) => setTask(i, f, v)}
+          onAdd={() => addTask()}
+          onRemove={(i) => removeTask(i)}
         />
 
         <div className="admin-footer">

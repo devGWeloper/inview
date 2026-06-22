@@ -37,7 +37,6 @@ export function ProfileCard({
         <AgentAvatar image={profile.avatarImage} emoji={profile.avatar} />
         <div className="agent-id">
           <div className="agent-name">{profile.name}</div>
-          <div className="agent-tagline">{profile.tagline}</div>
           <div className="agent-nick">
             <span className="agent-nick-key">호칭</span>
             <span className="agent-nick-val">“{profile.nickname}”</span>
@@ -48,6 +47,9 @@ export function ProfileCard({
           ON-DUTY
         </span>
       </header>
+
+      {/* 소개말 — 헤더 아래 전체 폭으로 (좁은 폭에서 한 글자 외톨이 줄바뀜 방지) */}
+      <div className="agent-tagline">{profile.tagline}</div>
 
       {/* 성과 지표 — 카드의 핵심 수치 (연간 FTE) */}
       <div className="agent-fte">

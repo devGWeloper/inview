@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { DimensionBreakdown } from "@/components/DimensionBreakdown";
+import { ProfileStrip } from "@/components/ProfileStrip";
 import { LayerBars } from "@/components/LayerBars";
 import { StatsCards } from "@/components/StatsCards";
 import { StatusDonut } from "@/components/StatusDonut";
@@ -31,7 +32,7 @@ function fmtRange(from: string | null, to: string | null): string {
 }
 
 export default function DashboardPage() {
-  const [preset, setPreset] = useState<Preset>("7d");
+  const [preset, setPreset] = useState<Preset>("30d");
   const [userId, setUserId] = useState("");
   const [channelId, setChannelId] = useState("");
   const [actionTyp, setActionTyp] = useState("");
@@ -168,6 +169,7 @@ export default function DashboardPage() {
 
   return (
     <div className="dash">
+      <ProfileStrip />
       <div className="dash-header">
         <div className="dash-title">
           <div className="dash-title-main">Usage Dashboard</div>

@@ -9,3 +9,6 @@ dist/
 next-env.d.ts
 *.log
 .DS_Store
+
+# runtime-edited agent profile
+data/

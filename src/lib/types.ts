@@ -138,6 +138,107 @@ export interface TopItem {
   count: number;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Agent profile (이억수 TL 프로필 카드)
+//
+// 통계(Trace)와는 성격이 다른 "에이전트 소개" 데이터. data/agent-profile.json 에
+// 영속 저장하고 ADMIN 페이지에서 편집한다. FTE(성과 지표)는 추후 Dashboard 집계와
+// 연계해 자동 계산할 예정이라 지금은 수동 입력값(또는 null = 측정 예정)으로 둔다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface WorkTask {
+  /** 카드에 표시할 아이콘 (이모지 1자 권장) */
+  icon: string;
+  title: string;
+  desc: string;
+  /** 선택: 처리량/성과 같은 짧은 지표 (예: "1,240건/월") */
+  metric?: string;
+}
+
+export interface AgentProfile {
+  /** 이름 (예: 이억수 TL) */
+  name: string;
+  /** 호칭 (예: 억수야) */
+  nickname: string;
+  /** 직급 (예: CL2 1년차) */
+  rank: string;
+  /** 근무시간 (예: 24시간 365일) */
+  workingHours: string;
+  /** 보유 스킬 */
+  skills: string[];
+  /** 성과 지표 FTE. null = 아직 측정 전(Dashboard 연계 예정) */
+  fte: number | null;
+  /** FTE 산정 방식/주석 (UI 보조 설명) */
+  fteNote: string;
+  /** 한 줄 소개 */
+  tagline: string;
+  /** 아바타 이모지 (avatarImage 가 없을 때 폴백) */
+  avatar: string;
+  /** 아바타 사진 경로. public/ 에 올린 파일을 "/파일명" 으로 지정 (예: "/agent.jpg"). 비면 이모지 사용 */
+  avatarImage: string;
+  /** 역량 강화 로드맵 (사용자가 채우는 자유 텍스트, 줄바꿈 = 항목 구분) */
+  roadmap: string;
+  /** 정형업무 */
+  formalTasks: WorkTask[];
+  /** 비정형업무 */
+  informalTasks: WorkTask[];
+}
+
+export const DEFAULT_PROFILE: AgentProfile = {
+  name: "이억수 TL",
+  nickname: "억수야",
+  rank: "CL2 1년차",
+  workingHours: "24시간 365일",
+  skills: ["시즈닝"],
+  fte: null,
+  fteNote: "Dashboard 집계 연계 예정 — 산정식 확정 후 자동 반영",
+  tagline: "쉬지 않고 일하는 우리 팀의 AI 에이전트",
+  avatar: "🧑‍🍳",
+  avatarImage: "",
+  roadmap: "",
+  formalTasks: [
+    { icon: "🧂", title: "시즈닝 자동 처리", desc: "수신 트랜잭션을 규칙 기반으로 시즈닝해 다운스트림으로 전달", metric: "상시 처리" },
+    { icon: "🔀", title: "채널 라우팅", desc: "CUBE → GAIA → MCP → ONEOIS 경로로 메시지를 정확히 중계" },
+    { icon: "🧾", title: "트랜잭션 추적·검증", desc: "TRACE_ID 기준 end-to-end 정합성 확인 및 완료 판정" },
+    { icon: "📊", title: "정기 리포트 생성", desc: "사용 추이·성공률·에러 통계를 주기적으로 집계" },
+  ],
+  informalTasks: [
+    { icon: "💬", title: "자연어 요청 해석", desc: "정형화되지 않은 사용자 요청의 의도를 파악해 액션으로 변환" },
+    { icon: "🧭", title: "예외 상황 판단", desc: "규칙에 없는 상황에서 맥락을 보고 최선의 처리를 선택" },
+    { icon: "🧪", title: "신규 레시피 학습", desc: "새로운 시즈닝 패턴을 학습해 처리 범위를 확장" },
+    { icon: "🤝", title: "사용자 문의 대응", desc: "실패·지연 트레이스에 대한 질의에 맥락을 담아 응답" },
+  ],
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FTE 성과 지표 (이억수 TL)
+//   연간 FTE  = (2026-01-01~현재 SEA 성공 트레이스 수) × 60 ÷ 65,984
+//   월별 FTE  = (해당 월 SEA 성공 수) × 60 ÷ 65,984 × 12   (월 → 연 환산)
+//   FTE 1 = 1년간 1인분(1 person-year)의 일을 했다는 의미.
+//   'SEA 성공' = 시즈닝 성공 트레이스 (대시보드 ok 기준: 에러 없고 CUBE 응답에
+//   'Seasoning 실패' 문구가 없는 트레이스).
+// ─────────────────────────────────────────────────────────────────────────────
+export interface FteMonth {
+  /** "YYYY-MM" */
+  ym: string;
+  /** 해당 월 SEA 성공 트레이스 수 */
+  count: number;
+  /** 월 환산(annualized) FTE = count × 60 ÷ 65,984 × 12 */
+  fte: number;
+}
+
+export interface FteStats {
+  /** 누적 연간 FTE = totalCount × 60 ÷ 65,984 */
+  annualFte: number;
+  /** 2026-01-01~현재 누적 SEA 성공 수 */
+  totalCount: number;
+  /** 집계 구간 (ISO, TZ 없음) */
+  from: string;
+  to: string;
+  /** 2026-01 ~ 현재 월까지 (빈 월은 0으로 채움) */
+  months: FteMonth[];
+}
+
 export interface StatsResponse {
   /** 적용된 기간 */
   range: { from: string | null; to: string | null };

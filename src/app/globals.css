@@ -483,6 +483,23 @@ a:hover { text-decoration: underline; }
   font-family: var(--mono); color: var(--text); font-weight: 600;
 }
 .tl-card-head .route .arrow { color: var(--text-muted); }
+
+/* HTTP 상태 코드 배지 (route 옆 / call 헤더) */
+.http-sts {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+  padding: 0 7px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  letter-spacing: 0.02em;
+}
+.http-sts.ok    { color: var(--ok);   background: var(--ok-soft);   border-color: #bfe3ce; }
+.http-sts.warn  { color: var(--warn); background: var(--warn-soft); border-color: #f1d6ba; }
+.http-sts.err   { color: var(--err);  background: var(--err-soft);  border-color: #f4c1bc; }
+.http-sts.muted { color: var(--text-3); background: var(--surface-2, #f1f1f1); border-color: var(--border, #e3e3e3); }
 .tl-card-head .right {
   display: flex; align-items: center; gap: 10px;
   font-size: 13px; color: var(--text-3);
@@ -1384,7 +1401,7 @@ a:hover { text-decoration: underline; }
   border-radius: 6px;
 }
 
-/* ── dimension breakdown (channel / action) ── */
+/* ── dimension breakdown (action) ── */
 .dim-list {
   list-style: none;
   margin: 0;

@@ -124,6 +124,22 @@ function diffMs(a: string | null, b: string | null): string {
   return `${d} ms`;
 }
 
+// HTTP 상태 코드 → 색상 클래스 (2xx ok, 3xx warn, 4xx/5xx err)
+function httpStsClass(code: string | null): "ok" | "warn" | "err" | "muted" {
+  if (!code) return "muted";
+  const n = Number(code);
+  if (!Number.isFinite(n)) return "muted";
+  if (n >= 200 && n < 300) return "ok";
+  if (n >= 300 && n < 400) return "warn";
+  if (n >= 400) return "err";
+  return "muted";
+}
+
+function HttpStsBadge({ code }: { code: string | null }) {
+  if (!code) return null;
+  return <span className={`http-sts ${httpStsClass(code)}`} title={`HTTP ${code}`}>{code}</span>;
+}
+
 type JsonKind = "recv" | "send" | "resp";
 
 const KIND_LABEL: Record<JsonKind, string> = { recv: "RECV", send: "SEND", resp: "RESP" };
@@ -322,6 +338,7 @@ function SingleCallCard({ row, frac3, setFrac3, startResize }: {
             <span className="arrow">⇄</span>
             <span className="hop">{row.sendSysId ?? "-"}</span>
           </span>
+          <HttpStsBadge code={row.httpStsCd} />
         </div>
         <div className="right">
           <span className="dur">{dur}</span>
@@ -463,6 +480,7 @@ function CallItem({ row, ci, frac2, setFrac2, startResize }: {
         <span className="tl-call-num">Call #{ci + 1}</span>
         <span className="tl-call-meta">
           <span className="hop mono">{row.sendSysId ?? "-"}</span>
+          <HttpStsBadge code={row.httpStsCd} />
           <span className="dur-inline">{callDur}</span>
           {row.errCd && <span className={`pill ${errKind} xs`}><span className="dot" />{row.errCd}</span>}
           {!row.errCd && <span className={`pill ${callStatus} xs`}><span className="dot" />{callStatus.toUpperCase()}</span>}

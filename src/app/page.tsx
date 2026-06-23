@@ -74,6 +74,7 @@ export default function Page() {
       const q = new URLSearchParams();
       if (f.traceId) q.set("traceId", f.traceId);
       if (f.userId) q.set("userId", f.userId);
+      if (f.errCd) q.set("errCd", f.errCd);
       if (f.dateFrom) q.set("dateFrom", f.dateFrom);
       if (f.dateTo) q.set("dateTo", f.dateTo);
       if (f.onlyError) q.set("onlyError", "true");
@@ -154,6 +155,15 @@ export default function Page() {
                     type="text"
                     value={filter.userId ?? ""}
                     onChange={(e) => setFilter({ ...filter, userId: e.target.value || undefined })}
+                  />
+                </label>
+                <label style={{ gridColumn: "1 / -1" }}>
+                  FAIL CODE
+                  <input
+                    type="text"
+                    placeholder="ERR_CD 부분 검색"
+                    value={filter.errCd ?? ""}
+                    onChange={(e) => setFilter({ ...filter, errCd: e.target.value || undefined })}
                   />
                 </label>
                 <label>

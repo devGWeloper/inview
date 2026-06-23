@@ -56,6 +56,19 @@ function normalizeLayers(raw: RawConfig | null): Partial<Record<LayerKey, LayerD
   return out;
 }
 
+/**
+ * 이 앱의 "자체 DB" 로 쓰는 레이어.
+ * 전용 DB 자원을 할당받지 못해, GAIA 레이어의 DB 를 앱 자체 DB 로 겸용한다.
+ * 트레이스 조회와 무관한 앱 전용 테이블(ex. TRX_ERRMSG_COD 에러코드 마스터)은
+ * 이 커넥션에 생성/조회한다. GAIA 의 DB 위치가 바뀌면 이 매핑만 따라가면 된다.
+ */
+export const APP_DB_LAYER: LayerKey = "GAIA";
+
+/** 앱 자체 DB(= APP_DB_LAYER) 의 커넥션 설정. 미구성 시 null. */
+export function getAppDbConfig(): LayerDbConfig | null {
+  return loadConfig().layers[APP_DB_LAYER] ?? null;
+}
+
 export function loadConfig(): AppConfig {
   if (cached) return cached;
   const root = process.cwd();

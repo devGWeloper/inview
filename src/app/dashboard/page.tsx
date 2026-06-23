@@ -34,7 +34,6 @@ function fmtRange(from: string | null, to: string | null): string {
 export default function DashboardPage() {
   const [preset, setPreset] = useState<Preset>("30d");
   const [userId, setUserId] = useState("");
-  const [channelId, setChannelId] = useState("");
   const [actionTyp, setActionTyp] = useState("");
   const [customFrom, setCustomFrom] = useState<string>("");
   const [customTo, setCustomTo] = useState<string>("");
@@ -44,6 +43,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [actionTypeOptions, setActionTypeOptions] = useState<string[]>([]);
+  const [errorCodeMap, setErrorCodeMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let alive = true;
@@ -60,10 +60,24 @@ export default function DashboardPage() {
     return () => { alive = false; };
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/error-codes", { cache: "no-store" });
+        if (!res.ok) return;
+        const data: { codes: Record<string, string> } = await res.json();
+        if (alive) setErrorCodeMap(data.codes ?? {});
+      } catch {
+        /* ignore — 매핑 없으면 툴팁은 코드만 노출 */
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
   const computeFilter = useCallback((): StatsFilter => {
     const base: StatsFilter = {
       userId: userId || undefined,
-      channelId: channelId || undefined,
       actionTyp: actionTyp || undefined,
       excludeErrCds: excludeErrCds.length > 0 ? excludeErrCds : undefined,
     };
@@ -81,7 +95,7 @@ export default function DashboardPage() {
       dateFrom: toLocalInput(now - p.hours * 3_600_000) + ":00",
       dateTo:   toLocalInput(now) + ":00",
     };
-  }, [preset, customFrom, customTo, userId, channelId, actionTyp, excludeErrCds]);
+  }, [preset, customFrom, customTo, userId, actionTyp, excludeErrCds]);
 
   const load = useCallback(async (f: StatsFilter) => {
     setLoading(true);
@@ -91,7 +105,6 @@ export default function DashboardPage() {
       if (f.dateFrom)  q.set("dateFrom",  f.dateFrom);
       if (f.dateTo)    q.set("dateTo",    f.dateTo);
       if (f.userId)    q.set("userId",    f.userId);
-      if (f.channelId) q.set("channelId", f.channelId);
       if (f.actionTyp) q.set("actionTyp", f.actionTyp);
       if (f.excludeErrCds && f.excludeErrCds.length > 0) {
         q.set("excludeErrCds", f.excludeErrCds.join(","));
@@ -124,30 +137,23 @@ export default function DashboardPage() {
         dateFrom: toLocalInput(now - p.hours * 3_600_000) + ":00",
         dateTo:   toLocalInput(now) + ":00",
         userId: userId || undefined,
-        channelId: channelId || undefined,
         actionTyp: actionTyp || undefined,
         excludeErrCds: excludeErrCds.length > 0 ? excludeErrCds : undefined,
       });
     }
   };
 
-  const onSelectChannel = (k: string) => {
-    const next = channelId === k ? "" : k;
-    setChannelId(next);
-    load({ ...computeFilter(), channelId: next || undefined });
-  };
   const onSelectAction = (k: string) => {
     const next = actionTyp === k ? "" : k;
     setActionTyp(next);
     load({ ...computeFilter(), actionTyp: next || undefined });
   };
 
-  const hasFilter = !!(userId || channelId || actionTyp);
+  const hasFilter = !!(userId || actionTyp);
   const clearFilters = () => {
     setUserId("");
-    setChannelId("");
     setActionTyp("");
-    load({ ...computeFilter(), userId: undefined, channelId: undefined, actionTyp: undefined });
+    load({ ...computeFilter(), userId: undefined, actionTyp: undefined });
   };
 
   // 에러 코드 제외: Top Errors 항목을 클릭해서 더하고, 칩의 × 로 해제한다.
@@ -220,13 +226,6 @@ export default function DashboardPage() {
             placeholder="USER_ID"
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
-          />
-          <input
-            type="text"
-            className="user-input"
-            placeholder="CHANNEL_ID"
-            value={channelId}
-            onChange={(e) => setChannelId(e.target.value)}
           />
           <select
             className="user-input user-select"
@@ -347,45 +346,43 @@ export default function DashboardPage() {
                   tone="err"
                   onItemClick={addExclude}
                   itemActionLabel="클릭해서 집계에서 제외"
+                  descriptions={errorCodeMap}
                 />
               </div>
             </section>
           </div>
 
-          {/* 4. 채널 / 액션 — 어디서 많이 쓰이는지 */}
-          <div className="dash-row split">
-            <section className="dash-card">
-              <div className="dash-card-head">
-                <span className="dash-card-title">채널별</span>
-                <span className="dash-card-sub">CHANNEL_ID 별 분포{channelId ? ` · 필터: ${channelId}` : ""}</span>
-              </div>
-              <div className="dash-card-body">
-                <DimensionBreakdown
-                  items={stats.byChannel}
-                  emptyText="채널 데이터 없음"
-                  onSelect={onSelectChannel}
-                  selected={channelId || undefined}
-                />
-              </div>
-            </section>
+          {/* 4. 액션 — 어디서 많이 쓰이는지 */}
+          <section className="dash-card">
+            <div className="dash-card-head">
+              <span className="dash-card-title">액션 타입별</span>
+              <span className="dash-card-sub">ACTION_TYP 별 분포{actionTyp ? ` · 필터: ${actionTyp}` : ""}</span>
+            </div>
+            <div className="dash-card-body">
+              <DimensionBreakdown
+                items={stats.byAction}
+                emptyText="액션 데이터 없음"
+                onSelect={onSelectAction}
+                selected={actionTyp || undefined}
+              />
+            </div>
+          </section>
 
-            <section className="dash-card">
-              <div className="dash-card-head">
-                <span className="dash-card-title">액션 타입별</span>
-                <span className="dash-card-sub">ACTION_TYP 별 분포{actionTyp ? ` · 필터: ${actionTyp}` : ""}</span>
-              </div>
-              <div className="dash-card-body">
-                <DimensionBreakdown
-                  items={stats.byAction}
-                  emptyText="액션 데이터 없음"
-                  onSelect={onSelectAction}
-                  selected={actionTyp || undefined}
-                />
-              </div>
-            </section>
-          </div>
+          {/* 5. FAC 별 — MCP send 단계에서 확정되는 FAC 기준 분포 */}
+          <section className="dash-card">
+            <div className="dash-card-head">
+              <span className="dash-card-title">FAC별</span>
+              <span className="dash-card-sub">FAC_ID 별 분포 · MCP 기준 (미도달은 (none))</span>
+            </div>
+            <div className="dash-card-body">
+              <DimensionBreakdown
+                items={stats.byFac}
+                emptyText="FAC 데이터 없음"
+              />
+            </div>
+          </section>
 
-          {/* 5. 사용자 Top — 헤비 유저 파악 */}
+          {/* 6. 사용자 Top — 헤비 유저 파악 */}
           <section className="dash-card">
             <div className="dash-card-head">
               <span className="dash-card-title">Top 사용자</span>
@@ -396,7 +393,7 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          {/* 6. 레이어 — 엔지니어용 디테일, 접근성 위해 유지하되 가장 아래 */}
+          {/* 7. 레이어 — 엔지니어용 디테일, 접근성 위해 유지하되 가장 아래 */}
           <section className="dash-card dash-card-muted">
             <div className="dash-card-head">
               <div className="dash-card-title-group">

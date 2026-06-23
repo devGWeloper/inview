@@ -36,6 +36,8 @@ export interface TraceRow {
   sysId: string | null;
   channelId: string | null;
   actionTyp: string | null;
+  /** 설비/FAC ID — MCP 의 send update 단계에서만 기록(그 외 레이어는 NULL) */
+  facId: string | null;
   recvSysId: string | null;
   recvMsgCtn: string | null;
   recvTm: string | null;
@@ -45,6 +47,8 @@ export interface TraceRow {
   sendCompltYn: "Y" | "N" | null;
   respMsgCtn: string | null;
   respTm: string | null;
+  /** 다운스트림 응답 HTTP 상태 코드 (resp update 시 기록, 행 단위). ex. "201", "401" */
+  httpStsCd: string | null;
   errCd: string | null;
   errDescCtn: string | null;
 }
@@ -78,8 +82,9 @@ export interface TraceListResponse {
 export interface TraceFilter {
   traceId?: string;
   userId?: string;
-  channelId?: string;
   actionTyp?: string;
+  /** ERR_CD(=FAIL/ERROR 코드) 부분 일치 검색 (대소문자 무시) */
+  errCd?: string;
   dateFrom?: string;
   dateTo?: string;
   onlyError?: boolean;
@@ -94,7 +99,6 @@ export interface StatsFilter {
   dateFrom?: string;
   dateTo?: string;
   userId?: string;
-  channelId?: string;
   actionTyp?: string;
   /** 집계에서 제외할 에러 코드들. 해당 코드를 errCd 로 가진 trace 는 모든 집계(total 포함)에서 빠진다. */
   excludeErrCds?: string[];
@@ -251,10 +255,10 @@ export interface StatsResponse {
   topUsers: TopItem[];
   /** 상위 에러/실패 코드 */
   topErrors: TopItem[];
-  /** 채널별 트레이스 분포 (count desc) */
-  byChannel: DimensionStats[];
   /** 액션 유형별 트레이스 분포 (count desc) */
   byAction: DimensionStats[];
+  /** FAC 별 트레이스 분포 (count desc) — FAC 는 MCP 의 send update 에서만 기록되므로 MCP 미도달 트레이스는 (none) */
+  byFac: DimensionStats[];
   /** 집계에 포함된 행 수 (제외 trace 의 행은 빠짐) */
   rowCount: number;
   /** 실제로 적용된 제외 에러 코드 목록 (echo) */

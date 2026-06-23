@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
   const filter: TraceFilter = {
     traceId: sp.get("traceId") || undefined,
     userId: sp.get("userId") || undefined,
+    errCd: sp.get("errCd") || undefined,
     dateFrom: sp.get("dateFrom") || undefined,
     dateTo: sp.get("dateTo") || undefined,
     onlyError: sp.get("onlyError") === "true" ? true : undefined,

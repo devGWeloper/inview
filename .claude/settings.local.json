@@ -23,7 +23,9 @@
       "Bash(npm ls *)",
       "Bash(echo \"EXIT=$?\")",
       "PowerShell(\\(Get-Content C:\\\\Users\\\\10333\\\\Desktop\\\\AI\\\\inview\\\\src\\\\app\\\\globals.css | Measure-Object -Line\\).Lines)",
-      "PowerShell(npm run *)"
+      "PowerShell(npm run *)",
+      "PowerShell(npx tsc --noEmit)",
+      "PowerShell(npx next lint --file src/app/page.tsx --file src/components/TraceTimeline.tsx --file src/app/api/traces/route.ts --file src/lib/db.ts 2>&1 | Select-Object -First 40)"
     ]
   }
 }

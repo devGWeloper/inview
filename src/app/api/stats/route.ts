@@ -82,7 +82,6 @@ export async function GET(req: NextRequest) {
   const dateFrom = sp.get("dateFrom") || undefined;
   const dateTo = sp.get("dateTo") || undefined;
   const userId = sp.get("userId") || undefined;
-  const channelId = sp.get("channelId") || undefined;
   const actionTyp = sp.get("actionTyp") || undefined;
 
   // 집계 제외 에러 코드 (CSV). 해당 코드를 가진 trace 는 모든 집계에서 통째로 빠진다.
@@ -98,7 +97,6 @@ export async function GET(req: NextRequest) {
 
   const filter: TraceFilter = {
     userId,
-    channelId,
     actionTyp,
     dateFrom: dateFrom ?? isoNoTz(effectiveFromMs),
     dateTo: dateTo ?? isoNoTz(effectiveToMs),
@@ -131,8 +129,8 @@ export async function GET(req: NextRequest) {
     const totals = { total: 0, ok: 0, fail: 0, pending: 0 };
     const userCount = new Map<string, number>();
     const errCount = new Map<string, number>();
-    const channelAcc = new Map<string, DimensionStats>();
     const actionAcc = new Map<string, DimensionStats>();
+    const facAcc = new Map<string, DimensionStats>();
     const NONE = "(none)";
     const dimBump = (acc: Map<string, DimensionStats>, key: string, status: DashStatus) => {
       let s = acc.get(key);
@@ -164,11 +162,13 @@ export async function GET(req: NextRequest) {
       const u = list.find((r) => r.userId)?.userId;
       if (u) userCount.set(u, (userCount.get(u) ?? 0) + 1);
 
-      // channel / action: 트레이스 내 첫 번째 비어있지 않은 값을 채택 (상위 레이어가 INSERT 시 기록)
-      const ch = list.find((r) => r.channelId)?.channelId ?? NONE;
+      // action: 트레이스 내 첫 번째 비어있지 않은 값을 채택 (상위 레이어가 INSERT 시 기록)
       const at = list.find((r) => r.actionTyp)?.actionTyp ?? NONE;
-      dimBump(channelAcc, ch, status);
       dimBump(actionAcc, at, status);
+
+      // FAC: MCP send update 에서만 기록되므로 트레이스 내 첫 non-null 값 채택. MCP 미도달 트레이스는 (none)
+      const fac = list.find((r) => r.facId)?.facId ?? NONE;
+      dimBump(facAcc, fac, status);
 
       // top errors (FAIL/ERROR 모두 포함, 단 에러 코드 기준)
       for (const r of list) {
@@ -269,8 +269,8 @@ export async function GET(req: NextRequest) {
       layers,
       topUsers: topN(userCount, 8),
       topErrors: topN(errCount, 8),
-      byChannel: Array.from(channelAcc.values()).sort((a, b) => b.total - a.total),
       byAction: Array.from(actionAcc.values()).sort((a, b) => b.total - a.total),
+      byFac: Array.from(facAcc.values()).sort((a, b) => b.total - a.total),
       rowCount: includedRowCount,
       excludeErrCds: excludeErrCds,
       excludedTraceCount: excludedTraces.size,

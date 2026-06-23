@@ -34,7 +34,7 @@ export function connectedLayerCount(): number {
 
 const SELECT_COLUMNS = `
   TRACE_ID, TIMEKEY, USER_ID, SYS_ID,
-  CHANNEL_ID, ACTION_TYP,
+  CHANNEL_ID, ACTION_TYP, FAC_ID,
   RECV_SYS_ID, RECV_MSG_CTN,
   TO_CHAR(RECV_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS RECV_TM,
   SEND_SYS_ID, SEND_MSG_CTN,
@@ -42,6 +42,7 @@ const SELECT_COLUMNS = `
   SEND_COMPLT_YN,
   RESP_MSG_CTN,
   TO_CHAR(RESP_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS RESP_TM,
+  HTTP_STS_CD,
   ERR_CD, ERR_DESC_CTN
 `;
 
@@ -56,6 +57,7 @@ function rowFrom(layer: LayerKey, r: Record<string, unknown>): TraceRow {
     sysId: read("SYS_ID"),
     channelId: read("CHANNEL_ID"),
     actionTyp: read("ACTION_TYP"),
+    facId: read("FAC_ID"),
     recvSysId: read("RECV_SYS_ID"),
     recvMsgCtn: read("RECV_MSG_CTN"),
     recvTm: read("RECV_TM"),
@@ -65,6 +67,7 @@ function rowFrom(layer: LayerKey, r: Record<string, unknown>): TraceRow {
     sendCompltYn: compl === "Y" || compl === "N" ? compl : null,
     respMsgCtn: read("RESP_MSG_CTN"),
     respTm: read("RESP_TM"),
+    httpStsCd: read("HTTP_STS_CD"),
     errCd: read("ERR_CD"),
     errDescCtn: read("ERR_DESC_CTN")
   };
@@ -88,13 +91,13 @@ async function queryLayer(layer: LayerKey, filter: TraceFilter): Promise<TraceRo
     where.push("USER_ID = :userId");
     binds.userId = filter.userId;
   }
-  if (filter.channelId) {
-    where.push("CHANNEL_ID = :channelId");
-    binds.channelId = filter.channelId;
-  }
   if (filter.actionTyp) {
     where.push("ACTION_TYP = :actionTyp");
     binds.actionTyp = filter.actionTyp;
+  }
+  if (filter.errCd) {
+    where.push("UPPER(ERR_CD) LIKE '%' || UPPER(:errCd) || '%'");
+    binds.errCd = filter.errCd;
   }
   if (filter.dateFrom) {
     where.push("RECV_TM >= TO_TIMESTAMP(:dateFrom, 'YYYY-MM-DD\"T\"HH24:MI:SS')");

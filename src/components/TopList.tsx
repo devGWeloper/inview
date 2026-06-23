@@ -9,10 +9,12 @@ interface Props {
   onItemClick?: (key: string) => void;
   /** 행 호버 시 보여줄 안내 문구 (onItemClick 가 있을 때만 의미) */
   itemActionLabel?: string;
+  /** key(에러 코드) → 의미 매핑. 있으면 호버 툴팁에 의미를 함께 노출 */
+  descriptions?: Record<string, string>;
 }
 
 export function TopList({
-  items, totalForPct, emptyText, tone, onItemClick, itemActionLabel,
+  items, totalForPct, emptyText, tone, onItemClick, itemActionLabel, descriptions,
 }: Props) {
   if (items.length === 0) {
     return <div className="top-empty">{emptyText}</div>;
@@ -25,7 +27,9 @@ export function TopList({
         const w = (it.count / maxCount) * 100;
         const p = totalForPct > 0 ? (it.count / totalForPct) * 100 : 0;
         const handleClick = onItemClick ? () => onItemClick(it.key) : undefined;
-        const title = interactive ? `${it.key} — ${itemActionLabel ?? "클릭"}` : it.key;
+        const desc = descriptions?.[it.key];
+        const base = desc ? `${it.key} — ${desc}` : it.key;
+        const title = interactive ? `${base} · ${itemActionLabel ?? "클릭"}` : base;
         return (
           <li
             key={it.key}

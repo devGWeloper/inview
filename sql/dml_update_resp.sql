@@ -2,6 +2,7 @@
 -- [UPDATE on RESPONSE] 하위 레이어로부터 응답을 수신한 직후 호출.
 --
 --   * RESP_MSG_CTN : 내가 send 한 시스템(하위 레이어)으로부터 받은 응답 JSON
+--   * HTTP_STS_CD  : 하위 레이어 응답의 HTTP 상태 코드 (ex. 201, 401). 행 단위.
 --   * SEND_COMPLT_YN = 'Y' : 이 시점에 왕복(send→response) 완료로 마킹.
 --     TraceX 의 allComplete 집계는 이 값을 기준으로 한다.
 -- ============================================================================
@@ -9,6 +10,7 @@
 UPDATE BIZ_AIACTIONTXN_HIS
    SET RESP_MSG_CTN   = :resp_msg_ctn,
        RESP_TM        = SYSTIMESTAMP,
+       HTTP_STS_CD    = :http_sts_cd,   -- 다운스트림 응답 HTTP 상태 코드
        SEND_COMPLT_YN = 'Y'
  WHERE TRACE_ID = :trace_id
    AND TIMEKEY  = :timekey;

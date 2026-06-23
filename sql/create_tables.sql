@@ -16,6 +16,7 @@ CREATE TABLE BIZ_AIACTIONTXN_HIS (
     CHANNEL_ID       VARCHAR2(50),                      -- 채널 ID (요청이 유입된 채널, ex. WEB/APP/BOT)
     ACTION_TYP       VARCHAR2(50),                      -- 액션 유형 (요청된 액션 타입, ex. CHAT/SEARCH)
     FAC_ID           VARCHAR2(50),                      -- FAC ID (MCP send update 에서만 기록, 그 외 레이어는 NULL)
+    AREA_ID          VARCHAR2(50),                      -- AREA ID (FAC_ID 와 동일 개념, MCP send update 에서만 기록)
     RECV_SYS_ID      VARCHAR2(50),                      -- 수신 시스템 ID (기록 주체, ex. GAIA)
     RECV_MSG_CTN     VARCHAR2(4000),                    -- 수신 메시지 (JSON 전문)
     RECV_TM          TIMESTAMP,                         -- 인수 시간 (MSG 받은 시각)
@@ -47,6 +48,7 @@ COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.SYS_ID        IS '시스템 ID';
 COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.CHANNEL_ID    IS '채널 ID (요청 유입 채널)';
 COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.ACTION_TYP    IS '액션 유형 (요청된 액션 타입)';
 COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.FAC_ID        IS 'FAC ID (MCP send update 에서만 기록)';
+COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.AREA_ID       IS 'AREA ID (FAC_ID 와 동일 개념, MCP send update 에서만 기록)';
 COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.RECV_SYS_ID   IS '수신 시스템 ID (기록 주체 시스템)';
 COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.RECV_MSG_CTN  IS '수신 메시지 내용 (JSON 전문)';
 COMMENT ON COLUMN BIZ_AIACTIONTXN_HIS.RECV_TM       IS '인수 시간';

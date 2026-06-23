@@ -131,6 +131,7 @@ export async function GET(req: NextRequest) {
     const errCount = new Map<string, number>();
     const actionAcc = new Map<string, DimensionStats>();
     const facAcc = new Map<string, DimensionStats>();
+    const areaAcc = new Map<string, DimensionStats>();
     const NONE = "(none)";
     const dimBump = (acc: Map<string, DimensionStats>, key: string, status: DashStatus) => {
       let s = acc.get(key);
@@ -166,9 +167,11 @@ export async function GET(req: NextRequest) {
       const at = list.find((r) => r.actionTyp)?.actionTyp ?? NONE;
       dimBump(actionAcc, at, status);
 
-      // FAC: MCP send update 에서만 기록되므로 트레이스 내 첫 non-null 값 채택. MCP 미도달 트레이스는 (none)
+      // FAC / AREA: MCP send update 에서만 기록되므로 트레이스 내 첫 non-null 값 채택. MCP 미도달 트레이스는 (none)
       const fac = list.find((r) => r.facId)?.facId ?? NONE;
       dimBump(facAcc, fac, status);
+      const area = list.find((r) => r.areaId)?.areaId ?? NONE;
+      dimBump(areaAcc, area, status);
 
       // top errors (FAIL/ERROR 모두 포함, 단 에러 코드 기준)
       for (const r of list) {
@@ -271,6 +274,7 @@ export async function GET(req: NextRequest) {
       topErrors: topN(errCount, 8),
       byAction: Array.from(actionAcc.values()).sort((a, b) => b.total - a.total),
       byFac: Array.from(facAcc.values()).sort((a, b) => b.total - a.total),
+      byArea: Array.from(areaAcc.values()).sort((a, b) => b.total - a.total),
       rowCount: includedRowCount,
       excludeErrCds: excludeErrCds,
       excludedTraceCount: excludedTraces.size,

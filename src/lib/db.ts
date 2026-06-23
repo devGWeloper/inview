@@ -34,7 +34,7 @@ export function connectedLayerCount(): number {
 
 const SELECT_COLUMNS = `
   TRACE_ID, TIMEKEY, USER_ID, SYS_ID,
-  CHANNEL_ID, ACTION_TYP, FAC_ID,
+  CHANNEL_ID, ACTION_TYP, FAC_ID, AREA_ID,
   RECV_SYS_ID, RECV_MSG_CTN,
   TO_CHAR(RECV_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS RECV_TM,
   SEND_SYS_ID, SEND_MSG_CTN,
@@ -58,6 +58,7 @@ function rowFrom(layer: LayerKey, r: Record<string, unknown>): TraceRow {
     channelId: read("CHANNEL_ID"),
     actionTyp: read("ACTION_TYP"),
     facId: read("FAC_ID"),
+    areaId: read("AREA_ID"),
     recvSysId: read("RECV_SYS_ID"),
     recvMsgCtn: read("RECV_MSG_CTN"),
     recvTm: read("RECV_TM"),

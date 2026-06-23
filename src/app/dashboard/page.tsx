@@ -352,48 +352,64 @@ export default function DashboardPage() {
             </section>
           </div>
 
-          {/* 4. 액션 — 어디서 많이 쓰이는지 */}
-          <section className="dash-card">
-            <div className="dash-card-head">
-              <span className="dash-card-title">액션 타입별</span>
-              <span className="dash-card-sub">ACTION_TYP 별 분포{actionTyp ? ` · 필터: ${actionTyp}` : ""}</span>
-            </div>
-            <div className="dash-card-body">
-              <DimensionBreakdown
-                items={stats.byAction}
-                emptyText="액션 데이터 없음"
-                onSelect={onSelectAction}
-                selected={actionTyp || undefined}
-              />
-            </div>
-          </section>
+          {/* 4. FAC / AREA 별 — MCP send 단계에서 확정되는 기준 분포 */}
+          <div className="dash-row split">
+            <section className="dash-card">
+              <div className="dash-card-head">
+                <span className="dash-card-title">FAC별</span>
+                <span className="dash-card-sub">FAC_ID 별 분포 · MCP 기준 (미도달은 (none))</span>
+              </div>
+              <div className="dash-card-body">
+                <DimensionBreakdown
+                  items={stats.byFac}
+                  emptyText="FAC 데이터 없음"
+                />
+              </div>
+            </section>
 
-          {/* 5. FAC 별 — MCP send 단계에서 확정되는 FAC 기준 분포 */}
-          <section className="dash-card">
-            <div className="dash-card-head">
-              <span className="dash-card-title">FAC별</span>
-              <span className="dash-card-sub">FAC_ID 별 분포 · MCP 기준 (미도달은 (none))</span>
-            </div>
-            <div className="dash-card-body">
-              <DimensionBreakdown
-                items={stats.byFac}
-                emptyText="FAC 데이터 없음"
-              />
-            </div>
-          </section>
+            <section className="dash-card">
+              <div className="dash-card-head">
+                <span className="dash-card-title">AREA별</span>
+                <span className="dash-card-sub">AREA_ID 별 분포 · MCP 기준 (미도달은 (none))</span>
+              </div>
+              <div className="dash-card-body">
+                <DimensionBreakdown
+                  items={stats.byArea}
+                  emptyText="AREA 데이터 없음"
+                />
+              </div>
+            </section>
+          </div>
 
-          {/* 6. 사용자 Top — 헤비 유저 파악 */}
-          <section className="dash-card">
-            <div className="dash-card-head">
-              <span className="dash-card-title">Top 사용자</span>
-              <span className="dash-card-sub">트레이스 수 기준</span>
-            </div>
-            <div className="dash-card-body">
-              <TopList items={stats.topUsers} totalForPct={stats.totals.total} emptyText="데이터 없음" tone="neutral" />
-            </div>
-          </section>
+          {/* 5. 액션 타입별 / Top 사용자 — 보조 지표 (덜 중요, FAC/AREA 아래로) */}
+          <div className="dash-row split">
+            <section className="dash-card">
+              <div className="dash-card-head">
+                <span className="dash-card-title">액션 타입별</span>
+                <span className="dash-card-sub">ACTION_TYP 별 분포{actionTyp ? ` · 필터: ${actionTyp}` : ""}</span>
+              </div>
+              <div className="dash-card-body">
+                <DimensionBreakdown
+                  items={stats.byAction}
+                  emptyText="액션 데이터 없음"
+                  onSelect={onSelectAction}
+                  selected={actionTyp || undefined}
+                />
+              </div>
+            </section>
 
-          {/* 7. 레이어 — 엔지니어용 디테일, 접근성 위해 유지하되 가장 아래 */}
+            <section className="dash-card">
+              <div className="dash-card-head">
+                <span className="dash-card-title">Top 사용자</span>
+                <span className="dash-card-sub">트레이스 수 기준</span>
+              </div>
+              <div className="dash-card-body">
+                <TopList items={stats.topUsers} totalForPct={stats.totals.total} emptyText="데이터 없음" tone="neutral" />
+              </div>
+            </section>
+          </div>
+
+          {/* 6. 레이어 — 엔지니어용 디테일, 접근성 위해 유지하되 가장 아래 */}
           <section className="dash-card dash-card-muted">
             <div className="dash-card-head">
               <div className="dash-card-title-group">

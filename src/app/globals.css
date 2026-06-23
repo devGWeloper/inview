@@ -1513,6 +1513,39 @@ a:hover { text-decoration: underline; }
   transform: translate(-50%, 0);
 }
 
+/* 커스텀 호버 툴팁 (TopList 에러 코드 의미 등) — portal + fixed */
+.ttip {
+  position: fixed;
+  z-index: 9999;
+  transform: translate(-50%, -100%);   /* 앵커 위쪽에 표시 (기본) */
+  max-width: 300px;
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: rgba(31, 35, 40, 0.96);
+  color: #f5f6f8;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: normal;
+  word-break: keep-all;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.24);
+  pointer-events: none;
+  animation: ttip-in 90ms ease-out;
+}
+.ttip.below { transform: translate(-50%, 0); }  /* 상단 근처면 아래로 플립 */
+.ttip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  margin-left: -6px;
+  border: 6px solid transparent;
+}
+.ttip:not(.below)::after { top: 100%;    border-top-color: rgba(31, 35, 40, 0.96); }
+.ttip.below::after       { bottom: 100%; border-bottom-color: rgba(31, 35, 40, 0.96); }
+.ttip-main { font-weight: 600; }
+.ttip-sub  { margin-top: 3px; font-size: 11.5px; color: #aab2c0; }
+@keyframes ttip-in { from { opacity: 0; } to { opacity: 1; } }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Agent profile — 이억수 TL 프로필 카드 / 업무 쇼케이스 / 대시보드 스트립
    ═══════════════════════════════════════════════════════════════════════════ */

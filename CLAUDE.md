@@ -32,7 +32,7 @@ Each layer records **one row per call cycle** using three DML operations in `sql
 | Phase | File | When | What changes |
 |-------|------|------|--------------|
 | 1 | `dml_insert_recv.sql` | Message received from upstream | INSERT with `RECV_*` filled, `SEND_COMPLT_YN='N'` |
-| 2 | `dml_update_send.sql` | Message forwarded to downstream | UPDATE `SEND_SYS_ID`, `SEND_MSG_CTN`, `SEND_TM`, `FAC_ID` (MCP only) |
+| 2 | `dml_update_send.sql` | Message forwarded to downstream | UPDATE `SEND_SYS_ID`, `SEND_MSG_CTN`, `SEND_TM`, `FAC_ID` / `AREA_ID` (MCP only) |
 | 3 | `dml_update_resp.sql` | Response received from downstream | UPDATE `RESP_MSG_CTN`, `RESP_TM`, `HTTP_STS_CD`, `SEND_COMPLT_YN='Y'` |
 
 `SEND_COMPLT_YN='Y'` is only set in phase 3 (response received), not on send. This means a row with `SEND_COMPLT_YN='N'` and a non-null `SEND_TM` indicates "sent but awaiting response".
@@ -45,7 +45,7 @@ PK is `(TRACE_ID, TIMEKEY)`, which allows **multiple rows per layer per trace** 
 - `SEND_SYS_ID` / `SEND_MSG_CTN` / `SEND_TM` — request forwarded to downstream
 - `RESP_MSG_CTN` / `RESP_TM` — response received **back from** the downstream system
 - `HTTP_STS_CD` — HTTP status of the downstream response (e.g. `201`, `401`), written per row at phase 3 by every layer. Surfaced in `TraceTimeline` next to the route (single-call card head; per `Call #N` header for multi-call).
-- `FAC_ID` — FAC identifier, written **only by MCP** at phase 2 (send-update; FAC is first known at MCP). The column exists in **all** layer tables (the shared SELECT fans out to every DB), but non-MCP rows leave it null. Drives the dashboard "FAC별" breakdown (`byFac`).
+- `FAC_ID` / `AREA_ID` — same concept; both written **only by MCP** at phase 2 (send-update; first known at MCP). The columns exist in **all** layer tables (the shared SELECT fans out to every DB), but non-MCP rows leave them null. Drive the dashboard "FAC별" / "AREA별" breakdowns (`byFac` / `byArea`).
 - `CHANNEL_ID` / `ACTION_TYP` — channel / action dimensions, written by the top layer on INSERT. `CHANNEL_ID` is still selected into `TraceRow` but no longer aggregated (channel breakdown was removed); `ACTION_TYP` drives the dashboard "액션 타입별" breakdown and the `/api/action-types` filter options.
 - `SEND_COMPLT_YN` — `'Y'` only after response received (full round-trip complete)
 

@@ -38,6 +38,8 @@ export interface TraceRow {
   actionTyp: string | null;
   /** 설비/FAC ID — MCP 의 send update 단계에서만 기록(그 외 레이어는 NULL) */
   facId: string | null;
+  /** AREA ID — FAC_ID 와 동일 개념, MCP 의 send update 단계에서만 기록(그 외 레이어는 NULL) */
+  areaId: string | null;
   recvSysId: string | null;
   recvMsgCtn: string | null;
   recvTm: string | null;
@@ -259,6 +261,8 @@ export interface StatsResponse {
   byAction: DimensionStats[];
   /** FAC 별 트레이스 분포 (count desc) — FAC 는 MCP 의 send update 에서만 기록되므로 MCP 미도달 트레이스는 (none) */
   byFac: DimensionStats[];
+  /** AREA 별 트레이스 분포 (count desc) — FAC 와 동일하게 MCP 미도달 트레이스는 (none) */
+  byArea: DimensionStats[];
   /** 집계에 포함된 행 수 (제외 trace 의 행은 빠짐) */
   rowCount: number;
   /** 실제로 적용된 제외 에러 코드 목록 (echo) */

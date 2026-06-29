@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchAllRows, connectedLayerCount, getAppEnv } from "@/lib/db";
 import { LAYER_ORDER, TraceFilter, TraceStatus, TraceSummary, TraceRow } from "@/lib/types";
 import { logger, reqContext } from "@/lib/logger";
-import { classifyPendingByCubeResp, hasSeasoningFailure, SEASONING_FAIL_CODE } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
+import { classifyPendingByCubeResp } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
 
 export const dynamic = "force-dynamic";
 
@@ -73,20 +73,8 @@ export async function GET(req: NextRequest) {
   logger.info("GET /api/traces", { ...ctx, query: sp.toString(), filter });
 
   try {
-    // TEMP(ONEOIS 미연결): FAIL_SEASONING 은 DB 에 없는 가상 코드라 ERR_CD 로 거를 수 없다.
-    // errCd 필터를 떼고 전체 행을 받은 뒤, CUBE RESP 에 Seasoning 실패가 있는 트레이스만 남긴다.
-    const wantSeasoning = filter.errCd === SEASONING_FAIL_CODE;
-    const rows = await fetchAllRows(wantSeasoning ? { ...filter, errCd: undefined } : filter);
-    let summaries = summarize(rows);
-    if (wantSeasoning) {
-      const byTrace = new Map<string, TraceRow[]>();
-      for (const r of rows) {
-        const arr = byTrace.get(r.traceId);
-        if (arr) arr.push(r); else byTrace.set(r.traceId, [r]);
-      }
-      const ids = new Set([...byTrace].filter(([, l]) => hasSeasoningFailure(l)).map(([id]) => id));
-      summaries = summaries.filter((s) => ids.has(s.traceId));
-    }
+    const rows = await fetchAllRows(filter);
+    const summaries = summarize(rows);
     const connectedLayers = connectedLayerCount();
     const appEnv = getAppEnv();
 

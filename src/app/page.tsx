@@ -24,6 +24,8 @@ export default function Page() {
   const [detailRows, setDetailRows] = useState<TraceRow[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  // FAIL CODE 드롭다운 옵션 — TRX_ERRMSG_COD 마스터(/api/error-codes)에서 로드
+  const [errCodes, setErrCodes] = useState<Array<{ code: string; desc: string }>>([]);
 
   const layoutRef = useRef<HTMLDivElement>(null);
   const splitterRef = useRef<HTMLDivElement>(null);
@@ -98,6 +100,21 @@ export default function Page() {
   }, []);
 
   useEffect(() => { loadList(filter); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+
+  // FAIL CODE 옵션 로드 (TRX_ERRMSG_COD). 실패/미구성 시 빈 목록 → 셀렉트는 '전체'만.
+  useEffect(() => {
+    fetch("/api/error-codes", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data: { codes?: Record<string, string> }) => {
+        const codes = data.codes ?? {};
+        setErrCodes(
+          Object.entries(codes)
+            .map(([code, desc]) => ({ code, desc }))
+            .sort((a, b) => a.code.localeCompare(b.code))
+        );
+      })
+      .catch(() => setErrCodes([]));
+  }, []);
   useEffect(() => { if (selected) loadDetail(selected); }, [selected, loadDetail]);
 
   useEffect(() => {
@@ -159,12 +176,17 @@ export default function Page() {
                 </label>
                 <label style={{ gridColumn: "1 / -1" }}>
                   FAIL CODE
-                  <input
-                    type="text"
-                    placeholder="ERR_CD 부분 검색"
+                  <select
                     value={filter.errCd ?? ""}
                     onChange={(e) => setFilter({ ...filter, errCd: e.target.value || undefined })}
-                  />
+                  >
+                    <option value="">전체</option>
+                    {errCodes.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.desc ? `${c.code} — ${c.desc}` : c.code}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <label>
                   FROM

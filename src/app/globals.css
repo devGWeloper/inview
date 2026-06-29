@@ -217,7 +217,8 @@ a:hover { text-decoration: underline; }
   text-transform: uppercase; letter-spacing: 0.6px;
 }
 .filter-grid input[type="text"],
-.filter-grid input[type="datetime-local"] {
+.filter-grid input[type="datetime-local"],
+.filter-grid select {
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: 6px;
@@ -227,7 +228,8 @@ a:hover { text-decoration: underline; }
   outline: none;
   transition: border-color .12s, box-shadow .12s;
 }
-.filter-grid input:focus {
+.filter-grid input:focus,
+.filter-grid select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
@@ -1489,6 +1491,117 @@ a:hover { text-decoration: underline; }
   font-family: var(--mono);
 }
 .dim-legend .lbs-l.pend { color: var(--text-muted); }
+
+/* ── token breakdown (prompt/completion 적층) ── */
+.tks { height: 100%; display: inline-block; }
+.tks.prompt { background: #0ea5e9; }
+.tks.compl  { background: #a855f7; }
+.tks-l { display: inline-flex; align-items: center; gap: 4px; }
+.tks-l.prompt { color: #0ea5e9; }
+.tks-l.compl  { color: #a855f7; }
+.tks-l.calls  { color: var(--text-muted); margin-left: auto; }
+
+/* ── token 최근 호출 테이블 ── */
+.dash-title-note { color: var(--text-muted); }
+.token-recent-wrap { overflow-x: auto; }
+.token-recent {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.token-recent th,
+.token-recent td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.token-recent th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.token-recent td.num,
+.token-recent th.num { text-align: right; }
+.token-recent tbody tr:hover { background: var(--surface-2); }
+
+/* ── 질문별 토큰 테이블 (QuestionsTable) ── */
+.qtable-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.qtable-search {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+.qtable-sort { display: inline-flex; gap: 4px; }
+.qsort-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.qsort-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.qtable-meta { font-size: 12px; color: var(--text-muted); font-family: var(--mono); white-space: nowrap; }
+
+.qtable .qcell-exp { width: 22px; text-align: center; color: var(--text-muted); }
+.qrow.expandable { cursor: pointer; }
+.qrow.expandable:hover { background: var(--surface-2); }
+.qrow.open { background: var(--surface-2); }
+.qrow .muted { color: var(--text-muted); }
+
+.qnode {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--mono);
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+
+/* TOTAL 셀: 값 뒤에 옅은 막대로 상대 크기 표현 */
+.qtable td.qtotal { position: relative; }
+.qtotal-bar {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 60%;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-radius: 3px;
+  z-index: 0;
+}
+.qtotal-val { position: relative; z-index: 1; }
+
+.qsubrow > td { background: var(--surface-2); padding: 0; }
+.qsub { padding: 4px 10px 8px 10px !important; }
+.qsub-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.qsub-table td {
+  padding: 4px 8px;
+  border-bottom: 1px dashed var(--border);
+  white-space: nowrap;
+}
+.qsub-table tr:last-child td { border-bottom: none; }
 
 /* ── toast ──────────────────────────────────────────────────────────────── */
 .app-toast {

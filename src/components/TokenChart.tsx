@@ -13,57 +13,61 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { StatsResponse, TimeBucket } from "@/lib/types";
+import { TokenBucket, TokenStatsResponse } from "@/lib/types";
 
-const STATUS_KEYS = ["ok", "fail", "pending"] as const;
-type StatusKey = typeof STATUS_KEYS[number];
+const SERIES = ["inputTokens", "outputTokens"] as const;
+type SeriesKey = typeof SERIES[number];
 
-const STATUS_COLOR: Record<StatusKey, string> = {
-  ok:      "#067647",
-  fail:    "#b42318",
-  pending: "#8a94a6",
+const SERIES_COLOR: Record<SeriesKey, string> = {
+  inputTokens: "#0ea5e9",
+  outputTokens: "#a855f7",
 };
 
-const STATUS_LABEL: Record<StatusKey, string> = {
-  ok:      "OK",
-  fail:    "FAIL",
-  pending: "PENDING",
+const SERIES_LABEL: Record<SeriesKey, string> = {
+  inputTokens: "INPUT",
+  outputTokens: "OUTPUT",
 };
 
-function fmtTick(ts: string, g: StatsResponse["granularity"]): string {
+type Gran = TokenStatsResponse["granularity"];
+
+function fmtTick(ts: string, g: Gran): string {
   if (g === "1d") return ts.slice(5, 10);
   return ts.slice(11, 16);
 }
 
-function fmtFullTs(ts: string, g: StatsResponse["granularity"]): string {
+function fmtFullTs(ts: string, g: Gran): string {
   if (g === "1d") return ts.slice(0, 10);
   return ts.slice(0, 16).replace("T", " ");
 }
 
-type Row = { ts: string; tick: string; total: number } & Record<StatusKey, number>;
+function fmtCompact(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+  return String(Math.round(n));
+}
+
+type Row = { ts: string; tick: string; total: number; calls: number } & Record<SeriesKey, number>;
 
 function CustomTooltip({
-  active, payload, label, granularity,
+  active, payload, granularity,
 }: {
   active?: boolean;
-  payload?: Array<{ name: string; value: number; color: string; dataKey: string; payload: Row }>;
-  label?: string;
-  granularity: StatsResponse["granularity"];
+  payload?: Array<{ payload: Row }>;
+  granularity: Gran;
 }) {
   if (!active || !payload || payload.length === 0) return null;
   const row = payload[0].payload;
-  const fullTs = fmtFullTs(row.ts, granularity);
   return (
     <div className="ts-tooltip">
-      <div className="ts-tooltip-head">{fullTs}</div>
+      <div className="ts-tooltip-head">{fmtFullTs(row.ts, granularity)}</div>
       <div className="ts-tooltip-body">
-        {STATUS_KEYS.map((k) => {
+        {SERIES.map((k) => {
           const v = row[k] ?? 0;
           if (v === 0) return null;
           return (
             <div key={k} className="ts-tooltip-row">
-              <span className="ts-tooltip-swatch" style={{ background: STATUS_COLOR[k] }} />
-              <span className="ts-tooltip-key">{STATUS_LABEL[k]}</span>
+              <span className="ts-tooltip-swatch" style={{ background: SERIES_COLOR[k] }} />
+              <span className="ts-tooltip-key">{SERIES_LABEL[k]}</span>
               <span className="ts-tooltip-val">{v.toLocaleString()}</span>
             </div>
           );
@@ -72,50 +76,49 @@ function CustomTooltip({
           <span className="ts-tooltip-key">TOTAL</span>
           <span className="ts-tooltip-val">{row.total.toLocaleString()}</span>
         </div>
+        <div className="ts-tooltip-row">
+          <span className="ts-tooltip-key">CALLS</span>
+          <span className="ts-tooltip-val">{row.calls.toLocaleString()}</span>
+        </div>
       </div>
     </div>
   );
 }
 
-export function TimeSeriesChart({ stats }: { stats: StatsResponse }) {
+export function TokenChart({ stats }: { stats: TokenStatsResponse }) {
   const granularity = stats.granularity;
-  const [hidden, setHidden] = useState<Record<StatusKey, boolean>>({
-    ok: false, fail: false, pending: false,
+  const [hidden, setHidden] = useState<Record<SeriesKey, boolean>>({
+    inputTokens: false,
+    outputTokens: false,
   });
 
-  const data: Row[] = useMemo(() => {
-    return stats.buckets.map((b: TimeBucket) => ({
-      ts: b.ts,
-      tick: fmtTick(b.ts, granularity),
-      ok: b.ok,
-      fail: b.fail,
-      pending: b.pending,
-      total: b.ok + b.fail + b.pending,
-    }));
-  }, [stats.buckets, granularity]);
+  const data: Row[] = useMemo(
+    () =>
+      stats.buckets.map((b: TokenBucket) => ({
+        ts: b.ts,
+        tick: fmtTick(b.ts, granularity),
+        inputTokens: b.inputTokens,
+        outputTokens: b.outputTokens,
+        total: b.totalTokens,
+        calls: b.calls,
+      })),
+    [stats.buckets, granularity]
+  );
 
-  const { peakIdx, peakVal, peakTs, avgSuccess } = useMemo(() => {
-    let pIdx = -1, pVal = 0, totalAll = 0, okAll = 0;
+  const { peakIdx, peakVal, peakTs } = useMemo(() => {
+    let pIdx = -1, pVal = 0;
     data.forEach((d, i) => {
       if (d.total > pVal) { pVal = d.total; pIdx = i; }
-      totalAll += d.total;
-      okAll += d.ok;
     });
-    return {
-      peakIdx: pIdx,
-      peakVal: pVal,
-      peakTs: pIdx >= 0 ? data[pIdx].ts : null,
-      avgSuccess: totalAll > 0 ? (okAll / totalAll) * 100 : null,
-    };
+    return { peakIdx: pIdx, peakVal: pVal, peakTs: pIdx >= 0 ? data[pIdx].ts : null };
   }, [data]);
 
-  const toggle = (k: StatusKey) =>
-    setHidden((h) => ({ ...h, [k]: !h[k] }));
+  const toggle = (k: SeriesKey) => setHidden((h) => ({ ...h, [k]: !h[k] }));
 
   return (
     <div className="ts-wrap">
       <div className="ts-legend">
-        {STATUS_KEYS.map((k) => (
+        {SERIES.map((k) => (
           <button
             type="button"
             key={k}
@@ -123,40 +126,26 @@ export function TimeSeriesChart({ stats }: { stats: StatsResponse }) {
             onClick={() => toggle(k)}
             aria-pressed={!hidden[k]}
           >
-            <span className="legend-swatch" style={{ background: STATUS_COLOR[k] }} />
-            {STATUS_LABEL[k]}
+            <span className="legend-swatch" style={{ background: SERIES_COLOR[k] }} />
+            {SERIES_LABEL[k]}
           </button>
         ))}
         <span className="ts-legend-spacer" />
-        {avgSuccess !== null && (
-          <span className="ts-meta">avg success {avgSuccess.toFixed(1)}%</span>
-        )}
-        <span className="ts-meta">
-          {data.length} buckets · {granText(granularity)}
-        </span>
+        <span className="ts-meta">{data.length} buckets · {granText(granularity)}</span>
       </div>
 
       <div className="ts-chart">
         <ResponsiveContainer width="100%" height={320}>
-          <AreaChart
-            data={data}
-            margin={{ top: 10, right: 18, bottom: 0, left: 0 }}
-          >
+          <AreaChart data={data} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
             <defs>
-              {STATUS_KEYS.map((k) => (
-                <linearGradient key={k} id={`ts-grad-${k}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%"  stopColor={STATUS_COLOR[k]} stopOpacity={k === "pending" ? 0.18 : 0.55} />
-                  <stop offset="100%" stopColor={STATUS_COLOR[k]} stopOpacity={0.05} />
+              {SERIES.map((k) => (
+                <linearGradient key={k} id={`tok-grad-${k}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={SERIES_COLOR[k]} stopOpacity={0.5} />
+                  <stop offset="100%" stopColor={SERIES_COLOR[k]} stopOpacity={0.05} />
                 </linearGradient>
               ))}
             </defs>
-            <CartesianGrid
-              stroke="var(--border-strong)"
-              strokeOpacity={0.55}
-              strokeWidth={1}
-              vertical={false}
-              horizontal
-            />
+            <CartesianGrid stroke="var(--border-strong)" strokeOpacity={0.55} strokeWidth={1} vertical={false} horizontal />
             <XAxis
               dataKey="tick"
               tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}
@@ -172,7 +161,7 @@ export function TimeSeriesChart({ stats }: { stats: StatsResponse }) {
               axisLine={{ stroke: "var(--border-strong)" }}
               width={52}
               allowDecimals={false}
-              tickFormatter={(v) => v.toLocaleString()}
+              tickFormatter={(v) => fmtCompact(Number(v))}
             />
             <Tooltip
               content={<CustomTooltip granularity={granularity} />}
@@ -184,7 +173,7 @@ export function TimeSeriesChart({ stats }: { stats: StatsResponse }) {
                 stroke="var(--text-muted)"
                 strokeDasharray="3 4"
                 label={{
-                  value: `peak ${peakVal.toLocaleString()}${peakTs ? ` · ${fmtFullTs(peakTs, granularity)}` : ""}`,
+                  value: `peak ${fmtCompact(peakVal)}${peakTs ? ` · ${fmtFullTs(peakTs, granularity)}` : ""}`,
                   position: "insideTopRight",
                   fill: "var(--text)",
                   fontSize: 12.5,
@@ -193,16 +182,16 @@ export function TimeSeriesChart({ stats }: { stats: StatsResponse }) {
                 }}
               />
             )}
-            {STATUS_KEYS.map((k) => (
+            {SERIES.map((k) => (
               <Area
                 key={k}
                 type="monotone"
                 dataKey={k}
-                name={STATUS_LABEL[k]}
-                stackId="status"
-                stroke={STATUS_COLOR[k]}
-                strokeWidth={k === "ok" ? 1.8 : 1}
-                fill={`url(#ts-grad-${k})`}
+                name={SERIES_LABEL[k]}
+                stackId="tok"
+                stroke={SERIES_COLOR[k]}
+                strokeWidth={1.4}
+                fill={`url(#tok-grad-${k})`}
                 hide={hidden[k]}
                 isAnimationActive
                 animationDuration={500}
@@ -227,6 +216,6 @@ export function TimeSeriesChart({ stats }: { stats: StatsResponse }) {
   );
 }
 
-function granText(g: StatsResponse["granularity"]): string {
+function granText(g: Gran): string {
   return g === "5m" ? "5-min" : g === "1h" ? "hourly" : "daily";
 }

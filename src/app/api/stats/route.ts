@@ -12,6 +12,13 @@ import {
 } from "@/lib/types";
 import { logger, reqContext } from "@/lib/logger";
 import { classifyPendingByCubeResp, hasSeasoningFailure, SEASONING_FAIL_CODE } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
+import {
+  enumerateBucketStarts,
+  floorToBucket,
+  isoNoTz,
+  parseTs,
+  pickGranularity,
+} from "@/lib/timeBuckets";
 
 export const dynamic = "force-dynamic";
 
@@ -27,43 +34,6 @@ function classify(rows: TraceRow[], allComplete: boolean): DashStatus {
     return t === "ok" ? "ok" : "fail";
   }
   return "fail";
-}
-
-type Granularity = "5m" | "1h" | "1d";
-
-function pickGranularity(fromMs: number, toMs: number): Granularity {
-  const hours = (toMs - fromMs) / 3_600_000;
-  if (hours <= 2) return "5m";
-  if (hours <= 48) return "1h";
-  return "1d";
-}
-
-function bucketMs(g: Granularity): number {
-  return g === "5m" ? 5 * 60_000 : g === "1h" ? 3_600_000 : 86_400_000;
-}
-
-function floorToBucket(ms: number, g: Granularity): number {
-  const step = bucketMs(g);
-  if (g === "1d") {
-    // 로컬 자정 기준 floor
-    const d = new Date(ms);
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
-  }
-  return Math.floor(ms / step) * step;
-}
-
-function isoNoTz(ms: number): string {
-  const d = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-function parseTs(ts: string | null): number | null {
-  if (!ts) return null;
-  // 'YYYY-MM-DDTHH:MM:SS.fff' → 로컬 파싱 (TZ 제거된 형태이므로 그대로 Date 생성)
-  const t = Date.parse(ts);
-  return Number.isFinite(t) ? t : null;
 }
 
 function topN(map: Map<string, number>, n: number): TopItem[] {
@@ -214,23 +184,9 @@ export async function GET(req: NextRequest) {
     }
 
     // 빈 버킷 채우기 (시계열 차트가 균일하게 보이도록)
-    const bucketArr: TimeBucket[] = [];
-    const step = bucketMs(g);
-    const startBucket = floorToBucket(effectiveFromMs, g);
-    const endBucket = floorToBucket(effectiveToMs, g);
-    if (g === "1d") {
-      const d = new Date(startBucket);
-      const endD = new Date(endBucket);
-      while (d.getTime() <= endD.getTime()) {
-        const k = d.getTime();
-        bucketArr.push(buckets.get(k) ?? { ts: isoNoTz(k), ok: 0, fail: 0, pending: 0 });
-        d.setDate(d.getDate() + 1);
-      }
-    } else {
-      for (let k = startBucket; k <= endBucket; k += step) {
-        bucketArr.push(buckets.get(k) ?? { ts: isoNoTz(k), ok: 0, fail: 0, pending: 0 });
-      }
-    }
+    const bucketArr: TimeBucket[] = enumerateBucketStarts(effectiveFromMs, effectiveToMs, g).map(
+      (k) => buckets.get(k) ?? { ts: isoNoTz(k), ok: 0, fail: 0, pending: 0 }
+    );
 
     // ── 레이어별 행 단위 집계 (ERROR/FAIL 구분 없이 fail 로 통합) — 제외 trace 의 행은 빠짐
     const layerAcc = new Map<LayerKey, { total: number; fail: number; ok: number; rt: number[] }>();

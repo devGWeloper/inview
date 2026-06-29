@@ -241,6 +241,98 @@ export interface FteStats {
   months: FteMonth[];
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Token usage (GAIA LLM 호출별 토큰 사용량)
+//
+// 트레이스(BIZ_AIACTIONTXN_HIS)와 별개로, GAIA 가 LLM 을 호출할 때마다 적재하는
+// TRX_TOKEN_DET (앱 자체 DB = GAIA, config.ts APP_DB_LAYER) 를 집계한다.
+//   - 1차 차원 = NODE(action/judge/setup_guide …), 보조 차원 = MODEL
+//   - 한 질문은 셋 중 한 노드로 분기. "질문" 단위는 TRACE_ID(= questions).
+//     TRACE_ID 가 없는(액션과 무관한) 호출은 호출 1건이 곧 1질문으로 본다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface TokenRow {
+  tokenId: string;
+  traceId: string | null;
+  nodeNm: string | null;
+  modelNm: string | null;
+  userId: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  /** ISO 형태 호출 시각 (TZ 없음) */
+  callTm: string | null;
+}
+
+/** 질문(TRACE_ID) 단위로 묶은 토큰 사용량. TRACE_ID 없으면 호출 1건 = 질문 1건. */
+export interface TokenQuestion {
+  /** 표시/그룹 키. TRACE_ID 가 있으면 그 값, 없으면 "token:<TOKEN_ID>" */
+  qKey: string;
+  /** 질문의 TRACE_ID (없으면 null) */
+  traceId: string | null;
+  /** 이 질문이 탄 노드 (보통 1개; 혼합 시 대표값) */
+  nodeNm: string | null;
+  /** 대표 모델 */
+  modelNm: string | null;
+  userId: string | null;
+  /** 이 질문에서 발생한 LLM 호출 수 */
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  /** 마지막 호출 시각 (ISO, TZ 없음) */
+  lastTm: string | null;
+}
+
+export interface TokenFilter {
+  dateFrom?: string;
+  dateTo?: string;
+  userId?: string;
+  nodeNm?: string;
+  modelNm?: string;
+  /** 특정 질문(TRACE_ID) 으로 좁히기. 설정 시 응답 calls 에 그 질문의 호출별 행이 채워진다. */
+  traceId?: string;
+}
+
+export interface TokenBucket {
+  /** ISO 형태 버킷 시작 시각 (stats 와 동일 규칙) */
+  ts: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  /** 해당 버킷의 LLM 호출 수 */
+  calls: number;
+}
+
+/** byNode / byModel 공용 — 차원 값별 토큰 집계 */
+export interface TokenDimStat {
+  /** node 명 또는 model 명. null/empty 는 '(none)' 로 정규화 */
+  key: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
+export interface TokenStatsResponse {
+  range: { from: string | null; to: string | null };
+  totals: { calls: number; inputTokens: number; outputTokens: number; totalTokens: number };
+  /** 호출당 평균 총 토큰. 호출이 없으면 null */
+  avgTotalPerCall: number | null;
+  granularity: "5m" | "1h" | "1d";
+  buckets: TokenBucket[];
+  /** 노드별 토큰 분포 (totalTokens desc) — 1차 차원 */
+  byNode: TokenDimStat[];
+  /** 모델별 토큰 분포 (totalTokens desc) — 보조 차원 */
+  byModel: TokenDimStat[];
+  /** 상위 사용자 (TOTAL_TOKENS 기준, count = totalTokens) */
+  topUsers: TopItem[];
+  /** 질문(TRACE_ID) 단위 토큰 사용량 — 총 토큰 desc, 상위 N건. "질문별 토큰" 표의 데이터 */
+  questions: TokenQuestion[];
+  /** filter.traceId 가 지정됐을 때 그 질문의 호출별 행(callTm desc). 그 외엔 빈 배열 (행 펼침용) */
+  calls: TokenRow[];
+}
+
 export interface StatsResponse {
   /** 적용된 기간 */
   range: { from: string | null; to: string | null };

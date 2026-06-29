@@ -72,15 +72,15 @@ export function AgentNavChip() {
       aria-current={agentActive ? "page" : undefined}
       title={`${name} · 프로필 보기`}
     >
-      <span className={"nav-agent-avatar" + (avatarImg ? " has-image" : "")} aria-hidden>
-        {avatarImg ? <img src={avatarImg} alt="" /> : <span>{emoji}</span>}
-        <span className="nav-agent-status-dot" />
+      <span className={"nav-agent-photo" + (avatarImg ? " has-image" : "")} aria-hidden>
+        {avatarImg ? <img src={avatarImg} alt="" /> : <span className="nav-agent-emoji">{emoji}</span>}
       </span>
       <span className="nav-agent-id">
         <span className="nav-agent-name">{name}</span>
         <span className="nav-agent-status">
-          <span className="nav-agent-role">AI AGENT</span>
+          <span className="nav-agent-dot" />
           <span className="nav-agent-live">근무중</span>
+          <span className="nav-agent-role">AI AGENT</span>
         </span>
       </span>
     </Link>

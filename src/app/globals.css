@@ -745,8 +745,9 @@ a:hover { text-decoration: underline; }
 .nav-agent {
   display: inline-flex; align-items: center; gap: 11px;
   height: 48px;
-  padding: 0 16px 0 8px;
+  padding: 0 16px 0 0;        /* 사진을 카드 좌측 끝까지 붙인다 */
   border-radius: 13px;
+  overflow: hidden;          /* 사진을 카드 모서리에 맞춰 클립 → 삐져나옴 차단 */
   text-decoration: none;
   border: 1px solid transparent;
   background:
@@ -770,35 +771,24 @@ a:hover { text-decoration: underline; }
   box-shadow: 0 4px 16px rgba(124, 58, 237, .22);
 }
 
-.nav-agent-avatar {
+/* 사진 = 카드 높이를 가득 채우는 좌측 스트립 (사원증 느낌) */
+.nav-agent-photo {
+  align-self: stretch;
+  width: 48px; flex-shrink: 0;
   position: relative;
-  width: 38px; height: 38px; flex-shrink: 0;
-  border-radius: 11px;
   display: grid; place-items: center;
-  font-size: 20px; line-height: 1;
   background: linear-gradient(135deg, #2563eb, #7c3aed);
   color: #fff;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, .35);
-  overflow: visible;
 }
-.nav-agent-avatar.has-image { background: var(--surface-3); }
-.nav-agent-avatar img {
-  width: 100%; height: 100%; object-fit: cover; display: block;
-  border-radius: 11px;
+.nav-agent-photo img {
+  width: 100%; height: 100%; object-fit: cover; object-position: center top; display: block;
 }
-/* 살아있는 근무중 상태등 */
-.nav-agent-status-dot {
-  position: absolute; right: -3px; bottom: -3px;
-  width: 12px; height: 12px; border-radius: 50%;
-  background: #16a34a;
-  border: 2.5px solid #f9f9fc;
-  box-shadow: 0 0 0 0 rgba(22, 163, 74, .55);
-  animation: nav-agent-pulse 2s ease-out infinite;
-}
-@keyframes nav-agent-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(22, 163, 74, .55); }
-  70%  { box-shadow: 0 0 0 7px rgba(22, 163, 74, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+.nav-agent-emoji { font-size: 24px; line-height: 1; }
+/* 사진 위 미세한 광택 + 텍스트와의 경계선 */
+.nav-agent-photo::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(0,0,0,.10));
+  box-shadow: inset -1px 0 0 rgba(17, 24, 39, .10);
 }
 
 .nav-agent-id { display: flex; flex-direction: column; gap: 2px; line-height: 1.1; }
@@ -807,18 +797,28 @@ a:hover { text-decoration: underline; }
   letter-spacing: 0.1px;
 }
 .nav-agent-status { display: inline-flex; align-items: center; gap: 6px; }
+/* 인라인 펄스 근무중 점 */
+.nav-agent-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  background: #16a34a;
+  box-shadow: 0 0 0 0 rgba(22, 163, 74, .5);
+  animation: nav-agent-pulse 2s ease-out infinite;
+}
+@keyframes nav-agent-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(22, 163, 74, .5); }
+  70%  { box-shadow: 0 0 0 5px rgba(22, 163, 74, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+}
+.nav-agent-live { font-size: 11px; font-weight: 600; color: #15803d; }
 .nav-agent-role {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.6px;
+  position: relative;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+  padding-left: 8px;
   background: linear-gradient(90deg, #2563eb, #7c3aed);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
 }
-.nav-agent-live {
-  position: relative;
-  font-size: 11px; font-weight: 600; color: #15803d;
-  padding-left: 12px;
-}
-.nav-agent-live::before {
+.nav-agent-role::before {
   content: ""; position: absolute; left: 0; top: 50%;
   width: 1px; height: 9px; margin-top: -4.5px;
   background: var(--border-strong);
@@ -828,7 +828,7 @@ a:hover { text-decoration: underline; }
   .tabnav-group .tab span { display: none; }
   .tabnav-group .tab { padding: 0 11px; }
   .nav-agent-id { display: none; }
-  .nav-agent { padding: 0 8px; }
+  .nav-agent { padding: 0; }
 }
 
 /* ---------------- dashboard ---------------- */

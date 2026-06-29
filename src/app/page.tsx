@@ -6,6 +6,7 @@ import {
   LAYER_COLOR, LAYER_ORDER,
   TraceFilter, TraceListResponse, TraceDetailResponse, TraceSummary, TraceRow
 } from "@/lib/types";
+import { SEASONING_FAIL_CODE } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 가상 코드
 
 const DEFAULT_FILTER: TraceFilter = {};
 const MIN_LEFT = 360;
@@ -186,6 +187,8 @@ export default function Page() {
                         {c.desc ? `${c.code} — ${c.desc}` : c.code}
                       </option>
                     ))}
+                    {/* TEMP(ONEOIS 미연결): DB 에 없는 가상 코드 — 항상 노출 */}
+                    <option value={SEASONING_FAIL_CODE}>{SEASONING_FAIL_CODE} — Seasoning 실패</option>
                   </select>
                 </label>
                 <label>

@@ -81,23 +81,34 @@ a:hover { text-decoration: underline; }
 .topbar {
   height: 64px;
   padding: 0 22px;
-  background: var(--surface);
+  background: linear-gradient(180deg, #ffffff, #fbfcfe);
   border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 0 rgba(17, 24, 39, .02), 0 10px 22px -18px rgba(17, 24, 39, .25);
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 .brand {
-  display: flex; align-items: center; gap: 10px;
-  font-size: 18px; font-weight: 600; letter-spacing: 0.1px;
+  display: flex; align-items: center; gap: 9px;
+  font-size: 18px; font-weight: 700; letter-spacing: -0.1px;
 }
 .brand .logo {
-  width: 24px; height: 24px; border-radius: 6px;
+  width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
   background: linear-gradient(135deg, #2563eb, #7c3aed);
-  display: inline-block;
+  display: grid; place-items: center;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .3),
+    0 2px 8px rgba(37, 99, 235, .35);
+}
+.brand-word { color: var(--text); }
+.brand-x {
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
 }
 .brand .sub {
-  font-weight: 400; color: var(--text-3); font-size: 14px; margin-left: 4px;
+  font-weight: 500; color: var(--text-muted); font-size: 13px;
+  margin-left: 3px; letter-spacing: 0;
 }
 
 .env-badge {

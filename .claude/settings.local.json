@@ -28,7 +28,8 @@
       "PowerShell(npx next lint --file src/app/page.tsx --file src/components/TraceTimeline.tsx --file src/app/api/traces/route.ts --file src/lib/db.ts 2>&1 | Select-Object -First 40)",
       "Bash(git check-ignore *)",
       "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 30)",
-      "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 20)"
+      "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 20)",
+      "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 15)"
     ]
   }
 }

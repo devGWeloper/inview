@@ -15,8 +15,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="app">
           <header className="topbar">
             <div className="brand">
-              <span className="logo" aria-hidden />
-              TraceX
+              <span className="logo" aria-hidden>
+                <svg viewBox="0 0 24 24" fill="none" width="15" height="15">
+                  <path d="M4 17 L10 11 L14 14 L20 6" stroke="#fff" strokeWidth="2.2"
+                        strokeLinecap="round" strokeLinejoin="round" />
+                  <circle cx="4" cy="17" r="1.7" fill="#fff" />
+                  <circle cx="20" cy="6" r="1.7" fill="#fff" />
+                </svg>
+              </span>
+              <span className="brand-word">Trace<span className="brand-x">X</span></span>
               <span className="sub">· AI Action Trace</span>
             </div>
             <TabNav />

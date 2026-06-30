@@ -90,6 +90,7 @@ function emptyStats(filter: TokenFilter, g: Granularity, buckets: TokenBucket[])
     range: { from: filter.dateFrom ?? null, to: filter.dateTo ?? null },
     totals: { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     avgTotalPerCall: null,
+    avgLatencyMs: null,
     granularity: g,
     buckets,
     byNode: [],
@@ -112,6 +113,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     outputTokens: 0,
     totalTokens: 0,
     calls: 0,
+    avgLatencyMs: null,
   }));
 
   const cfg = getAppDbConfig();
@@ -129,22 +131,32 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     const rowsOf = (r: { rows?: unknown }) => (r.rows ?? []) as Array<Record<string, unknown>>;
 
     // 1) 시계열 버킷 (+ totals 는 버킷 합으로 도출)
+    //   LATENCY_MS 는 NULL 가능 → SUM/COUNT(LATENCY_MS) 로 NULL 제외 평균을 도출하고,
+    //   전체 평균(latSum/latCnt)도 같은 행들에서 누적한다.
     const bucketSql =
       `SELECT TO_CHAR(${bucketExpr(g)}, 'YYYY-MM-DD"T"HH24:MI:SS') AS BKT,` +
-      ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T, COUNT(*) AS N` +
+      ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T, COUNT(*) AS N,` +
+      ` SUM(LATENCY_MS) AS LSUM, COUNT(LATENCY_MS) AS LCNT` +
       ` FROM TRX_TOKEN_DET${where} GROUP BY ${bucketExpr(g)} ORDER BY 1`;
     const bucketRes = await conn.execute(bucketSql, binds, opts);
     const bucketMap = new Map<number, TokenBucket>();
+    let latSum = 0;
+    let latCnt = 0;
     for (const r of rowsOf(bucketRes)) {
       const ms = parseTs(str(r.BKT ?? r.bkt));
       if (ms === null) continue;
       const key = floorToBucket(ms, g);
+      const lsum = num(r.LSUM ?? r.lsum);
+      const lcnt = num(r.LCNT ?? r.lcnt);
+      latSum += lsum;
+      latCnt += lcnt;
       bucketMap.set(key, {
         ts: isoNoTz(key),
         inputTokens: num(r.P ?? r.p),
         outputTokens: num(r.C ?? r.c),
         totalTokens: num(r.T ?? r.t),
         calls: num(r.N ?? r.n),
+        avgLatencyMs: lcnt > 0 ? lsum / lcnt : null,
       });
     }
     const buckets = enumerateBucketStarts(fromMs, toMs, g).map(
@@ -155,6 +167,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
           outputTokens: 0,
           totalTokens: 0,
           calls: 0,
+          avgLatencyMs: null,
         }
     );
     const totals = buckets.reduce(
@@ -169,18 +182,24 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     );
 
     // 2) byNode / 3) byModel — 동일 패턴 (차원 컬럼만 다름)
+    //   AVG(LATENCY_MS) 는 NULL 을 자동 제외하므로, 측정값이 하나도 없으면 NULL 을 돌려준다.
     const dimSql = (col: string) =>
       `SELECT NVL(${col}, '(none)') AS K, COUNT(*) AS N,` +
-      ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T` +
+      ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T,` +
+      ` AVG(LATENCY_MS) AS L` +
       ` FROM TRX_TOKEN_DET${where} GROUP BY NVL(${col}, '(none)') ORDER BY T DESC`;
     const dimFrom = (rows: Array<Record<string, unknown>>): TokenDimStat[] =>
-      rows.map((r) => ({
-        key: String(r.K ?? r.k ?? "(none)"),
-        calls: num(r.N ?? r.n),
-        inputTokens: num(r.P ?? r.p),
-        outputTokens: num(r.C ?? r.c),
-        totalTokens: num(r.T ?? r.t),
-      }));
+      rows.map((r) => {
+        const l = r.L ?? r.l;
+        return {
+          key: String(r.K ?? r.k ?? "(none)"),
+          calls: num(r.N ?? r.n),
+          inputTokens: num(r.P ?? r.p),
+          outputTokens: num(r.C ?? r.c),
+          totalTokens: num(r.T ?? r.t),
+          avgLatencyMs: l == null ? null : num(l),
+        };
+      });
     const byNode = dimFrom(rowsOf(await conn.execute(dimSql("NODE_NM"), binds, opts)));
     const byModel = dimFrom(rowsOf(await conn.execute(dimSql("MODEL_NM"), binds, opts)));
 
@@ -251,6 +270,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       range: { from: filter.dateFrom ?? null, to: filter.dateTo ?? null },
       totals,
       avgTotalPerCall: totals.calls > 0 ? totals.totalTokens / totals.calls : null,
+      avgLatencyMs: latCnt > 0 ? latSum / latCnt : null,
       granularity: g,
       buckets,
       byNode,

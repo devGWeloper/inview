@@ -24,6 +24,7 @@ CREATE TABLE TRX_TOKEN_DET (
     INPUT_TOKENS       NUMBER         DEFAULT 0,                 -- 입력 토큰 (LLM usage 의 prompt_tokens/input_tokens)
     OUTPUT_TOKENS      NUMBER         DEFAULT 0,                 -- 출력 토큰 (LLM usage 의 completion_tokens/output_tokens)
     TOTAL_TOKENS       NUMBER         DEFAULT 0,                 -- 합계 (응답값 그대로; 없으면 input+output)
+    LATENCY_MS         NUMBER,                                  -- LLM 호출 소요시간(ms): 요청→응답. GAIA 가 측정해 적재(없으면 NULL)
     CALL_TM            TIMESTAMP      DEFAULT SYSTIMESTAMP,      -- LLM 호출 시각 (시계열 버킷 기준)
     REG_DT             TIMESTAMP      DEFAULT SYSTIMESTAMP,      -- 적재 시각
     CONSTRAINT PK_TRX_TOKEN_DET PRIMARY KEY (TOKEN_ID)
@@ -45,6 +46,7 @@ COMMENT ON COLUMN TRX_TOKEN_DET.USER_ID           IS '사용자 ID';
 COMMENT ON COLUMN TRX_TOKEN_DET.INPUT_TOKENS      IS '입력 토큰 수 (prompt_tokens/input_tokens)';
 COMMENT ON COLUMN TRX_TOKEN_DET.OUTPUT_TOKENS     IS '출력 토큰 수 (completion_tokens/output_tokens)';
 COMMENT ON COLUMN TRX_TOKEN_DET.TOTAL_TOKENS      IS '합계 토큰 수';
+COMMENT ON COLUMN TRX_TOKEN_DET.LATENCY_MS        IS 'LLM 호출 소요시간(ms): 요청→응답. 없으면 NULL';
 COMMENT ON COLUMN TRX_TOKEN_DET.CALL_TM           IS 'LLM 호출 시각';
 COMMENT ON COLUMN TRX_TOKEN_DET.REG_DT            IS '적재 일시';
 
@@ -57,6 +59,13 @@ COMMIT;
 --   FROM USER_TAB_COLUMNS
 --  WHERE TABLE_NAME = 'TRX_TOKEN_DET'
 --  ORDER BY COLUMN_ID;
+
+-- ============================================================================
+-- [MIGRATION] 기존 TRX_TOKEN_DET 에 LATENCY_MS 를 사후 추가할 때 (앱 자체 DB 에서 1회)
+-- ============================================================================
+-- ALTER TABLE TRX_TOKEN_DET ADD (LATENCY_MS NUMBER);
+-- COMMENT ON COLUMN TRX_TOKEN_DET.LATENCY_MS IS 'LLM 호출 소요시간(ms): 요청→응답. 없으면 NULL';
+-- COMMIT;
 
 -- ============================================================================
 -- [ROLLBACK]

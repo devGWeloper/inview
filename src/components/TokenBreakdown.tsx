@@ -1,4 +1,5 @@
 import { TokenDimStat } from "@/lib/types";
+import { fmtDuration } from "@/components/TokenLatencyChart";
 
 function fmtCompact(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
@@ -61,6 +62,9 @@ export function TokenBreakdown({
               <span className="tks-l prompt">IN {fmtCompact(it.inputTokens)}</span>
               <span className="tks-l compl">OUT {fmtCompact(it.outputTokens)}</span>
               <span className="tks-l calls">{it.calls.toLocaleString()} calls</span>
+              {it.avgLatencyMs != null && (
+                <span className="tks-l calls" title="평균 LLM 호출 지연">~{fmtDuration(it.avgLatencyMs)}</span>
+              )}
             </div>
           </li>
         );

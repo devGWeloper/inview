@@ -1,4 +1,5 @@
 import { TokenBucket, TokenStatsResponse } from "@/lib/types";
+import { fmtDuration } from "@/components/TokenLatencyChart";
 
 function fmtInt(n: number): string {
   return Math.round(n).toLocaleString();
@@ -36,13 +37,15 @@ function Sparkline({
 }
 
 export function TokenStatsCards({ stats }: { stats: TokenStatsResponse }) {
-  const { totals, avgTotalPerCall, buckets, granularity } = stats;
+  const { totals, avgTotalPerCall, avgLatencyMs, buckets, granularity } = stats;
 
   const totalSpark = buckets.map((b: TokenBucket) => b.totalTokens);
   const inputSpark = buckets.map((b: TokenBucket) => b.inputTokens);
   const outputSpark = buckets.map((b: TokenBucket) => b.outputTokens);
   const callsSpark = buckets.map((b: TokenBucket) => b.calls);
+  const latencySpark = buckets.map((b: TokenBucket) => b.avgLatencyMs ?? 0);
   const peak = Math.max(0, ...totalSpark);
+  const peakLatency = Math.max(0, ...latencySpark);
 
   return (
     <div className="kpi-grid">
@@ -76,6 +79,14 @@ export function TokenStatsCards({ stats }: { stats: TokenStatsResponse }) {
         sub={avgTotalPerCall !== null ? `평균 ${fmtInt(avgTotalPerCall)} tok/call` : "호출 없음"}
         spark={callsSpark}
         color="var(--ok)"
+        tone="default"
+      />
+      <Card
+        title="Avg Latency"
+        value={fmtDuration(avgLatencyMs)}
+        sub={avgLatencyMs !== null ? `peak ${fmtDuration(peakLatency)} / ${granLabel(granularity)}` : "측정값 없음"}
+        spark={avgLatencyMs !== null ? latencySpark : undefined}
+        color="#f59e0b"
         tone="default"
       />
     </div>

@@ -302,6 +302,8 @@ export interface TokenBucket {
   totalTokens: number;
   /** 해당 버킷의 LLM 호출 수 */
   calls: number;
+  /** 해당 버킷의 평균 LLM 호출 소요시간(ms). LATENCY_MS 가 기록된 호출이 없으면 null */
+  avgLatencyMs: number | null;
 }
 
 /** byNode / byModel 공용 — 차원 값별 토큰 집계 */
@@ -312,6 +314,8 @@ export interface TokenDimStat {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  /** 차원 값별 평균 LLM 호출 소요시간(ms). LATENCY_MS 기록이 없으면 null */
+  avgLatencyMs: number | null;
 }
 
 export interface TokenStatsResponse {
@@ -319,6 +323,8 @@ export interface TokenStatsResponse {
   totals: { calls: number; inputTokens: number; outputTokens: number; totalTokens: number };
   /** 호출당 평균 총 토큰. 호출이 없으면 null */
   avgTotalPerCall: number | null;
+  /** 전체 평균 LLM 호출 소요시간(ms). LATENCY_MS 가 기록된 호출이 없으면 null */
+  avgLatencyMs: number | null;
   granularity: "5m" | "1h" | "1d";
   buckets: TokenBucket[];
   /** 노드별 토큰 분포 (totalTokens desc) — 1차 차원 */

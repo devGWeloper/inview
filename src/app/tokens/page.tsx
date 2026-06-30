@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { TokenChart } from "@/components/TokenChart";
+import { TokenLatencyChart, fmtDuration } from "@/components/TokenLatencyChart";
 import { TokenBreakdown } from "@/components/TokenBreakdown";
 import { TokenStatsCards } from "@/components/TokenStatsCards";
 import { QuestionsTable } from "@/components/QuestionsTable";
@@ -234,6 +235,24 @@ export default function TokensPage() {
             </div>
             <div className="dash-card-body">
               <TokenChart stats={stats} />
+            </div>
+          </section>
+
+          <section className="dash-card dash-card-hero">
+            <div className="dash-card-head">
+              <div className="dash-card-title-group">
+                <span className="dash-card-title">LLM 호출 지연 추이</span>
+                <span className="dash-card-sub">호출당 평균 소요시간 · {granText(stats.granularity)} 단위 · 어느 시점이 느렸는지</span>
+              </div>
+              <div className="dash-card-aux">
+                <span className="aux-pill">
+                  <span className="aux-pill-key">평균 지연</span>
+                  <span className="aux-pill-val">{fmtDuration(stats.avgLatencyMs)}</span>
+                </span>
+              </div>
+            </div>
+            <div className="dash-card-body">
+              <TokenLatencyChart stats={stats} />
             </div>
           </section>
 

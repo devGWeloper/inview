@@ -48,7 +48,7 @@ export function TokenStatsCards({ stats }: { stats: TokenStatsResponse }) {
   const peakLatency = Math.max(0, ...latencySpark);
 
   return (
-    <div className="kpi-grid">
+    <div className="kpi-grid kpi-grid-5">
       <Card
         title="Total Tokens"
         value={fmtCompact(totals.totalTokens)}

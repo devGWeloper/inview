@@ -65,15 +65,16 @@ export async function GET(req: NextRequest) {
   const effectiveFromMs = dateFrom ? Date.parse(dateFrom) : now - 24 * 3_600_000;
   const effectiveToMs = dateTo ? Date.parse(dateTo) : now;
 
+  // ⚠️ 집계용 필터: 날짜 범위만 SQL 로 내린다.
+  //  - limit 없음 → db.ts 가 FETCH FIRST 를 안 붙여 기간 내 전체 행을 가져온다(집계는 다 봐야 함).
+  //  - userId/actionTyp 는 일부 레이어에만 기록되는 컬럼이라 행 단위(per-layer) SQL 필터로 걸면
+  //    해당 컬럼이 빈 다른 레이어 행이 통째로 빠져 트레이스가 깨진다. → 아래에서 트레이스 단위로 필터링한다.
   const filter: TraceFilter = {
-    userId,
-    actionTyp,
     dateFrom: dateFrom ?? isoNoTz(effectiveFromMs),
     dateTo: dateTo ?? isoNoTz(effectiveToMs),
-    limit: 500,
   };
 
-  logger.info("GET /api/stats", { ...ctx, filter, excludeErrCds });
+  logger.info("GET /api/stats", { ...ctx, filter, userId, actionTyp, excludeErrCds });
 
   try {
     const rows = await fetchAllRows(filter);
@@ -83,6 +84,18 @@ export async function GET(req: NextRequest) {
     for (const r of rows) {
       if (!byTrace.has(r.traceId)) byTrace.set(r.traceId, []);
       byTrace.get(r.traceId)!.push(r);
+    }
+
+    // ── 트레이스 단위 필터 (userId/actionTyp)
+    //   ACTION_TYP/USER_ID 는 일부 레이어 행에만 채워지므로, "트레이스 내 어느 한 행이라도 일치"하면
+    //   그 트레이스의 전체 레이어 행을 유지한다. (행 단위로 거르면 다른 레이어 행이 사라져 FAC/AREA·
+    //   레이어바·Seasoning 판정이 모두 깨진다.)
+    if (userId || actionTyp) {
+      for (const [traceId, list] of byTrace) {
+        const matchUser = !userId || list.some((r) => r.userId === userId);
+        const matchAction = !actionTyp || list.some((r) => r.actionTyp === actionTyp);
+        if (!matchUser || !matchAction) byTrace.delete(traceId);
+      }
     }
 
     // 제외 trace 집합: 제외 코드 셋과 매칭되는 errCd 를 가진 trace + (가상)Seasoning 실패 trace
@@ -193,7 +206,8 @@ export async function GET(req: NextRequest) {
     for (const l of LAYER_ORDER) layerAcc.set(l, { total: 0, fail: 0, ok: 0, rt: [] });
     let includedRowCount = 0;
     for (const r of rows) {
-      if (excludedTraces.has(r.traceId)) continue;
+      // 트레이스 단위 필터(byTrace 에서 제거)된 행과 제외 trace 행은 모두 건너뛴다.
+      if (!byTrace.has(r.traceId) || excludedTraces.has(r.traceId)) continue;
       includedRowCount += 1;
       const a = layerAcc.get(r.layer);
       if (!a) continue;

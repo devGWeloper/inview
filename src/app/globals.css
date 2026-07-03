@@ -1732,6 +1732,23 @@ a:hover { text-decoration: underline; }
   white-space: nowrap;
 }
 .qsub-table tr:last-child td { border-bottom: none; }
+/* 호출별 실제 LLM 쿼리(QUERY_CTN) — 길 수 있어 줄바꿈 허용 + 스크롤 */
+.qsub-table .qquery-row td { white-space: normal; border-bottom: 1px solid var(--border); }
+.qquery {
+  margin: 2px 0 6px;
+  padding: 8px 10px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
 
 /* ── toast ──────────────────────────────────────────────────────────────── */
 .app-toast {

@@ -260,6 +260,8 @@ export interface TokenRow {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  /** LLM 에 실제로 들어간 쿼리/프롬프트 (디버깅용, 없으면 null) */
+  queryCtn: string | null;
   /** ISO 형태 호출 시각 (TZ 없음) */
   callTm: string | null;
 }

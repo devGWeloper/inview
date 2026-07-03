@@ -288,7 +288,7 @@ export default function TokensPage() {
               <div className="dash-card-title-group">
                 <span className="dash-card-title">질문별 토큰</span>
                 <span className="dash-card-sub">
-                  TRACE_ID(질문) 단위 · 총 토큰 상위 {stats.questions.length.toLocaleString()}건 · 호출 여러 건이면 행을 펼쳐 상세 확인
+                  TRACE_ID(질문) 단위 · 총 토큰 상위 {stats.questions.length.toLocaleString()}건 · 행을 펼치면 호출별 실제 LLM 쿼리 확인
                 </span>
               </div>
             </div>

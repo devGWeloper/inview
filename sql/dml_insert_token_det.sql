@@ -14,6 +14,8 @@
 --   * TOTAL_TOKENS 는 응답값을 그대로 넣되, 응답에 없으면 input+output 합으로 채워 전달.
 --   * LATENCY_MS 는 LLM 요청→응답 소요시간(ms). GAIA 가 호출 직전·직후 시각 차로 측정해
 --     넣는다. 측정값이 없으면 NULL 로 보내면 집계에서 자동 제외된다.
+--   * QUERY_CTN 은 LLM 에 실제로 들어간 쿼리/프롬프트(디버깅용). 최대 4000자이므로
+--     길면 GAIA 쪽에서 잘라서 넣는다. 없으면 NULL.
 -- ============================================================================
 
 INSERT INTO TRX_TOKEN_DET (
@@ -25,6 +27,7 @@ INSERT INTO TRX_TOKEN_DET (
     OUTPUT_TOKENS,
     TOTAL_TOKENS,
     LATENCY_MS,
+    QUERY_CTN,
     CALL_TM
 ) VALUES (
     :trace_id,          -- 액션 trace ID (없으면 NULL)
@@ -35,5 +38,6 @@ INSERT INTO TRX_TOKEN_DET (
     :output_tokens, -- 출력 토큰
     :total_tokens,      -- 합계 토큰
     :latency_ms,        -- LLM 호출 소요시간(ms), 없으면 NULL
+    :query_ctn,         -- LLM 에 들어간 실제 쿼리/프롬프트(디버깅용, 최대 4000자), 없으면 NULL
     SYSTIMESTAMP
 );

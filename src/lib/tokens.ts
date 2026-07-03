@@ -248,7 +248,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     if (filter.traceId) {
       const callsSql =
         `SELECT TOKEN_ID, TRACE_ID, NODE_NM, MODEL_NM, USER_ID,` +
-        ` INPUT_TOKENS, OUTPUT_TOKENS, TOTAL_TOKENS,` +
+        ` INPUT_TOKENS, OUTPUT_TOKENS, TOTAL_TOKENS, QUERY_CTN,` +
         ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS CALL_TM` +
         ` FROM TRX_TOKEN_DET${where} ORDER BY CALL_TM DESC FETCH FIRST ${CALL_LIMIT} ROWS ONLY`;
       calls = rowsOf(await conn.execute(callsSql, binds, opts)).map((r) => ({
@@ -260,6 +260,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
         inputTokens: num(r.INPUT_TOKENS ?? r.input_tokens),
         outputTokens: num(r.OUTPUT_TOKENS ?? r.output_tokens),
         totalTokens: num(r.TOTAL_TOKENS ?? r.total_tokens),
+        queryCtn: str(r.QUERY_CTN ?? r.query_ctn),
         callTm: str(r.CALL_TM ?? r.call_tm),
       }));
     }

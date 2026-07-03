@@ -51,7 +51,7 @@ export function QuestionsTable({
   const maxTotal = Math.max(1, ...questions.map((x) => x.totalTokens));
 
   const toggle = async (row: TokenQuestion) => {
-    if (!row.traceId || row.calls <= 1) return; // 단일 호출 질문은 펼칠 게 없음
+    if (!row.traceId) return; // trace_id 없는(개별) 호출은 펼쳐서 조회할 대상이 없음
     const key = row.qKey;
     const next = new Set(open);
     if (next.has(key)) {
@@ -120,7 +120,7 @@ export function QuestionsTable({
           </thead>
           <tbody>
             {rows.map((r) => {
-              const expandable = !!r.traceId && r.calls > 1;
+              const expandable = !!r.traceId; // trace_id 있으면 호출 1건이어도 펼쳐서 실제 쿼리 확인
               const isOpen = open.has(r.qKey);
               const w = (r.totalTokens / maxTotal) * 100;
               const sub = cache[r.qKey];
@@ -155,14 +155,26 @@ export function QuestionsTable({
                           <table className="qsub-table">
                             <tbody>
                               {sub.map((c) => (
-                                <tr key={c.tokenId}>
-                                  <td className="mono">{fmtTs(c.callTm)}</td>
-                                  <td><span className="qnode">{c.nodeNm ?? "—"}</span></td>
-                                  <td className="mono">{c.modelNm ?? "—"}</td>
-                                  <td className="num mono">IN {fmtInt(c.inputTokens)}</td>
-                                  <td className="num mono">OUT {fmtInt(c.outputTokens)}</td>
-                                  <td className="num mono strong">{fmtInt(c.totalTokens)}</td>
-                                </tr>
+                                <Fragment key={c.tokenId}>
+                                  <tr>
+                                    <td className="mono">{fmtTs(c.callTm)}</td>
+                                    <td><span className="qnode">{c.nodeNm ?? "—"}</span></td>
+                                    <td className="mono">{c.modelNm ?? "—"}</td>
+                                    <td className="num mono">IN {fmtInt(c.inputTokens)}</td>
+                                    <td className="num mono">OUT {fmtInt(c.outputTokens)}</td>
+                                    <td className="num mono strong">{fmtInt(c.totalTokens)}</td>
+                                  </tr>
+                                  <tr className="qquery-row">
+                                    <td />
+                                    <td colSpan={5}>
+                                      {c.queryCtn ? (
+                                        <pre className="qquery">{c.queryCtn}</pre>
+                                      ) : (
+                                        <span className="muted">쿼리 미기록</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                </Fragment>
                               ))}
                             </tbody>
                           </table>

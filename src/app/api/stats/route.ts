@@ -132,6 +132,12 @@ export async function GET(req: NextRequest) {
     let latencySum = 0;
     let latencyN = 0;
 
+    // TEMP(Tokens 탭 이관 예정): CUBE send→resp 지연 버킷별 집계 — 대시보드 임시 지연 차트용.
+    // TRX_TOKEN_DET 의 LATENCY_MS 적재가 시작되면 Tokens 탭으로 이관하고 이 블록을 제거한다.
+    const cubeLat = new Map<number, { sum: number; n: number }>();
+    let cubeLatSum = 0;
+    let cubeLatN = 0;
+
     for (const [traceId, list] of byTrace) {
       if (excludedTraces.has(traceId)) continue;
 
@@ -193,12 +199,43 @@ export async function GET(req: NextRequest) {
             latencyN += 1;
           }
         }
+
+        // TEMP(Tokens 탭 이관 예정): CUBE 가 하위로 요청 보낸 시각(send)→응답 받은 시각(resp) 지연
+        const cubeSends = list
+          .filter((r) => r.layer === "CUBE")
+          .map((r) => parseTs(r.sendTm))
+          .filter((v): v is number => v !== null);
+        const cubeResps = list
+          .filter((r) => r.layer === "CUBE")
+          .map((r) => parseTs(r.respTm))
+          .filter((v): v is number => v !== null);
+        if (cubeSends.length > 0 && cubeResps.length > 0) {
+          const d = Math.max(...cubeResps) - Math.min(...cubeSends);
+          if (d >= 0 && d < 24 * 3_600_000) {
+            let cl = cubeLat.get(key);
+            if (!cl) {
+              cl = { sum: 0, n: 0 };
+              cubeLat.set(key, cl);
+            }
+            cl.sum += d;
+            cl.n += 1;
+            cubeLatSum += d;
+            cubeLatN += 1;
+          }
+        }
       }
     }
 
     // 빈 버킷 채우기 (시계열 차트가 균일하게 보이도록)
     const bucketArr: TimeBucket[] = enumerateBucketStarts(effectiveFromMs, effectiveToMs, g).map(
-      (k) => buckets.get(k) ?? { ts: isoNoTz(k), ok: 0, fail: 0, pending: 0 }
+      (k) => {
+        const b = buckets.get(k) ?? { ts: isoNoTz(k), ok: 0, fail: 0, pending: 0 };
+        // TEMP(Tokens 탭 이관 예정): 버킷별 CUBE send→resp 평균 지연 부착
+        const cl = cubeLat.get(k);
+        b.avgCubeLatencyMs = cl ? cl.sum / cl.n : null;
+        b.cubeLatencyTraces = cl?.n ?? 0;
+        return b;
+      }
     );
 
     // ── 레이어별 행 단위 집계 (ERROR/FAIL 구분 없이 fail 로 통합) — 제외 trace 의 행은 빠짐
@@ -237,6 +274,8 @@ export async function GET(req: NextRequest) {
       range: { from: filter.dateFrom ?? null, to: filter.dateTo ?? null },
       totals,
       avgLatencyMs: latencyN > 0 ? latencySum / latencyN : null,
+      // TEMP(Tokens 탭 이관 예정)
+      cubeAvgLatencyMs: cubeLatN > 0 ? cubeLatSum / cubeLatN : null,
       granularity: g,
       buckets: bucketArr,
       layers,

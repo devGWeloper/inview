@@ -137,6 +137,10 @@ export interface TimeBucket {
   ok: number;
   fail: number;
   pending: number;
+  /** TEMP(Tokens 탭 이관 예정): CUBE send→resp 평균 지연(ms). 측정 가능한 트레이스가 없으면 null */
+  avgCubeLatencyMs?: number | null;
+  /** TEMP(Tokens 탭 이관 예정): 지연 측정에 포함된 트레이스 수 */
+  cubeLatencyTraces?: number;
 }
 
 export interface TopItem {
@@ -348,6 +352,8 @@ export interface StatsResponse {
   totals: StatusCounts & { total: number };
   /** 트레이스 평균 end-to-end 지연 (ms). 측정 가능한 트레이스가 없으면 null */
   avgLatencyMs: number | null;
+  /** TEMP(Tokens 탭 이관 예정): 전체 CUBE send→resp 평균 지연(ms). 측정 가능한 트레이스가 없으면 null */
+  cubeAvgLatencyMs?: number | null;
   /** 시간대별 버킷 (오름차순). granularity 는 자동: <=2h → 5분, <=48h → 1시간, 그 이상 → 1일 */
   granularity: "5m" | "1h" | "1d";
   buckets: TimeBucket[];

@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { CubeLatencyChart } from "@/components/CubeLatencyChart"; // TEMP: Tokens 탭 이관 예정
+import { fmtDuration } from "@/components/TokenLatencyChart";
 import { DimensionBreakdown } from "@/components/DimensionBreakdown";
 import { ProfileStrip } from "@/components/ProfileStrip";
 import { LayerBars } from "@/components/LayerBars";
@@ -285,6 +287,28 @@ export default function DashboardPage() {
             </div>
             <div className="dash-card-body">
               <TimeSeriesChart stats={stats} />
+            </div>
+          </section>
+
+          {/* TEMP(Tokens 탭 이관 예정): 평균 응답 지연 추이 — CUBE send→resp 기준.
+              TRX_TOKEN_DET 적재가 시작되면 Tokens 탭으로 이관하고 이 섹션을 제거한다. */}
+          <section className="dash-card">
+            <div className="dash-card-head">
+              <div className="dash-card-title-group">
+                <span className="dash-card-title">평균 응답 지연</span>
+                <span className="dash-card-sub">
+                  CUBE 요청→응답 기준 · {granText(stats.granularity)} 단위 · 임시 (Tokens 탭 이관 예정)
+                </span>
+              </div>
+              <div className="dash-card-aux">
+                <span className="aux-pill">
+                  <span className="aux-pill-key">전체 평균</span>
+                  <span className="aux-pill-val">{fmtDuration(stats.cubeAvgLatencyMs ?? null)}</span>
+                </span>
+              </div>
+            </div>
+            <div className="dash-card-body">
+              <CubeLatencyChart stats={stats} />
             </div>
           </section>
 

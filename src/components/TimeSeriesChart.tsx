@@ -5,7 +5,6 @@ import {
   Area,
   AreaChart,
   Brush,
-  CartesianGrid,
   Legend,
   ReferenceLine,
   ResponsiveContainer,
@@ -150,13 +149,6 @@ export function TimeSeriesChart({ stats }: { stats: StatsResponse }) {
                 </linearGradient>
               ))}
             </defs>
-            <CartesianGrid
-              stroke="var(--border-strong)"
-              strokeOpacity={0.55}
-              strokeWidth={1}
-              vertical={false}
-              horizontal
-            />
             <XAxis
               dataKey="tick"
               tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}

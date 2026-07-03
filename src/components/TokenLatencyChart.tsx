@@ -5,7 +5,6 @@ import {
   Area,
   AreaChart,
   Brush,
-  CartesianGrid,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -54,12 +53,12 @@ function CustomTooltip({
     <div className="ts-tooltip">
       <div className="ts-tooltip-head">{fmtFullTs(row.ts, granularity)}</div>
       <div className="ts-tooltip-body">
-        <div className="ts-tooltip-row total">
+        <div className="ts-tooltip-row">
           <span className="ts-tooltip-swatch" style={{ background: COLOR }} />
           <span className="ts-tooltip-key">평균 지연</span>
           <span className="ts-tooltip-val">{fmtDuration(row.avgLatencyMs)}</span>
         </div>
-        <div className="ts-tooltip-row">
+        <div className="ts-tooltip-row two-col">
           <span className="ts-tooltip-key">CALLS</span>
           <span className="ts-tooltip-val">{row.calls.toLocaleString()}</span>
         </div>
@@ -122,7 +121,6 @@ export function TokenLatencyChart({ stats }: { stats: TokenStatsResponse }) {
                 <stop offset="100%" stopColor={COLOR} stopOpacity={0.04} />
               </linearGradient>
             </defs>
-            <CartesianGrid stroke="var(--border-strong)" strokeOpacity={0.55} strokeWidth={1} vertical={false} horizontal />
             <XAxis
               dataKey="tick"
               tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}

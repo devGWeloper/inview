@@ -5,7 +5,6 @@ import {
   Area,
   AreaChart,
   Brush,
-  CartesianGrid,
   Legend,
   ReferenceLine,
   ResponsiveContainer,
@@ -76,7 +75,7 @@ function CustomTooltip({
           <span className="ts-tooltip-key">TOTAL</span>
           <span className="ts-tooltip-val">{row.total.toLocaleString()}</span>
         </div>
-        <div className="ts-tooltip-row">
+        <div className="ts-tooltip-row two-col">
           <span className="ts-tooltip-key">CALLS</span>
           <span className="ts-tooltip-val">{row.calls.toLocaleString()}</span>
         </div>
@@ -145,7 +144,6 @@ export function TokenChart({ stats }: { stats: TokenStatsResponse }) {
                 </linearGradient>
               ))}
             </defs>
-            <CartesianGrid stroke="var(--border-strong)" strokeOpacity={0.55} strokeWidth={1} vertical={false} horizontal />
             <XAxis
               dataKey="tick"
               tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}

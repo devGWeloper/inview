@@ -30,7 +30,9 @@
       "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 30)",
       "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 20)",
       "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 15)",
-      "PowerShell(npx next lint --file src/components/TokenLatencyChart.tsx --file src/components/TokenStatsCards.tsx --file src/components/TokenBreakdown.tsx --file src/app/tokens/page.tsx --file src/lib/tokens.ts)"
+      "PowerShell(npx next lint --file src/components/TokenLatencyChart.tsx --file src/components/TokenStatsCards.tsx --file src/components/TokenBreakdown.tsx --file src/app/tokens/page.tsx --file src/lib/tokens.ts)",
+      "PowerShell($deadline=\\(Get-Date\\).AddSeconds\\(60\\); do { Start-Sleep -Milliseconds 1500; try { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:3000/api/tokens' -TimeoutSec 30; break } catch { $r=$null } } while \\(\\(Get-Date\\) -lt $deadline\\); if \\($r\\) { $r.Content.Substring\\(0, [Math]::Min\\(3000, $r.Content.Length\\)\\) } else { 'no response' })",
+      "PowerShell($from=\\(Get-Date\\).AddDays\\(-30\\).ToString\\(\"yyyy-MM-ddTHH:mm:00\"\\); $to=\\(Get-Date\\).ToString\\(\"yyyy-MM-ddTHH:mm:00\"\\); $r=Invoke-WebRequest -UseBasicParsing -Uri \"http://localhost:5174/api/tokens?dateFrom=$from&dateTo=$to\" -TimeoutSec 60; $j=$r.Content | ConvertFrom-Json; \"totals: \" + \\($j.totals | ConvertTo-Json -Compress\\); \"avgLatencyMs: $\\($j.avgLatencyMs\\)\"; \"granularity: $\\($j.granularity\\)\"; \"buckets with data:\"; $j.buckets | Where-Object { $_.calls -gt 0 -or $_.avgLatencyMs -ne $null } | ConvertTo-Json -Compress)"
     ]
   }
 }

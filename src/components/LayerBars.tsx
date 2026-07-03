@@ -46,7 +46,7 @@ function LayerTooltip({ active, payload }: any) {
         {row.name}
       </div>
       <div className="ts-tooltip-body">
-        <div className="ts-tooltip-row">
+        <div className="ts-tooltip-row two-col">
           <span className="ts-tooltip-key">TOTAL</span>
           <span className="ts-tooltip-val">{row.total.toLocaleString()}</span>
         </div>

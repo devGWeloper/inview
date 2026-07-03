@@ -1,16 +1,15 @@
 "use client";
 
-// ⚠️ TEMP(Tokens 탭 이관 예정): CUBE send→resp 평균 지연 추이 차트.
-// TRX_TOKEN_DET 의 LATENCY_MS 적재가 시작되면 Tokens 탭(TokenLatencyChart)으로
-// 역할을 넘기고 이 파일과 /api/stats 의 cubeLat 집계, TimeBucket 의
-// avgCubeLatencyMs/cubeLatencyTraces 필드를 함께 제거한다.
+// ⚠️ TEMP(Tokens 탭 차트로 대체 예정): CUBE send→resp 평균 지연 추이 차트.
+// Tokens 탭에는 이미 TokenLatencyChart 가 구현되어 있고, GAIA 가 TRX_TOKEN_DET 에
+// LATENCY_MS 적재를 시작하면 그쪽이 역할을 대신한다. 그때 이 파일과 /api/stats 의
+// cubeLat 집계, TimeBucket 의 avgCubeLatencyMs/cubeLatencyTraces 필드를 함께 제거한다.
 
 import { useMemo } from "react";
 import {
   Area,
   AreaChart,
   Brush,
-  CartesianGrid,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -49,12 +48,12 @@ function CustomTooltip({
     <div className="ts-tooltip">
       <div className="ts-tooltip-head">{fmtFullTs(row.ts, granularity)}</div>
       <div className="ts-tooltip-body">
-        <div className="ts-tooltip-row total">
+        <div className="ts-tooltip-row">
           <span className="ts-tooltip-swatch" style={{ background: COLOR }} />
           <span className="ts-tooltip-key">평균 지연</span>
           <span className="ts-tooltip-val">{fmtDuration(row.avgLatencyMs)}</span>
         </div>
-        <div className="ts-tooltip-row">
+        <div className="ts-tooltip-row two-col">
           <span className="ts-tooltip-key">TRACES</span>
           <span className="ts-tooltip-val">{row.traces.toLocaleString()}</span>
         </div>
@@ -117,7 +116,6 @@ export function CubeLatencyChart({ stats }: { stats: StatsResponse }) {
                 <stop offset="100%" stopColor={COLOR} stopOpacity={0.04} />
               </linearGradient>
             </defs>
-            <CartesianGrid stroke="var(--border-strong)" strokeOpacity={0.55} strokeWidth={1} vertical={false} horizontal />
             <XAxis
               dataKey="tick"
               tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}

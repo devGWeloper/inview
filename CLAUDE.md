@@ -92,21 +92,22 @@ The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTI
 - **화면**: `/agent`(서버 컴포넌트, `ProfileCard` + `WorkShowcase`), 대시보드 상단 `ProfileStrip`(클라이언트), `/admin`(비밀번호 게이트 후 편집 폼, 업무 순서 드래그앤드롭). 사진은 `public/` 에 올리고 `avatarImage` 에 `/파일명` 지정(없거나 로드 실패 시 `avatar` 이모지로 폴백, `AgentAvatar`).
 - **FTE 성과 지표**: `src/lib/fte.ts` `computeFteStats()` 가 **실데이터로 계산**한다. `db.ts.monthlySeaSuccess()` 가 CUBE 에서 2026-01-01~현재 'SEA 성공'(에러 없고 CUBE RESP 에 'Seasoning 실패' 문구 없는 트레이스) 수를 월별 집계 → 연간 FTE `= 누적 × 60 ÷ 65,984`, 월별 FTE `= 월 × 60 ÷ 65,984 × 12`(연환산). FTE 1 = 1인·1년. CUBE 미연결이면 `null` → 카드는 `profile.fte`(수동 폴백) 표시 + 차트는 안내 문구. 차트(`FteChart`)는 최근 12개월만 노출. **위 TEMPORARY WORKAROUND 의 `SEASONING_FAIL_PHRASE` 에 의존**(원복 시 5번 항목 참고).
 
-## ⚠️ TEMPORARY — 대시보드 평균 응답 지연 차트 (Tokens 탭 이관 예정)
+## ⚠️ TEMPORARY — 대시보드 평균 응답 지연 차트 (Tokens 탭 차트로 대체 예정)
 
-**배경**: LLM 지연은 원래 Tokens 탭(`TRX_TOKEN_DET.LATENCY_MS`)에서 관리할 계획이나, GAIA 가 아직 데이터를 적재하지 않아
-2026-06-29 부터 급증한 지연을 눈으로 확인할 수단이 없었다. 임시로 대시보드에 지연 추이 차트를 넣었다.
+**배경**: LLM 지연은 Tokens 탭에서 관리할 계획이고 차트(`TokenLatencyChart`)도 이미 구현되어 있으나, GAIA 가 아직
+`TRX_TOKEN_DET.LATENCY_MS` 를 적재하지 않아 2026-06-29 부터 급증한 지연을 눈으로 확인할 수단이 없었다.
+임시로 대시보드에 지연 추이 차트를 넣었다.
 
 **측정 기준**: 트레이스별 **CUBE 행의 `SEND_TM`(min) → `RESP_TM`(max)** — CUBE 가 하위로 요청을 보내고 응답을 받기까지의 시간.
 버킷 귀속은 사용 추이 차트와 동일하게 트레이스 시작 시각(첫 recv) 기준. 24h 이상 음수/이상치는 제외(기존 latency 집계와 동일 가드).
 
-**구현 위치** (모두 `TEMP(Tokens 탭 이관 예정)` 주석 표시):
+**구현 위치** (모두 `TEMP(Tokens 탭 차트로 대체 예정)` 주석 표시):
 - `src/app/api/stats/route.ts` — `cubeLat` 버킷 집계 + `cubeAvgLatencyMs` 응답 필드
 - `src/lib/types.ts` — `TimeBucket.avgCubeLatencyMs`/`cubeLatencyTraces`, `StatsResponse.cubeAvgLatencyMs` (모두 optional)
 - `src/components/CubeLatencyChart.tsx` — 차트 (파일 전체 삭제 대상, `TokenLatencyChart` 의 `fmtDuration` 재사용)
 - `src/app/dashboard/page.tsx` — "평균 응답 지연" 섹션 (사용 추이 카드 바로 아래)
 
-**이관 시점**: GAIA 가 `TRX_TOKEN_DET` 에 LATENCY_MS 적재를 시작하면 Tokens 탭의 `TokenLatencyChart` 가 역할을 대신한다.
+**제거 시점**: GAIA 가 `TRX_TOKEN_DET` 에 LATENCY_MS 적재를 시작하면 Tokens 탭의 `TokenLatencyChart` 가 역할을 대신한다.
 위 4곳의 TEMP 코드를 제거하면 끝 (optional 필드라 다른 코드 영향 없음).
 
 ## ⚠️ TEMPORARY WORKAROUND — ONEOIS 미연결 status 보정 (제거 예정)

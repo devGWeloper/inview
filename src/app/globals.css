@@ -1651,11 +1651,30 @@ a:hover { text-decoration: underline; }
 }
 .nm-metric-btn:hover { color: var(--text); }
 .nm-metric-btn.active {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.10), inset 0 0 0 1px var(--border-strong);
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.35);
+}
+.nm-toolbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 .nm-hint { font-size: 11.5px; color: var(--text-muted); }
+.nm-scale { display: inline-flex; align-items: center; gap: 6px; }
+.nm-scale-lbl { font-size: 10.5px; color: var(--text-muted); }
+.nm-scale-bar {
+  width: 70px;
+  height: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.06), rgba(37, 99, 235, 0.92));
+}
+.nm-scale-bar.lat {
+  background: linear-gradient(90deg, rgba(220, 38, 38, 0.06), rgba(220, 38, 38, 0.92));
+}
 
 .nm-scroll { overflow-x: auto; }
 .nm-grid { display: grid; gap: 4px; min-width: 480px; }
@@ -1683,14 +1702,28 @@ a:hover { text-decoration: underline; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: background .1s, border-color .1s;
+  transition: background .1s, border-color .1s, color .1s;
 }
 .nm-head.col { text-align: center; align-self: end; }
-.nm-head.row { display: flex; align-items: center; }
+.nm-head.row { display: flex; align-items: center; gap: 7px; }
+.nm-head-key { overflow: hidden; text-overflow: ellipsis; }
+.nm-rank {
+  flex: none;
+  width: 14px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-align: right;
+}
 button.nm-head:not(:disabled) { cursor: pointer; }
 button.nm-head:not(:disabled):hover {
   background: var(--surface);
   border-color: var(--border-strong);
+}
+.nm-head.hl {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--text);
 }
 .nm-head.active {
   background: var(--accent-soft);
@@ -1698,6 +1731,7 @@ button.nm-head:not(:disabled):hover {
   color: var(--accent);
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.10);
 }
+.nm-head.active .nm-rank { color: var(--accent); }
 .nm-head.none { font-style: italic; color: var(--text-muted); }
 .nm-head.sum {
   background: transparent;
@@ -1718,32 +1752,66 @@ button.nm-head:not(:disabled):hover {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
   transition: background .2s;
 }
 .nm-cell .nm-v {
   font-family: var(--mono);
   font-size: 13.5px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   color: var(--text);
   line-height: 1.2;
 }
 .nm-cell .nm-s {
   font-family: var(--mono);
   font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
   color: var(--text-3);
   line-height: 1.2;
 }
+.nm-cell.heat:hover { box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.30); }
 .nm-cell.dark .nm-v { color: #fff; }
 .nm-cell.dark .nm-s { color: rgba(255, 255, 255, 0.82); }
 .nm-cell.empty { background: transparent; border: 1px dashed var(--border); }
 .nm-dash { color: var(--text-muted); font-family: var(--mono); }
+
+/* 합계 셀: 좌측 정렬 + 값·비중 한 줄 + 비중 미니바 */
 .nm-cell.sum {
   background: var(--surface);
   border: 1px dashed var(--border-strong);
+  align-items: stretch;
+  gap: 4px;
 }
-.nm-cell.sum.grand { border-style: solid; }
-.nm-cell.sum.grand .nm-v { font-size: 14px; }
+.nm-sumline {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.nm-sbar {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.nm-sbar-f {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width .25s;
+}
+
+/* 전체 합계: 다크 앵커 셀 */
+.nm-cell.grand {
+  background: #1f2937;
+  border: 1px solid #1f2937;
+  align-items: stretch;
+}
+.nm-cell.grand .nm-v { color: #fff; font-size: 14.5px; }
+.nm-cell.grand .nm-s { color: rgba(255, 255, 255, 0.72); }
 
 .nm-note { font-size: 11.5px; color: var(--text-muted); }
 

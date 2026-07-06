@@ -64,6 +64,7 @@ export async function GET(req: NextRequest) {
     traceId: sp.get("traceId") || undefined,
     userId: sp.get("userId") || undefined,
     errCd: sp.get("errCd") || undefined,
+    facId: sp.get("facId") || undefined,
     dateFrom: sp.get("dateFrom") || undefined,
     dateTo: sp.get("dateTo") || undefined,
     onlyError: sp.get("onlyError") === "true" ? true : undefined,
@@ -73,7 +74,17 @@ export async function GET(req: NextRequest) {
   logger.info("GET /api/traces", { ...ctx, query: sp.toString(), filter });
 
   try {
-    const rows = await fetchAllRows(filter);
+    let rows = await fetchAllRows(filter);
+
+    // FAC(FAB) 필터: FAC_ID 는 MCP 행에만 기록되므로 트레이스 단위로 후처리한다.
+    // (행 단위 SQL 필터로 걸면 FAC_ID 가 빈 다른 레이어 행이 전부 빠져 트레이스가 깨짐)
+    if (filter.facId) {
+      const matched = new Set(
+        rows.filter((r) => r.facId === filter.facId).map((r) => r.traceId)
+      );
+      rows = rows.filter((r) => matched.has(r.traceId));
+    }
+
     const summaries = summarize(rows);
     const connectedLayers = connectedLayerCount();
     const appEnv = getAppEnv();

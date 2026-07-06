@@ -87,6 +87,12 @@ export interface TraceFilter {
   actionTyp?: string;
   /** ERR_CD(=FAIL/ERROR 코드) 부분 일치 검색 (대소문자 무시) */
   errCd?: string;
+  /**
+   * FAC(FAB) 필터. FAC_ID 는 MCP send update 에서만 기록되므로 행 단위 SQL WHERE 로
+   * 걸면 다른 레이어 행이 통째로 빠져 트레이스가 깨진다. db.ts 는 이 필드를 무시하고,
+   * /api/traces 가 트레이스 단위로 후처리한다 (stats 의 userId/actionTyp 와 동일 패턴).
+   */
+  facId?: string;
   dateFrom?: string;
   dateTo?: string;
   onlyError?: boolean;

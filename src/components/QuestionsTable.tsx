@@ -1,7 +1,9 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { TokenQuestion, TokenRow } from "@/lib/types";
+
+const PAGE_SIZE = 20; // 한 페이지에 보여줄 질문 수
 
 function fmtTs(ts: string | null): string {
   if (!ts) return "—";
@@ -27,6 +29,7 @@ export function QuestionsTable({
 }) {
   const [sort, setSort] = useState<SortKey>("total");
   const [q, setQ] = useState("");
+  const [page, setPage] = useState(0);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [cache, setCache] = useState<Record<string, TokenRow[] | "loading">>({});
 
@@ -47,6 +50,13 @@ export function QuestionsTable({
         : (b.lastTm ?? "").localeCompare(a.lastTm ?? "")
     );
   }, [questions, q, sort]);
+
+  // 검색/정렬/데이터가 바뀌면 첫 페이지로
+  useEffect(() => { setPage(0); }, [q, sort, questions]);
+
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const curPage = Math.min(page, pageCount - 1);
+  const paged = rows.slice(curPage * PAGE_SIZE, curPage * PAGE_SIZE + PAGE_SIZE);
 
   const maxTotal = Math.max(1, ...questions.map((x) => x.totalTokens));
 
@@ -119,7 +129,7 @@ export function QuestionsTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => {
+            {paged.map((r) => {
               const expandable = !!r.traceId; // trace_id 있으면 호출 1건이어도 펼쳐서 실제 쿼리 확인
               const isOpen = open.has(r.qKey);
               const w = (r.totalTokens / maxTotal) * 100;
@@ -188,6 +198,36 @@ export function QuestionsTable({
           </tbody>
         </table>
       </div>
+
+      {rows.length > PAGE_SIZE && (
+        <div className="qpager">
+          <button
+            type="button"
+            className="qpage-btn"
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={curPage === 0}
+          >
+            ‹ 이전
+          </button>
+          <span className="qpage-info">
+            {curPage + 1} / {pageCount}
+            <span className="qpage-range">
+              {" "}· {(curPage * PAGE_SIZE + 1).toLocaleString()}–
+              {Math.min(rows.length, curPage * PAGE_SIZE + PAGE_SIZE).toLocaleString()}
+              {" / "}
+              {rows.length.toLocaleString()}
+            </span>
+          </span>
+          <button
+            type="button"
+            className="qpage-btn"
+            onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+            disabled={curPage >= pageCount - 1}
+          >
+            다음 ›
+          </button>
+        </div>
+      )}
     </div>
   );
 }

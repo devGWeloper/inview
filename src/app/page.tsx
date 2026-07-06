@@ -26,6 +26,8 @@ export default function Page() {
   const [detailLoading, setDetailLoading] = useState(false);
   // FAIL CODE 드롭다운 옵션 — TRX_ERRMSG_COD 마스터(/api/error-codes)에서 로드
   const [errCodes, setErrCodes] = useState<Array<{ code: string; desc: string }>>([]);
+  // FAB 드롭다운 옵션 — MCP DB 의 DISTINCT FAC_ID(/api/facs)에서 로드
+  const [facs, setFacs] = useState<string[]>([]);
 
   const layoutRef = useRef<HTMLDivElement>(null);
   const splitterRef = useRef<HTMLDivElement>(null);
@@ -77,6 +79,7 @@ export default function Page() {
       if (f.traceId) q.set("traceId", f.traceId);
       if (f.userId) q.set("userId", f.userId);
       if (f.errCd) q.set("errCd", f.errCd);
+      if (f.facId) q.set("facId", f.facId);
       if (f.dateFrom) q.set("dateFrom", f.dateFrom);
       if (f.dateTo) q.set("dateTo", f.dateTo);
       if (f.onlyError) q.set("onlyError", "true");
@@ -114,6 +117,14 @@ export default function Page() {
         );
       })
       .catch(() => setErrCodes([]));
+  }, []);
+
+  // FAB 옵션 로드 (MCP DISTINCT FAC_ID). 실패/미구성 시 빈 목록 → 셀렉트는 '전체'만.
+  useEffect(() => {
+    fetch("/api/facs", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data: { values?: string[] }) => setFacs(data.values ?? []))
+      .catch(() => setFacs([]));
   }, []);
   useEffect(() => { if (selected) loadDetail(selected); }, [selected, loadDetail]);
 
@@ -174,7 +185,7 @@ export default function Page() {
                     onChange={(e) => setFilter({ ...filter, userId: e.target.value || undefined })}
                   />
                 </label>
-                <label style={{ gridColumn: "1 / -1" }}>
+                <label>
                   FAIL CODE
                   <select
                     value={filter.errCd ?? ""}
@@ -185,6 +196,18 @@ export default function Page() {
                       <option key={c.code} value={c.code}>
                         {c.desc ? `${c.code} — ${c.desc}` : c.code}
                       </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  FAB
+                  <select
+                    value={filter.facId ?? ""}
+                    onChange={(e) => setFilter({ ...filter, facId: e.target.value || undefined })}
+                  >
+                    <option value="">전체</option>
+                    {facs.map((v) => (
+                      <option key={v} value={v}>{v}</option>
                     ))}
                   </select>
                 </label>

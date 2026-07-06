@@ -1631,6 +1631,40 @@ a:hover { text-decoration: underline; }
 .tks-l.compl  { color: #a855f7; }
 .tks-l.calls  { color: var(--text-muted); margin-left: auto; }
 
+/* ── token breakdown 지표 행 (토큰 / 지연 정렬 막대) ── */
+.dim-metric {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.dim-metric-lbl {
+  font-family: var(--sans);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  letter-spacing: -0.02em;
+}
+.dim-bar {
+  height: 7px;
+  background: var(--surface-3);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.dim-bar-fill { height: 100%; border-radius: 4px; transition: width .25s; }
+.dim-bar-fill.tok { display: flex; overflow: hidden; }
+.dim-bar-fill.tok .tks { flex-basis: 0; }
+.dim-bar-fill.lat { background: #f59e0b; }
+.dim-metric-val {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  display: inline-flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+.dim-metric-val.lat { color: #b45309; font-weight: 600; }
+.dim-metric-val.muted { color: var(--text-muted); font-weight: 400; }
+.dim-legend-sep { color: var(--border-strong); }
+
 /* ── token 최근 호출 테이블 ── */
 .dash-title-note { color: var(--text-muted); }
 .token-recent-wrap { overflow-x: auto; }
@@ -1691,6 +1725,29 @@ a:hover { text-decoration: underline; }
   color: #fff;
 }
 .qtable-meta { font-size: 12px; color: var(--text-muted); font-family: var(--mono); white-space: nowrap; }
+
+/* ── 질문별 토큰 표 페이징 ── */
+.qpager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 12px 4px 2px;
+}
+.qpage-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.qpage-btn:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-2); }
+.qpage-btn:disabled { opacity: 0.4; cursor: default; }
+.qpage-info { font-size: 12.5px; font-family: var(--mono); color: var(--text-2); font-weight: 600; }
+.qpage-range { color: var(--text-muted); font-weight: 400; }
 
 .qtable .qcell-exp { width: 22px; text-align: center; color: var(--text-muted); }
 .qrow.expandable { cursor: pointer; }

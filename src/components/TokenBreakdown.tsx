@@ -7,7 +7,9 @@ function fmtCompact(n: number): string {
   return String(Math.round(n));
 }
 
-// 노드별 / 모델별 토큰 분포. 막대는 totalTokens 비중, 그 아래 input/output 적층.
+// 노드별 / 모델별 분포.
+//  - 토큰 막대: IN/OUT 적층 + 폭 = 최대 대비 비중 (막대 하나로 총량 + 구성 동시 표현)
+//  - 지연 막대: 폭 = 가장 느린 항목 대비 (어느 노드/모델이 느린지 눈으로 비교)
 export function TokenBreakdown({
   items,
   emptyText,
@@ -24,14 +26,21 @@ export function TokenBreakdown({
   }
   const maxTotal = Math.max(1, ...items.map((i) => i.totalTokens));
   const grandTotal = items.reduce((a, b) => a + b.totalTokens, 0);
+  const latencies = items.map((i) => i.avgLatencyMs).filter((v): v is number => v != null);
+  const hasLatency = latencies.length > 0;
+  const maxLatency = hasLatency ? Math.max(...latencies) : 0;
 
   return (
     <ul className="dim-list">
       {items.map((it) => {
-        const promptPct = it.totalTokens > 0 ? (it.inputTokens / it.totalTokens) * 100 : 0;
-        const complPct = it.totalTokens > 0 ? (it.outputTokens / it.totalTokens) * 100 : 0;
         const share = grandTotal > 0 ? (it.totalTokens / grandTotal) * 100 : 0;
         const wBar = (it.totalTokens / maxTotal) * 100;
+        const inFlex = it.inputTokens;
+        const outFlex = it.outputTokens;
+        const avgPerCall = it.calls > 0 ? it.totalTokens / it.calls : 0;
+        const latPct = hasLatency && it.avgLatencyMs != null && maxLatency > 0
+          ? (it.avgLatencyMs / maxLatency) * 100
+          : 0;
         const active = selected === it.key;
         const isNone = it.key === "(none)";
         const interactive = !!onSelect && !isNone;
@@ -47,24 +56,43 @@ export function TokenBreakdown({
             <div className="dim-row-head">
               <span className="dim-key">{it.key}</span>
               <span className="dim-stats">
-                <span className="dim-total">{fmtCompact(it.totalTokens)}</span>
+                <span className="dim-total" title={`${it.totalTokens.toLocaleString()} tokens`}>
+                  {fmtCompact(it.totalTokens)}
+                </span>
                 <span className="dim-share">{share.toFixed(1)}%</span>
               </span>
             </div>
-            <div className="dim-track" aria-hidden>
-              <div className="dim-track-fill" style={{ width: `${wBar}%` }} />
+
+            {/* 토큰: 폭=최대 대비, 내부는 IN/OUT 적층 */}
+            <div className="dim-metric">
+              <span className="dim-metric-lbl">토큰</span>
+              <div className="dim-bar">
+                <div className="dim-bar-fill tok" style={{ width: `${wBar}%` }}>
+                  {inFlex > 0 && <span className="tks prompt" style={{ flexGrow: inFlex }} title={`INPUT ${it.inputTokens.toLocaleString()}`} />}
+                  {outFlex > 0 && <span className="tks compl" style={{ flexGrow: outFlex }} title={`OUTPUT ${it.outputTokens.toLocaleString()}`} />}
+                </div>
+              </div>
+              <span className="dim-metric-val">
+                <span className="tks-l prompt">IN {fmtCompact(it.inputTokens)}</span>
+                <span className="tks-l compl">OUT {fmtCompact(it.outputTokens)}</span>
+              </span>
             </div>
-            <div className="dim-stack" aria-hidden>
-              {promptPct > 0 && <span className="tks prompt" style={{ width: `${promptPct}%` }} title={`INPUT ${it.inputTokens}`} />}
-              {complPct > 0 && <span className="tks compl" style={{ width: `${complPct}%` }} title={`OUTPUT ${it.outputTokens}`} />}
+
+            {/* 지연: 폭=가장 느린 항목 대비 */}
+            <div className="dim-metric">
+              <span className="dim-metric-lbl">지연</span>
+              <div className="dim-bar">
+                {latPct > 0 && <div className="dim-bar-fill lat" style={{ width: `${latPct}%` }} />}
+              </div>
+              <span className={"dim-metric-val lat" + (it.avgLatencyMs == null ? " muted" : "")}>
+                {it.avgLatencyMs == null ? "측정 없음" : fmtDuration(it.avgLatencyMs)}
+              </span>
             </div>
+
             <div className="dim-legend">
-              <span className="tks-l prompt">IN {fmtCompact(it.inputTokens)}</span>
-              <span className="tks-l compl">OUT {fmtCompact(it.outputTokens)}</span>
-              <span className="tks-l calls">{it.calls.toLocaleString()} calls</span>
-              {it.avgLatencyMs != null && (
-                <span className="tks-l calls" title="평균 LLM 호출 지연">~{fmtDuration(it.avgLatencyMs)}</span>
-              )}
+              <span>{it.calls.toLocaleString()} calls</span>
+              <span className="dim-legend-sep">·</span>
+              <span title="호출당 평균 토큰">{fmtCompact(avgPerCall)}/call</span>
             </div>
           </li>
         );

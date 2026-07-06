@@ -92,9 +92,15 @@ async function queryLayer(layer: LayerKey, filter: TraceFilter): Promise<TraceRo
     where.push("USER_ID = :userId");
     binds.userId = filter.userId;
   }
-  if (filter.actionTyp) {
-    where.push("ACTION_TYP = :actionTyp");
-    binds.actionTyp = filter.actionTyp;
+  // ACTION_TYP / FAC_ID 는 일부 레이어만 기록하는 컬럼이라 행 단위 WHERE 로 걸면
+  // 값이 빈 다른 레이어 행이 통째로 빠져 트레이스가 깨진다. 두 필터는
+  // fetchTraceIdsBy()로 TRACE_ID 를 먼저 확정한 뒤 traceIds 로 조회한다.
+  if (filter.traceIds && filter.traceIds.length > 0) {
+    const names = filter.traceIds.map((id, i) => {
+      binds[`tid${i}`] = id;
+      return `:tid${i}`;
+    });
+    where.push(`TRACE_ID IN (${names.join(", ")})`);
   }
   if (filter.errCd) {
     where.push("UPPER(ERR_CD) LIKE '%' || UPPER(:errCd) || '%'");
@@ -140,6 +146,69 @@ async function queryLayer(layer: LayerKey, filter: TraceFilter): Promise<TraceRo
 export async function fetchAllRows(filter: TraceFilter): Promise<TraceRow[]> {
   const arrs = await Promise.all(LAYER_ORDER.map((l) => queryLayer(l, filter)));
   return arrs.flat();
+}
+
+/**
+ * 일부 레이어만 기록하는 컬럼(FAC_ID=MCP, ACTION_TYP 등) 필터의 1단계:
+ * 그 컬럼을 기록하는 레이어의 DB 에서 조건에 맞는 최근 TRACE_ID 목록을 확정한다.
+ * (전 레이어 최근 N행을 가져온 뒤 후처리로 거르면 해당 행이 창 밖일 때 0건이 되고,
+ *  행 단위 SQL 필터로 걸면 다른 레이어 행이 빠져 트레이스가 깨지는 문제를 피한다.)
+ * 2단계는 반환된 ID 들을 TraceFilter.traceIds 로 넘겨 전 레이어 행을 조회한다.
+ * 드롭다운 옵션을 뽑는 DB(/api/facs=MCP, /api/action-types=GAIA)와 같은 레이어를
+ * 지정해야 옵션에 보이는 값이 조회에서도 반드시 잡힌다.
+ */
+export async function fetchTraceIdsBy(
+  layer: LayerKey,
+  column: "FAC_ID" | "ACTION_TYP",
+  value: string,
+  filter: Pick<TraceFilter, "dateFrom" | "dateTo" | "limit">
+): Promise<string[]> {
+  const cfg = readConfig(layer);
+  if (!cfg) return [];
+  const oracle = await getOracle();
+  if (!oracle) return [];
+
+  const where: string[] = [`${column} = :val`];
+  const binds: Record<string, unknown> = { val: value };
+  if (filter.dateFrom) {
+    where.push("RECV_TM >= TO_TIMESTAMP(:dateFrom, 'YYYY-MM-DD\"T\"HH24:MI:SS')");
+    binds.dateFrom = filter.dateFrom;
+  }
+  if (filter.dateTo) {
+    where.push("RECV_TM <= TO_TIMESTAMP(:dateTo, 'YYYY-MM-DD\"T\"HH24:MI:SS')");
+    binds.dateTo = filter.dateTo;
+  }
+  const limit = Math.max(1, Math.min(filter.limit ?? 200, 500));
+
+  const sql = `
+    SELECT TRACE_ID FROM (
+      SELECT TRACE_ID, MAX(RECV_TM) AS LAST_RECV
+        FROM BIZ_AIACTIONTXN_HIS
+       WHERE ${where.join(" AND ")}
+       GROUP BY TRACE_ID
+       ORDER BY LAST_RECV DESC
+    )
+    FETCH FIRST ${limit} ROWS ONLY`;
+
+  let conn: Awaited<ReturnType<typeof oracle.getConnection>> | undefined;
+  const t0 = Date.now();
+  try {
+    conn = await oracle.getConnection(cfg);
+    const result = await conn.execute(sql, binds, { outFormat: oracle.OBJECT });
+    const rows = (result.rows ?? []) as Record<string, unknown>[];
+    const ids = rows
+      .map((r) => (r["TRACE_ID"] ?? r["trace_id"]) as string | null)
+      .filter((v): v is string => !!v);
+    logger.info("fetchTraceIdsBy ok", { layer, column, value, ids: ids.length, ms: Date.now() - t0 });
+    return ids;
+  } catch (e) {
+    logger.error("fetchTraceIdsBy failed", { layer, column, ms: Date.now() - t0, err: String(e) });
+    return [];
+  } finally {
+    if (conn) {
+      try { await conn.close(); } catch { /* ignore */ }
+    }
+  }
 }
 
 // FTE 산정용: 월별 'SEA 성공' 트레이스 수.

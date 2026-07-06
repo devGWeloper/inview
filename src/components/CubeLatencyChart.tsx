@@ -1,9 +1,9 @@
 "use client";
 
-// ⚠️ TEMP(Tokens 탭 차트로 대체 예정): CUBE send→resp 평균 지연 추이 차트.
-// Tokens 탭에는 이미 TokenLatencyChart 가 구현되어 있고, GAIA 가 TRX_TOKEN_DET 에
-// LATENCY_MS 적재를 시작하면 그쪽이 역할을 대신한다. 그때 이 파일과 /api/stats 의
-// cubeLat 집계, TimeBucket 의 avgCubeLatencyMs/cubeLatencyTraces 필드를 함께 제거한다.
+// 대시보드 "평균 응답 지연" 차트: Action 1건의 end-to-end 응답시간 추이.
+// CUBE(진입 레이어) send→resp 를 기준으로 재므로 LLM 을 포함한 전 구간 왕복시간이다.
+// Tokens 탭의 TokenLatencyChart(LLM 호출 1콜 단위, 전 노드)와는 재는 대상이 다른
+// 상호 보완 지표다 — 둘 다 정규.
 
 import { useMemo } from "react";
 import {

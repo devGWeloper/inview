@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CubeLatencyChart } from "@/components/CubeLatencyChart"; // TEMP: Tokens 탭 차트로 대체 예정
+import { CubeLatencyChart } from "@/components/CubeLatencyChart"; // Action end-to-end 응답 지연 (Tokens 탭 LLM 지연과 별개)
 import { fmtDuration } from "@/components/TokenLatencyChart";
 import { DimensionBreakdown } from "@/components/DimensionBreakdown";
 import { ProfileStrip } from "@/components/ProfileStrip";
@@ -290,15 +290,14 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          {/* TEMP(Tokens 탭 차트로 대체 예정): 평균 응답 지연 추이 — CUBE send→resp 기준.
-              GAIA 가 TRX_TOKEN_DET 에 LATENCY_MS 적재를 시작하면 Tokens 탭의 기존
-              LLM 호출 지연 차트가 역할을 대신한다. 그때 이 섹션을 제거한다. */}
+          {/* 평균 응답 지연 추이 — Action end-to-end 응답시간(CUBE send→resp, LLM 포함 전 구간).
+              Tokens 탭의 LLM 호출 지연(1콜 단위, 전 노드)과는 재는 대상이 다른 정규 지표다. */}
           <section className="dash-card">
             <div className="dash-card-head">
               <div className="dash-card-title-group">
                 <span className="dash-card-title">평균 응답 지연</span>
                 <span className="dash-card-sub">
-                  CUBE 요청→응답 기준 · {granText(stats.granularity)} 단위 · 임시 (Tokens 탭 차트로 대체 예정)
+                  Action 전체 응답시간 · CUBE 수신→응답(LLM 포함 전 구간) · {granText(stats.granularity)} 단위
                 </span>
               </div>
               <div className="dash-card-aux">

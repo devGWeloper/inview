@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchAllRows, connectedLayerCount, getAppEnv } from "@/lib/db";
-import { LAYER_ORDER, TraceFilter, TraceStatus, TraceSummary, TraceRow } from "@/lib/types";
+import { fetchAllRows, fetchTraceIdsBy, connectedLayerCount, getAppEnv } from "@/lib/db";
+import { LAYER_ORDER, LayerKey, TraceFilter, TraceStatus, TraceSummary, TraceRow } from "@/lib/types";
 import { logger, reqContext } from "@/lib/logger";
 import { classifyPendingByCubeResp } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
 
@@ -65,6 +65,7 @@ export async function GET(req: NextRequest) {
     userId: sp.get("userId") || undefined,
     errCd: sp.get("errCd") || undefined,
     facId: sp.get("facId") || undefined,
+    actionTyp: sp.get("actionTyp") || undefined,
     dateFrom: sp.get("dateFrom") || undefined,
     dateTo: sp.get("dateTo") || undefined,
     onlyError: sp.get("onlyError") === "true" ? true : undefined,
@@ -74,15 +75,28 @@ export async function GET(req: NextRequest) {
   logger.info("GET /api/traces", { ...ctx, query: sp.toString(), filter });
 
   try {
-    let rows = await fetchAllRows(filter);
+    // FAC(FAB)/ACTION_TYP 필터: 일부 레이어만 기록하는 컬럼이라 2단계로 조회한다 —
+    // 1) 기록 레이어 DB 에서 조건에 맞는 최근 TRACE_ID 확정(드롭다운 옵션 출처와 동일 DB:
+    //    FAC_ID=MCP(/api/facs), ACTION_TYP=GAIA(/api/action-types))
+    // 2) 그 ID 들의 전 레이어 행을 traceIds IN 으로 조회 (두 필터 동시 사용 시 교집합)
+    let rows: TraceRow[];
+    const idFilters: Array<[LayerKey, "FAC_ID" | "ACTION_TYP", string]> = [];
+    if (filter.facId) idFilters.push(["MCP", "FAC_ID", filter.facId]);
+    if (filter.actionTyp) idFilters.push(["GAIA", "ACTION_TYP", filter.actionTyp]);
 
-    // FAC(FAB) 필터: FAC_ID 는 MCP 행에만 기록되므로 트레이스 단위로 후처리한다.
-    // (행 단위 SQL 필터로 걸면 FAC_ID 가 빈 다른 레이어 행이 전부 빠져 트레이스가 깨짐)
-    if (filter.facId) {
-      const matched = new Set(
-        rows.filter((r) => r.facId === filter.facId).map((r) => r.traceId)
+    if (idFilters.length > 0) {
+      const idSets = await Promise.all(
+        idFilters.map(([layer, column, value]) => fetchTraceIdsBy(layer, column, value, filter))
       );
-      rows = rows.filter((r) => matched.has(r.traceId));
+      const traceIds = idSets.reduce((acc, set) => {
+        const s = new Set(set);
+        return acc.filter((id) => s.has(id));
+      });
+      rows = traceIds.length > 0
+        ? await fetchAllRows({ ...filter, facId: undefined, actionTyp: undefined, traceIds, limit: undefined })
+        : [];
+    } else {
+      rows = await fetchAllRows(filter);
     }
 
     const summaries = summarize(rows);

@@ -84,15 +84,19 @@ export interface TraceListResponse {
 export interface TraceFilter {
   traceId?: string;
   userId?: string;
+  /** ACTION_TYP 필터. facId 와 마찬가지로 queryLayer 는 무시하고 /api/traces 가 2단계(traceIds)로 처리 */
   actionTyp?: string;
   /** ERR_CD(=FAIL/ERROR 코드) 부분 일치 검색 (대소문자 무시) */
   errCd?: string;
   /**
    * FAC(FAB) 필터. FAC_ID 는 MCP send update 에서만 기록되므로 행 단위 SQL WHERE 로
-   * 걸면 다른 레이어 행이 통째로 빠져 트레이스가 깨진다. db.ts 는 이 필드를 무시하고,
-   * /api/traces 가 트레이스 단위로 후처리한다 (stats 의 userId/actionTyp 와 동일 패턴).
+   * 걸면 다른 레이어 행이 통째로 빠져 트레이스가 깨진다. queryLayer 는 이 필드를 무시하고,
+   * /api/traces 가 2단계로 처리한다: fetchTraceIdsByFac(MCP)로 TRACE_ID 를 먼저 확정한 뒤
+   * traceIds 로 전 레이어 행을 조회.
    */
   facId?: string;
+  /** 서버 내부용: TRACE_ID IN (...) 조회. FAB 필터 2단계에서 사용하며 클라이언트는 설정하지 않는다. */
+  traceIds?: string[];
   dateFrom?: string;
   dateTo?: string;
   onlyError?: boolean;
@@ -143,9 +147,10 @@ export interface TimeBucket {
   ok: number;
   fail: number;
   pending: number;
-  /** TEMP(Tokens 탭 차트로 대체 예정): CUBE send→resp 평균 지연(ms). 측정 가능한 트레이스가 없으면 null */
+  /** Action 전체 응답 지연(ms) 평균 — CUBE(진입 레이어) send→resp 기준이라 전 구간(LLM 포함) 왕복시간.
+      Tokens 탭의 LLM 호출 지연(1콜 단위)과는 다른, end-to-end 지표. 측정 가능한 트레이스가 없으면 null */
   avgCubeLatencyMs?: number | null;
-  /** TEMP(Tokens 탭 차트로 대체 예정): 지연 측정에 포함된 트레이스 수 */
+  /** 위 응답 지연 평균에 포함된 트레이스 수 */
   cubeLatencyTraces?: number;
 }
 
@@ -358,7 +363,7 @@ export interface StatsResponse {
   totals: StatusCounts & { total: number };
   /** 트레이스 평균 end-to-end 지연 (ms). 측정 가능한 트레이스가 없으면 null */
   avgLatencyMs: number | null;
-  /** TEMP(Tokens 탭 차트로 대체 예정): 전체 CUBE send→resp 평균 지연(ms). 측정 가능한 트레이스가 없으면 null */
+  /** Action 전체 응답 지연(ms) 평균 — CUBE send→resp 기준(전 구간 왕복). 측정 가능한 트레이스가 없으면 null */
   cubeAvgLatencyMs?: number | null;
   /** 시간대별 버킷 (오름차순). granularity 는 자동: <=2h → 5분, <=48h → 1시간, 그 이상 → 1일 */
   granularity: "5m" | "1h" | "1d";

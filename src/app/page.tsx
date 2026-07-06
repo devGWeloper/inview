@@ -28,6 +28,8 @@ export default function Page() {
   const [errCodes, setErrCodes] = useState<Array<{ code: string; desc: string }>>([]);
   // FAB 드롭다운 옵션 — MCP DB 의 DISTINCT FAC_ID(/api/facs)에서 로드
   const [facs, setFacs] = useState<string[]>([]);
+  // ACTION_TYP 드롭다운 옵션 — DISTINCT ACTION_TYP(/api/action-types)에서 로드
+  const [actionTypes, setActionTypes] = useState<string[]>([]);
 
   const layoutRef = useRef<HTMLDivElement>(null);
   const splitterRef = useRef<HTMLDivElement>(null);
@@ -77,7 +79,7 @@ export default function Page() {
     try {
       const q = new URLSearchParams();
       if (f.traceId) q.set("traceId", f.traceId);
-      if (f.userId) q.set("userId", f.userId);
+      if (f.actionTyp) q.set("actionTyp", f.actionTyp);
       if (f.errCd) q.set("errCd", f.errCd);
       if (f.facId) q.set("facId", f.facId);
       if (f.dateFrom) q.set("dateFrom", f.dateFrom);
@@ -125,6 +127,14 @@ export default function Page() {
       .then((res) => res.json())
       .then((data: { values?: string[] }) => setFacs(data.values ?? []))
       .catch(() => setFacs([]));
+  }, []);
+
+  // ACTION_TYP 옵션 로드. 실패/미구성 시 빈 목록 → 셀렉트는 '전체'만.
+  useEffect(() => {
+    fetch("/api/action-types", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data: { values?: string[] }) => setActionTypes(data.values ?? []))
+      .catch(() => setActionTypes([]));
   }, []);
   useEffect(() => { if (selected) loadDetail(selected); }, [selected, loadDetail]);
 
@@ -178,12 +188,16 @@ export default function Page() {
                   />
                 </label>
                 <label>
-                  USER_ID
-                  <input
-                    type="text"
-                    value={filter.userId ?? ""}
-                    onChange={(e) => setFilter({ ...filter, userId: e.target.value || undefined })}
-                  />
+                  ACTION_TYP
+                  <select
+                    value={filter.actionTyp ?? ""}
+                    onChange={(e) => setFilter({ ...filter, actionTyp: e.target.value || undefined })}
+                  >
+                    <option value="">전체</option>
+                    {actionTypes.map((v) => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
                 </label>
                 <label>
                   FAIL CODE

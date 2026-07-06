@@ -132,8 +132,8 @@ export async function GET(req: NextRequest) {
     let latencySum = 0;
     let latencyN = 0;
 
-    // TEMP(Tokens 탭 차트로 대체 예정): CUBE send→resp 지연 버킷별 집계 — 대시보드 임시 지연 차트용.
-    // GAIA 가 TRX_TOKEN_DET 에 LATENCY_MS 적재를 시작하면 Tokens 탭의 기존 차트가 역할을 대신한다. 그때 이 블록을 제거한다.
+    // Action 전체 응답 지연: CUBE(진입 레이어) send→resp 를 버킷별 집계 — 대시보드 "평균 응답 지연" 차트용.
+    // Tokens 탭의 LLM 호출 지연(1콜 단위, LATENCY_MS)과는 별개의 정규 지표(전 구간 왕복시간).
     const cubeLat = new Map<number, { sum: number; n: number }>();
     let cubeLatSum = 0;
     let cubeLatN = 0;
@@ -200,7 +200,7 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        // TEMP(Tokens 탭 차트로 대체 예정): CUBE 가 하위로 요청 보낸 시각(send)→응답 받은 시각(resp) 지연
+        // CUBE 가 하위로 요청 보낸 시각(send)→응답 받은 시각(resp) 지연 = Action end-to-end 응답시간
         const cubeSends = list
           .filter((r) => r.layer === "CUBE")
           .map((r) => parseTs(r.sendTm))
@@ -230,7 +230,7 @@ export async function GET(req: NextRequest) {
     const bucketArr: TimeBucket[] = enumerateBucketStarts(effectiveFromMs, effectiveToMs, g).map(
       (k) => {
         const b = buckets.get(k) ?? { ts: isoNoTz(k), ok: 0, fail: 0, pending: 0 };
-        // TEMP(Tokens 탭 차트로 대체 예정): 버킷별 CUBE send→resp 평균 지연 부착
+        // 버킷별 CUBE send→resp 평균 지연(=Action 응답 지연) 부착
         const cl = cubeLat.get(k);
         b.avgCubeLatencyMs = cl ? cl.sum / cl.n : null;
         b.cubeLatencyTraces = cl?.n ?? 0;
@@ -274,7 +274,7 @@ export async function GET(req: NextRequest) {
       range: { from: filter.dateFrom ?? null, to: filter.dateTo ?? null },
       totals,
       avgLatencyMs: latencyN > 0 ? latencySum / latencyN : null,
-      // TEMP(Tokens 탭 차트로 대체 예정)
+      // Action 전체 응답 지연 평균 (CUBE send→resp)
       cubeAvgLatencyMs: cubeLatN > 0 ? cubeLatSum / cubeLatN : null,
       granularity: g,
       buckets: bucketArr,

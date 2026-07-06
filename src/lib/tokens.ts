@@ -2,6 +2,7 @@ import { getAppDbConfig } from "./config";
 import { logger } from "./logger";
 import {
   TokenBucket,
+  TokenCellStat,
   TokenDimStat,
   TokenFilter,
   TokenQuestion,
@@ -95,6 +96,7 @@ function emptyStats(filter: TokenFilter, g: Granularity, buckets: TokenBucket[])
     buckets,
     byNode: [],
     byModel: [],
+    byNodeModel: [],
     topUsers: [],
     questions: [],
     calls: [],
@@ -203,6 +205,26 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     const byNode = dimFrom(rowsOf(await conn.execute(dimSql("NODE_NM"), binds, opts)));
     const byModel = dimFrom(rowsOf(await conn.execute(dimSql("MODEL_NM"), binds, opts)));
 
+    // 2-b) byNodeModel — 노드 × 모델 셀 단위 (매트릭스 뷰). 행/열 합계는 byNode/byModel 이 담당.
+    const cellSql =
+      `SELECT NVL(NODE_NM, '(none)') AS NK, NVL(MODEL_NM, '(none)') AS MK, COUNT(*) AS N,` +
+      ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T,` +
+      ` AVG(LATENCY_MS) AS L` +
+      ` FROM TRX_TOKEN_DET${where}` +
+      ` GROUP BY NVL(NODE_NM, '(none)'), NVL(MODEL_NM, '(none)') ORDER BY T DESC`;
+    const byNodeModel: TokenCellStat[] = rowsOf(await conn.execute(cellSql, binds, opts)).map((r) => {
+      const l = r.L ?? r.l;
+      return {
+        nodeKey: String(r.NK ?? r.nk ?? "(none)"),
+        modelKey: String(r.MK ?? r.mk ?? "(none)"),
+        calls: num(r.N ?? r.n),
+        inputTokens: num(r.P ?? r.p),
+        outputTokens: num(r.C ?? r.c),
+        totalTokens: num(r.T ?? r.t),
+        avgLatencyMs: l == null ? null : num(l),
+      };
+    });
+
     // 4) topUsers — TOTAL_TOKENS 기준 (count = totalTokens)
     const userSql =
       `SELECT USER_ID AS K, SUM(TOTAL_TOKENS) AS T FROM TRX_TOKEN_DET${where}` +
@@ -276,6 +298,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       buckets,
       byNode,
       byModel,
+      byNodeModel,
       topUsers,
       questions,
       calls,

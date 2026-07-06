@@ -1622,85 +1622,130 @@ a:hover { text-decoration: underline; }
 }
 .dim-legend .lbs-l.pend { color: var(--text-muted); }
 
-/* ── token breakdown (prompt/completion 적층) ── */
-.tks { height: 100%; display: inline-block; }
-.tks.prompt { background: #0ea5e9; }
-.tks.compl  { background: #a855f7; }
-.tks-l { display: inline-flex; align-items: center; gap: 4px; }
-.tks-l.prompt { color: #0ea5e9; }
-.tks-l.compl  { color: #a855f7; }
-.tks-l.calls  { color: var(--text-muted); margin-left: auto; }
-
-/* ── token breakdown 지표 행 (토큰 / 지연 정렬 막대) ── */
-.dim-metric {
-  display: grid;
-  grid-template-columns: 28px 1fr auto;
+/* ── 노드 × 모델 매트릭스 (Tokens 탭) ── */
+.nm-wrap { display: flex; flex-direction: column; gap: 12px; }
+.nm-toolbar {
+  display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-.dim-metric-lbl {
-  font-family: var(--sans);
-  font-size: 10.5px;
-  color: var(--text-muted);
-  letter-spacing: -0.02em;
-}
-.dim-bar {
-  height: 7px;
-  background: var(--surface-3);
-  border-radius: 4px;
-  overflow: hidden;
-}
-.dim-bar-fill { height: 100%; border-radius: 4px; transition: width .25s; }
-.dim-bar-fill.tok { display: flex; overflow: hidden; }
-.dim-bar-fill.tok .tks { flex-basis: 0; }
-.dim-metric-val {
-  font-family: var(--mono);
-  font-size: 11.5px;
+.nm-metrics {
   display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.nm-metric-btn {
+  border: 0;
+  background: transparent;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: background .1s, color .1s;
+}
+.nm-metric-btn:hover { color: var(--text); }
+.nm-metric-btn.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.10), inset 0 0 0 1px var(--border-strong);
+}
+.nm-hint { font-size: 11.5px; color: var(--text-muted); }
+
+.nm-scroll { overflow-x: auto; }
+.nm-grid { display: grid; gap: 4px; min-width: 480px; }
+
+.nm-corner {
+  display: flex;
+  align-items: flex-end;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: var(--text-muted);
   white-space: nowrap;
 }
-.dim-metric-val.muted { color: var(--text-muted); font-weight: 400; }
-.dim-legend-sep { color: var(--border-strong); }
+.nm-corner-x { color: var(--border-strong); margin: 0 2px; }
 
-/* ── 지연 발산(diverging) 막대 : 평균(중앙선) 대비 빠름◀/느림▶ ── */
-.dim-bar.diverge { position: relative; overflow: hidden; }
-.dim-bar.diverge .dim-center {
-  position: absolute;
-  left: 50%; top: 0; bottom: 0;
-  width: 1px;
-  background: var(--border-strong);
-  transform: translateX(-0.5px);
-  z-index: 1;
-}
-.dim-bar-fill.dev { position: absolute; top: 0; bottom: 0; height: 100%; transition: left .25s, width .25s; }
-.dim-bar-fill.dev.slow { background: #ef4444; border-radius: 0 4px 4px 0; }
-.dim-bar-fill.dev.fast { background: #10b981; border-radius: 4px 0 0 4px; }
-.dim-lat-abs { color: var(--text); font-weight: 600; }
-.dim-delta { font-weight: 700; font-size: 11px; }
-.dim-delta.slow { color: #dc2626; }
-.dim-delta.fast { color: #059669; }
-.dim-delta.near { color: var(--text-muted); font-weight: 500; }
-
-/* 지연 기준선 캡션 */
-.dim-wrap { display: flex; flex-direction: column; gap: 10px; }
-.dim-lat-ref {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 7px 10px;
+.nm-head {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
   background: var(--surface-2);
-  border: 1px dashed var(--border);
-  border-radius: 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 9px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background .1s, border-color .1s;
+}
+.nm-head.col { text-align: center; align-self: end; }
+.nm-head.row { display: flex; align-items: center; }
+button.nm-head:not(:disabled) { cursor: pointer; }
+button.nm-head:not(:disabled):hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+.nm-head.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.10);
+}
+.nm-head.none { font-style: italic; color: var(--text-muted); }
+.nm-head.sum {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-muted);
   font-family: var(--sans);
   font-size: 11.5px;
+  font-weight: 600;
 }
-.dim-lat-ref-lbl { color: var(--text-muted); }
-.dim-lat-ref-val { font-family: var(--mono); font-weight: 700; color: var(--text); }
-.dim-lat-ref-hint { margin-left: auto; color: var(--text-3); }
-.dim-lat-ref-hint .fast { color: #059669; font-weight: 600; }
-.dim-lat-ref-hint .slow { color: #dc2626; font-weight: 600; }
+.nm-head.col.sum { text-align: center; }
+
+.nm-cell {
+  min-height: 46px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 1px;
+  transition: background .2s;
+}
+.nm-cell .nm-v {
+  font-family: var(--mono);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+.nm-cell .nm-s {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+  line-height: 1.2;
+}
+.nm-cell.dark .nm-v { color: #fff; }
+.nm-cell.dark .nm-s { color: rgba(255, 255, 255, 0.82); }
+.nm-cell.empty { background: transparent; border: 1px dashed var(--border); }
+.nm-dash { color: var(--text-muted); font-family: var(--mono); }
+.nm-cell.sum {
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+}
+.nm-cell.sum.grand { border-style: solid; }
+.nm-cell.sum.grand .nm-v { font-size: 14px; }
+
+.nm-note { font-size: 11.5px; color: var(--text-muted); }
 
 /* ── token 최근 호출 테이블 ── */
 .dash-title-note { color: var(--text-muted); }

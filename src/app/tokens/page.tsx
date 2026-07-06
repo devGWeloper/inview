@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { TokenChart } from "@/components/TokenChart";
 import { TokenLatencyChart, fmtDuration } from "@/components/TokenLatencyChart";
-import { TokenBreakdown } from "@/components/TokenBreakdown";
+import { NodeModelMatrix } from "@/components/NodeModelMatrix";
 import { TokenStatsCards } from "@/components/TokenStatsCards";
 import { QuestionsTable } from "@/components/QuestionsTable";
 import { TopList } from "@/components/TopList";
@@ -132,6 +132,12 @@ export default function TokensPage() {
     load({ ...computeFilter(), nodeNm: next || undefined });
   };
 
+  const onSelectModel = (k: string) => {
+    const next = modelNm === k ? "" : k;
+    setModelNm(next);
+    load({ ...computeFilter(), modelNm: next || undefined });
+  };
+
   const hasFilter = !!(userId || nodeNm || modelNm);
   const clearFilters = () => {
     setUserId("");
@@ -256,32 +262,28 @@ export default function TokensPage() {
             </div>
           </section>
 
-          <div className="dash-row split">
-            <section className="dash-card">
-              <div className="dash-card-head">
-                <span className="dash-card-title">노드별</span>
-                <span className="dash-card-sub">NODE_NM 별 토큰 분포 · 클릭해서 필터{nodeNm ? ` · 필터: ${nodeNm}` : ""}</span>
+          <section className="dash-card">
+            <div className="dash-card-head">
+              <div className="dash-card-title-group">
+                <span className="dash-card-title">노드 × 모델</span>
+                <span className="dash-card-sub">
+                  행=NODE_NM · 열=MODEL_NM · 오른쪽/아래 = 합계
+                  {nodeNm ? ` · 노드 필터: ${nodeNm}` : ""}
+                  {modelNm ? ` · 모델 필터: ${modelNm}` : ""}
+                </span>
               </div>
-              <div className="dash-card-body">
-                <TokenBreakdown
-                  items={stats.byNode}
-                  emptyText="노드 데이터 없음"
-                  onSelect={onSelectNode}
-                  selected={nodeNm || undefined}
-                />
-              </div>
-            </section>
-
-            <section className="dash-card">
-              <div className="dash-card-head">
-                <span className="dash-card-title">모델별</span>
-                <span className="dash-card-sub">MODEL_NM 별 토큰 분포</span>
-              </div>
-              <div className="dash-card-body">
-                <TokenBreakdown items={stats.byModel} emptyText="모델 데이터 없음" />
-              </div>
-            </section>
-          </div>
+            </div>
+            <div className="dash-card-body">
+              <NodeModelMatrix
+                stats={stats}
+                emptyText="노드/모델 데이터 없음"
+                onSelectNode={onSelectNode}
+                onSelectModel={onSelectModel}
+                selectedNode={nodeNm || undefined}
+                selectedModel={modelNm || undefined}
+              />
+            </div>
+          </section>
 
           <section className="dash-card">
             <div className="dash-card-head">

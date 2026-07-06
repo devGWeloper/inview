@@ -335,6 +335,20 @@ export interface TokenDimStat {
   avgLatencyMs: number | null;
 }
 
+/** byNodeModel — 노드 × 모델 조합(셀) 단위 토큰 집계. "노드 × 모델" 매트릭스의 데이터 */
+export interface TokenCellStat {
+  /** NODE_NM. null/empty 는 '(none)' 로 정규화 */
+  nodeKey: string;
+  /** MODEL_NM. null/empty 는 '(none)' 로 정규화 */
+  modelKey: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  /** 조합별 평균 LLM 호출 소요시간(ms). LATENCY_MS 기록이 없으면 null */
+  avgLatencyMs: number | null;
+}
+
 export interface TokenStatsResponse {
   range: { from: string | null; to: string | null };
   totals: { calls: number; inputTokens: number; outputTokens: number; totalTokens: number };
@@ -344,10 +358,12 @@ export interface TokenStatsResponse {
   avgLatencyMs: number | null;
   granularity: "5m" | "1h" | "1d";
   buckets: TokenBucket[];
-  /** 노드별 토큰 분포 (totalTokens desc) — 1차 차원 */
+  /** 노드별 토큰 분포 (totalTokens desc) — 매트릭스 행 합계 + NODE 필터 옵션 */
   byNode: TokenDimStat[];
-  /** 모델별 토큰 분포 (totalTokens desc) — 보조 차원 */
+  /** 모델별 토큰 분포 (totalTokens desc) — 매트릭스 열 합계 + MODEL 필터 옵션 */
   byModel: TokenDimStat[];
+  /** 노드 × 모델 셀 단위 집계 (totalTokens desc) — 매트릭스 본체 */
+  byNodeModel: TokenCellStat[];
   /** 상위 사용자 (TOTAL_TOKENS 기준, count = totalTokens) */
   topUsers: TopItem[];
   /** 질문(TRACE_ID) 단위 토큰 사용량 — 총 토큰 desc, 상위 N건. "질문별 토큰" 표의 데이터 */

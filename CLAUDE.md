@@ -90,7 +90,7 @@ The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTI
 - **영속 저장**: `src/lib/profile.ts` → `data/agent-profile.json` (DB 아님, gitignore 됨). `normalizeProfile()` 가 부분/구버전 데이터를 항상 완전한 객체로 보정하며, 구버전의 `formalTasks`/`informalTasks` 는 읽을 때 `tasks` 로 자동 병합(마이그레이션).
 - **API**: `GET/PUT /api/profile`. PUT 은 헤더 `x-admin-password` 가 `ADMIN_PASSWORD`(`src/lib/adminAuth.ts`, 하드코딩 `"admin"`)와 일치해야 저장. ⚠️ 클라이언트 번들에도 노출되는 **단순 게이트** — 실제 보안 아님.
 - **화면**: `/agent`(서버 컴포넌트, `ProfileCard` + `WorkShowcase`), 대시보드 상단 `ProfileStrip`(클라이언트), `/admin`(비밀번호 게이트 후 편집 폼, 업무 순서 드래그앤드롭). 사진은 `public/` 에 올리고 `avatarImage` 에 `/파일명` 지정(없거나 로드 실패 시 `avatar` 이모지로 폴백, `AgentAvatar`).
-- **FTE 성과 지표**: `src/lib/fte.ts` `computeFteStats()` 가 **실데이터로 계산**한다. `db.ts.monthlySeaSuccess()` 가 CUBE 에서 2026-01-01~현재 'SEA 성공'(에러 없고 CUBE RESP 에 'Seasoning 실패' 문구 없는 트레이스) 수를 월별 집계 → 연간 FTE `= 누적 × 60 ÷ 65,984`, 월별 FTE `= 월 × 60 ÷ 65,984 × 12`(연환산). FTE 1 = 1인·1년. CUBE 미연결이면 `null` → 카드는 `profile.fte`(수동 폴백) 표시 + 차트는 안내 문구. 차트(`FteChart`)는 최근 12개월만 노출. **위 TEMPORARY WORKAROUND 의 `SEASONING_FAIL_PHRASE` 에 의존**(원복 시 5번 항목 참고).
+- **FTE 성과 지표**: `src/lib/fte.ts` `computeFteStats(profile)` 가 **실데이터로 계산**한다. `db.ts.monthlyActionSuccess()` 가 CUBE 에서 2026-01-01~현재 '액션 성공'(에러 없고 CUBE RESP 에 실패 문구 — `ACTION_FAIL_PHRASES`: 'Seasoning 실패'/'AutoQual 취소 실패' — 없는 트레이스, 시즈닝·AutoQual 취소 공통) 수를 월별 집계 → 연간 FTE `= 누적 × 건당 분 ÷ 연간 분`, 월별 FTE `= 월 × 건당 분 ÷ 연간 분 × 12`(연환산). **계산식 상수는 프로필 필드** `fteMinutesPerCase`(기본 5)/`fteAnnualMinutes`(기본 65,984)로, `/admin` 의 "성과 지표 (FTE)" 섹션에서 편집한다 (`normalizeProfile` 이 0 이하/비숫자를 기본값으로 보정). FTE 1 = 1인·1년. CUBE 미연결이면 `null` → 카드는 `profile.fte`(수동 폴백) 표시 + 차트는 안내 문구. 차트(`FteChart`)는 최근 12개월만 노출. `FteStats.minutesPerCase` 는 적용 상수 echo 로 카드 주석("액션 성공 N건 × M분 환산")에 쓰인다. **위 TEMPORARY WORKAROUND 의 `ACTION_FAIL_PHRASES` 에 의존**(원복 시 5번 항목 참고).
 
 ## 두 가지 지연 지표 (둘 다 정규 — 재는 대상이 다름)
 
@@ -120,26 +120,27 @@ Action 에 한정되지 않고 GAIA 의 모든 노드 LLM 호출을 포괄한다
 에러 코드가 없는 트레이스가 전부 `pending`(대시보드의 PARTIAL)으로 분류되어 대시보드/목록 값이 무의미해지는 문제가 있었다.
 
 **임시 규칙**: 에러 코드(`errCd`)가 없는 미완료(pending) 트레이스를 CUBE 레이어의 RESP 메시지(`respMsgCtn`)로 재판정한다.
-- CUBE RESP 에 `"Seasoning 실패"` 문구 포함 → `fail`
+- CUBE RESP 에 액션 실패 문구 포함 → `fail` — 문구는 `ACTION_FAIL_RULES` 로 정의 (시즈닝 = `"Seasoning 실패"`, AutoQual 취소 = `"AutoQual 취소 실패"`; 새 액션이 생기면 여기에 한 줄 추가)
 - 그 외 → `ok`(성공으로 간주)
 
 **구현 위치**:
 - `src/lib/tempStatus.ts` — 아래 export 들이 모두 임시 코드 (파일 전체 삭제 대상):
-  - `SEASONING_FAIL_PHRASE` — CUBE RESP 에서 검색할 문구
-  - `SEASONING_FAIL_CODE` (`"FAIL_SEASONING"`) — Top Errors 에 노출할 가상 에러 코드 (DB 에는 존재하지 않음)
-  - `hasSeasoningFailure(rows)` — CUBE RESP 에 위 문구 포함 여부
+  - `ACTION_FAIL_RULES` — 액션별 `{ action, phrase, code }` 규칙. `phrase` 는 CUBE RESP 검색 문구, `code` 는 Top Errors 에 노출할 가상 에러 코드 (DB 에는 존재하지 않음): `FAIL_SEASONING` / `FAIL_AQ_CANCEL`
+  - `ACTION_FAIL_PHRASES` — 실패 문구 목록 (db.ts FTE 집계에서 성공 제외용)
+  - `matchedActionFailCodes(rows)` — CUBE RESP 에 매칭된 규칙들의 가상 코드 목록
+  - `hasActionFailure(rows)` — 실패 문구가 하나라도 있는지
   - `classifyPendingByCubeResp(rows)` — pending 을 ok/fail 로 대체 판정
 - `src/app/api/traces/route.ts` 와 `src/app/api/stats/route.ts` 의 `classify()` 내 `// TEMP(ONEOIS 미연결)` 블록 — pending 분기를 `classifyPendingByCubeResp` 로 교체
-- `src/app/api/stats/route.ts` 의 트레이스 루프 내 `// TEMP(ONEOIS 미연결)` 블록 — `hasSeasoningFailure(list)` 시 `errCount` 에 `SEASONING_FAIL_CODE` 를 +1 해서 Top Errors 리스트에 노출
+- `src/app/api/stats/route.ts` 의 트레이스 루프 내 `// TEMP(ONEOIS 미연결)` 블록 — `matchedActionFailCodes(list)` 의 각 가상 코드를 `errCount` 에 +1 해서 Top Errors 리스트에 노출 (제외 필터 `excludeErrCds` 도 같은 코드로 매칭)
 
-> ⚠️ 알려진 갭(미보정): 위 가상 코드는 **트레이스 단위**(도넛/시계열/Top Errors/byChannel/byAction)에만 반영된다. **행 단위** 집계인 `layers[].failCount` / `errCount` / `okRows` (LayerBars) 는 여전히 보정되지 않아, Seasoning 실패 트레이스의 CUBE 행이 `okRows` 로 잡힐 수 있다. 의도된 트레이드오프이며, 필요해지면 같은 패턴으로 보정 가능.
+> ⚠️ 알려진 갭(미보정): 위 가상 코드는 **트레이스 단위**(도넛/시계열/Top Errors/byChannel/byAction)에만 반영된다. **행 단위** 집계인 `layers[].failCount` / `errCount` / `okRows` (LayerBars) 는 여전히 보정되지 않아, 액션 실패 트레이스의 CUBE 행이 `okRows` 로 잡힐 수 있다. 의도된 트레이드오프이며, 필요해지면 같은 패턴으로 보정 가능.
 
 **ONEOIS DB 연결이 완료되면 원복 방법**:
 1. `src/lib/tempStatus.ts` 파일 삭제
 2. 두 route 파일의 `import { ... } from "@/lib/tempStatus"` 라인 제거
 3. 두 `classify()` 의 `// TEMP(ONEOIS 미연결)` 블록을 원래 코드로 복원:
    `if (errs.length === 0) return allComplete ? "ok" : "pending";`
-4. `src/app/api/stats/route.ts` 의 트레이스 루프에서 Seasoning Top Errors 보정 블록 삭제
-5. ⚠️ `src/lib/db.ts` 의 `monthlySeaSuccess()`(FTE 집계)도 `SEASONING_FAIL_PHRASE` 를 import 한다.
-   tempStatus.ts 를 지우면 빌드가 깨지므로, 'SEA 성공' 정의를 ONEOIS 포함 정식 기준
+4. `src/app/api/stats/route.ts` 의 트레이스 루프에서 액션 실패 Top Errors 보정 블록 삭제
+5. ⚠️ `src/lib/db.ts` 의 `monthlyActionSuccess()`(FTE 집계)도 `ACTION_FAIL_PHRASES` 를 import 한다.
+   tempStatus.ts 를 지우면 빌드가 깨지므로, '액션 성공' 정의를 ONEOIS 포함 정식 기준
    (allComplete + errCd 없음)으로 다시 잡고 import 를 정리할 것. (아래 "Agent 프로필" 참고)

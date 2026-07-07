@@ -49,6 +49,12 @@ export function normalizeProfile(raw: unknown): AgentProfile {
     ? r.skills.filter((s): s is string => typeof s === "string" && s.trim() !== "")
     : DEFAULT_PROFILE.skills;
 
+  // FTE 계산식 상수: 0 이하/비숫자는 기본값으로 보정 (연간 분이 0 이면 나눗셈이 깨진다)
+  const posNum = (v: unknown, d: number): number => {
+    const n = typeof v === "string" && v.trim() !== "" ? Number(v) : v;
+    return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : d;
+  };
+
   return {
     name:         str("name", DEFAULT_PROFILE.name),
     nickname:     str("nickname", DEFAULT_PROFILE.nickname),
@@ -57,6 +63,8 @@ export function normalizeProfile(raw: unknown): AgentProfile {
     skills,
     fte,
     fteNote:      str("fteNote", DEFAULT_PROFILE.fteNote),
+    fteMinutesPerCase: posNum(r.fteMinutesPerCase, DEFAULT_PROFILE.fteMinutesPerCase),
+    fteAnnualMinutes:  posNum(r.fteAnnualMinutes, DEFAULT_PROFILE.fteAnnualMinutes),
     tagline:      str("tagline", DEFAULT_PROFILE.tagline),
     avatar:       str("avatar", DEFAULT_PROFILE.avatar),
     avatarImage:  str("avatarImage", DEFAULT_PROFILE.avatarImage),

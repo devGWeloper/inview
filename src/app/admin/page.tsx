@@ -16,6 +16,8 @@ export default function AdminPage() {
   const [profile, setProfile] = useState<AgentProfile | null>(null);
   const [skillsText, setSkillsText] = useState("");
   const [fteText, setFteText] = useState("");
+  const [fteMinText, setFteMinText] = useState("");
+  const [fteAnnText, setFteAnnText] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -49,6 +51,8 @@ export default function AdminPage() {
         setProfile(data.profile);
         setSkillsText(data.profile.skills.join(", "));
         setFteText(data.profile.fte === null ? "" : String(data.profile.fte));
+        setFteMinText(String(data.profile.fteMinutesPerCase));
+        setFteAnnText(String(data.profile.fteAnnualMinutes));
       } catch (e) {
         if (alive) setMsg({ kind: "err", text: "불러오기 실패: " + String(e) });
       } finally {
@@ -99,6 +103,16 @@ export default function AdminPage() {
       setMsg({ kind: "err", text: "FTE는 숫자여야 합니다 (비우면 '측정 예정')." });
       return;
     }
+    const fteMinutesPerCase = Number(fteMinText);
+    const fteAnnualMinutes = Number(fteAnnText);
+    if (
+      !Number.isFinite(fteMinutesPerCase) || fteMinutesPerCase <= 0 ||
+      !Number.isFinite(fteAnnualMinutes) || fteAnnualMinutes <= 0
+    ) {
+      setSaving(false);
+      setMsg({ kind: "err", text: "FTE 계산식 상수(건당 분·연간 분)는 0보다 큰 숫자여야 합니다." });
+      return;
+    }
     try {
       const res = await fetch("/api/profile", {
         method: "PUT",
@@ -106,7 +120,7 @@ export default function AdminPage() {
           "Content-Type": "application/json",
           [ADMIN_PASSWORD_HEADER]: ADMIN_PASSWORD,
         },
-        body: JSON.stringify({ ...profile, skills, fte }),
+        body: JSON.stringify({ ...profile, skills, fte, fteMinutesPerCase, fteAnnualMinutes }),
       });
       if (res.status === 401) throw new Error("비밀번호가 올바르지 않습니다.");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -114,6 +128,8 @@ export default function AdminPage() {
       setProfile(data.profile);
       setSkillsText(data.profile.skills.join(", "));
       setFteText(data.profile.fte === null ? "" : String(data.profile.fte));
+      setFteMinText(String(data.profile.fteMinutesPerCase));
+      setFteAnnText(String(data.profile.fteAnnualMinutes));
       setMsg({ kind: "ok", text: "저장되었습니다." });
     } catch (e) {
       setMsg({ kind: "err", text: "저장 실패: " + String(e) });
@@ -177,7 +193,7 @@ export default function AdminPage() {
             <Field label="직급"><input value={profile.rank} onChange={(e) => set("rank", e.target.value)} /></Field>
             <Field label="근무시간"><input value={profile.workingHours} onChange={(e) => set("workingHours", e.target.value)} /></Field>
             <Field label="아바타 (이모지 · 사진 없을 때 폴백)"><input value={profile.avatar} onChange={(e) => set("avatar", e.target.value)} /></Field>
-            <Field label="보유 스킬 (쉼표로 구분)"><input value={skillsText} onChange={(e) => setSkillsText(e.target.value)} placeholder="시즈닝, ..." /></Field>
+            <Field label="보유 스킬 (쉼표로 구분)"><input value={skillsText} onChange={(e) => setSkillsText(e.target.value)} placeholder="시즈닝, AutoQual 취소, ..." /></Field>
             <Field label="프로필 사진 경로 (public/ 기준)" wide>
               <input value={profile.avatarImage} onChange={(e) => set("avatarImage", e.target.value)} placeholder="예: /agent.jpg  (public 폴더에 올린 파일명)" />
             </Field>
@@ -188,14 +204,21 @@ export default function AdminPage() {
         <fieldset className="admin-section">
           <legend>성과 지표 (FTE) — 자동 집계</legend>
           <div className="admin-grid">
+            <Field label="성공 1건당 환산 분 (기본 5)">
+              <input value={fteMinText} onChange={(e) => setFteMinText(e.target.value)} placeholder="예: 5" inputMode="decimal" />
+            </Field>
+            <Field label="1 FTE 연간 분 (기본 65,984)">
+              <input value={fteAnnText} onChange={(e) => setFteAnnText(e.target.value)} placeholder="예: 65984" inputMode="numeric" />
+            </Field>
             <Field label="FTE 폴백 값 (DB 미연결 시에만 사용)">
               <input value={fteText} onChange={(e) => setFteText(e.target.value)} placeholder="예: 4.32" inputMode="decimal" />
             </Field>
-            <Field label="FTE 주석 (폴백 시 표시)" wide><input value={profile.fteNote} onChange={(e) => set("fteNote", e.target.value)} /></Field>
+            <Field label="FTE 주석 (폴백 시 표시)"><input value={profile.fteNote} onChange={(e) => set("fteNote", e.target.value)} /></Field>
           </div>
           <p className="admin-hint">
-            ※ FTE 는 <b>2026-01-01 ~ 현재 SEA 성공 수 × 60 ÷ 65,984</b> 로 자동 집계되며(월별은 ×12 연환산),
-            CUBE DB 가 연결돼 있으면 위 입력값 대신 실측값이 표시됩니다. 입력값은 DB 미연결 시 폴백으로만 쓰입니다.
+            ※ FTE 는 <b>2026-01-01 ~ 현재 액션 성공 수(시즈닝·AutoQual 취소) × {fteMinText || "?"} ÷ {fteAnnText || "?"}</b> 로
+            자동 집계되며(월별은 ×12 연환산), CUBE DB 가 연결돼 있으면 폴백 입력값 대신 실측값이 표시됩니다.
+            건당 분·연간 분 상수는 저장 즉시 카드/대시보드 FTE 에 반영됩니다.
           </p>
         </fieldset>
 

@@ -11,7 +11,7 @@ import {
   TraceRow,
 } from "@/lib/types";
 import { logger, reqContext } from "@/lib/logger";
-import { classifyPendingByCubeResp, hasSeasoningFailure, SEASONING_FAIL_CODE } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
+import { classifyPendingByCubeResp, matchedActionFailCodes } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
 import {
   enumerateBucketStarts,
   floorToBucket,
@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
     // ── 트레이스 단위 필터 (userId/actionTyp)
     //   ACTION_TYP/USER_ID 는 일부 레이어 행에만 채워지므로, "트레이스 내 어느 한 행이라도 일치"하면
     //   그 트레이스의 전체 레이어 행을 유지한다. (행 단위로 거르면 다른 레이어 행이 사라져 FAC/AREA·
-    //   레이어바·Seasoning 판정이 모두 깨진다.)
+    //   레이어바·액션 실패(시즈닝/AutoQual 취소) 판정이 모두 깨진다.)
     if (userId || actionTyp) {
       for (const [traceId, list] of byTrace) {
         const matchUser = !userId || list.some((r) => r.userId === userId);
@@ -98,14 +98,13 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 제외 trace 집합: 제외 코드 셋과 매칭되는 errCd 를 가진 trace + (가상)Seasoning 실패 trace
+    // 제외 trace 집합: 제외 코드 셋과 매칭되는 errCd 를 가진 trace + (가상)액션 실패(시즈닝/AutoQual 취소) trace
     const excludedTraces = new Set<string>();
     if (excludeSet.size > 0) {
-      const excludeSeasoning = excludeSet.has(SEASONING_FAIL_CODE);
       for (const [traceId, list] of byTrace) {
         const hitErr = list.some((r) => r.errCd && excludeSet.has(r.errCd));
-        const hitSeasoning = excludeSeasoning && hasSeasoningFailure(list);
-        if (hitErr || hitSeasoning) excludedTraces.add(traceId);
+        const hitAction = matchedActionFailCodes(list).some((code) => excludeSet.has(code));
+        if (hitErr || hitAction) excludedTraces.add(traceId);
       }
     }
 
@@ -167,9 +166,9 @@ export async function GET(req: NextRequest) {
         if (!r.errCd) continue;
         errCount.set(r.errCd, (errCount.get(r.errCd) ?? 0) + 1);
       }
-      // TEMP(ONEOIS 미연결): Seasoning 실패는 실제 errCd 가 없으므로 가상 코드로 topErrors 에 반영
-      if (hasSeasoningFailure(list)) {
-        errCount.set(SEASONING_FAIL_CODE, (errCount.get(SEASONING_FAIL_CODE) ?? 0) + 1);
+      // TEMP(ONEOIS 미연결): 액션 실패(시즈닝/AutoQual 취소)는 실제 errCd 가 없으므로 가상 코드로 topErrors 에 반영
+      for (const code of matchedActionFailCodes(list)) {
+        errCount.set(code, (errCount.get(code) ?? 0) + 1);
       }
 
       // 트레이스 시작 시각 → 버킷

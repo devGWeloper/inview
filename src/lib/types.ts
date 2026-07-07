@@ -191,6 +191,10 @@ export interface AgentProfile {
   fte: number | null;
   /** FTE 산정 방식/주석 (UI 보조 설명) */
   fteNote: string;
+  /** FTE 계산식: 액션 성공 1건당 환산 분(分). ADMIN 에서 편집 가능 (기본 5) */
+  fteMinutesPerCase: number;
+  /** FTE 계산식: 1 FTE(1인 1년)에 해당하는 연간 분(分). ADMIN 에서 편집 가능 (기본 65,984) */
+  fteAnnualMinutes: number;
   /** 한 줄 소개 */
   tagline: string;
   /** 아바타 이모지 (avatarImage 가 없을 때 폴백) */
@@ -208,15 +212,18 @@ export const DEFAULT_PROFILE: AgentProfile = {
   nickname: "억수야",
   rank: "CL2 1년차",
   workingHours: "24시간 365일",
-  skills: ["시즈닝"],
+  skills: ["시즈닝", "AutoQual 취소"],
   fte: null,
   fteNote: "Dashboard 집계 연계 예정 — 산정식 확정 후 자동 반영",
+  fteMinutesPerCase: 5,
+  fteAnnualMinutes: 65984,
   tagline: "쉬지 않고 일하는 우리 팀의 AI 에이전트",
   avatar: "🧑‍🍳",
   avatarImage: "",
   roadmap: "",
   tasks: [
     { icon: "🧂", title: "시즈닝 자동 처리", desc: "수신 트랜잭션을 규칙 기반으로 시즈닝해 다운스트림으로 전달", metric: "상시 처리" },
+    { icon: "🚫", title: "AutoQual 취소 처리", desc: "요청 받은 AutoQual 을 검증 후 자동으로 취소 처리", metric: "상시 처리" },
     { icon: "🔀", title: "채널 라우팅", desc: "CUBE → GAIA → MCP → ONEOIS 경로로 메시지를 정확히 중계" },
     { icon: "🧾", title: "트랜잭션 추적·검증", desc: "TRACE_ID 기준 end-to-end 정합성 확인 및 완료 판정" },
     { icon: "📊", title: "정기 리포트 생성", desc: "사용 추이·성공률·에러 통계를 주기적으로 집계" },
@@ -229,26 +236,29 @@ export const DEFAULT_PROFILE: AgentProfile = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FTE 성과 지표 (이억수 TL)
-//   연간 FTE  = (2026-01-01~현재 SEA 성공 트레이스 수) × 60 ÷ 65,984
-//   월별 FTE  = (해당 월 SEA 성공 수) × 60 ÷ 65,984 × 12   (월 → 연 환산)
-//   FTE 1 = 1년간 1인분(1 person-year)의 일을 했다는 의미.
-//   'SEA 성공' = 시즈닝 성공 트레이스 (대시보드 ok 기준: 에러 없고 CUBE 응답에
-//   'Seasoning 실패' 문구가 없는 트레이스).
+//   연간 FTE  = (2026-01-01~현재 액션 성공 트레이스 수) × 건당 분 ÷ 연간 분
+//   월별 FTE  = (해당 월 액션 성공 수) × 건당 분 ÷ 연간 분 × 12   (월 → 연 환산)
+//   건당 분(기본 5)·연간 분(기본 65,984)은 프로필(fteMinutesPerCase/fteAnnualMinutes,
+//   ADMIN 편집)에서 가져온다. FTE 1 = 1년간 1인분(1 person-year)의 일을 했다는 의미.
+//   '액션 성공' = 시즈닝·AutoQual 취소 성공 트레이스 (대시보드 ok 기준: 에러 없고
+//   CUBE 응답에 실패 문구(ACTION_FAIL_PHRASES)가 없는 트레이스).
 // ─────────────────────────────────────────────────────────────────────────────
 export interface FteMonth {
   /** "YYYY-MM" */
   ym: string;
-  /** 해당 월 SEA 성공 트레이스 수 */
+  /** 해당 월 액션 성공 트레이스 수 */
   count: number;
-  /** 월 환산(annualized) FTE = count × 60 ÷ 65,984 × 12 */
+  /** 월 환산(annualized) FTE = count × 건당 분 ÷ 연간 분 × 12 */
   fte: number;
 }
 
 export interface FteStats {
-  /** 누적 연간 FTE = totalCount × 60 ÷ 65,984 */
+  /** 누적 연간 FTE = totalCount × 건당 분 ÷ 연간 분 */
   annualFte: number;
-  /** 2026-01-01~현재 누적 SEA 성공 수 */
+  /** 2026-01-01~현재 누적 액션 성공 수 */
   totalCount: number;
+  /** 계산에 적용된 성공 1건당 환산 분 (프로필 상수 echo — UI 주석 표기용) */
+  minutesPerCase: number;
   /** 집계 구간 (ISO, TZ 없음) */
   from: string;
   to: string;

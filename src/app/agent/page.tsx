@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AgentPage() {
   const profile = readProfile();
-  const fteStats = await computeFteStats();
+  const fteStats = await computeFteStats(profile);
   return (
     <div className="agent-page">
       <div className="agent-shell">

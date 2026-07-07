@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const ctx = reqContext(req);
   try {
     const profile = readProfile();
-    const fteStats = await computeFteStats();
+    const fteStats = await computeFteStats(profile);
     return NextResponse.json({ profile, fteStats });
   } catch (e) {
     logger.error("GET /api/profile failed", { ...ctx, err: String(e) });

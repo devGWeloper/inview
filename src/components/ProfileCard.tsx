@@ -26,7 +26,7 @@ export function ProfileCard({
 
   const fteValue = fteStats ? fteStats.annualFte : profile.fte;
   const fteNote = fteStats
-    ? `2026-01-01 ~ 현재 · SEA 성공 ${fteStats.totalCount.toLocaleString()}건 누적`
+    ? `2026-01-01 ~ 현재 · 액션 성공 ${fteStats.totalCount.toLocaleString()}건 × ${fteStats.minutesPerCase}분 환산`
     : profile.fteNote;
 
   return (

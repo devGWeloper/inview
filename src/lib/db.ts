@@ -1,7 +1,7 @@
 import { LAYER_ORDER, LayerKey, TraceFilter, TraceRow } from "./types";
 import { logger } from "./logger";
 import { AppEnv, LayerDbConfig, loadConfig } from "./config";
-import { SEASONING_FAIL_PHRASE } from "./tempStatus"; // TEMP(ONEOIS 미연결): 시즈닝 성공 판정에 사용
+import { ACTION_FAIL_PHRASES } from "./tempStatus"; // TEMP(ONEOIS 미연결): 액션(시즈닝/AutoQual 취소) 성공 판정에 사용
 
 export type { AppEnv } from "./config";
 
@@ -211,20 +211,28 @@ export async function fetchTraceIdsBy(
   }
 }
 
-// FTE 산정용: 월별 'SEA 성공' 트레이스 수.
-//   성공 = 트레이스의 어떤 행에도 ERR_CD 가 없고, CUBE 응답에 'Seasoning 실패' 문구가
-//   없는 트레이스 (대시보드 ok 정의와 일치). 시즈닝은 CUBE 레이어에서 판정되므로
+// FTE 산정용: 월별 '액션 성공' 트레이스 수 (시즈닝·AutoQual 취소 공통).
+//   성공 = 트레이스의 어떤 행에도 ERR_CD 가 없고, CUBE 응답에 액션 실패 문구
+//   (ACTION_FAIL_PHRASES: 'Seasoning 실패'/'AutoQual 취소 실패')가 없는 트레이스
+//   (대시보드 ok 정의와 일치). 액션 결과는 CUBE 레이어에서 판정되므로
 //   CUBE DB 한 곳에서 집계한다. CUBE 미연결/드라이버 없음이면 null 반환(수동 fte 폴백).
-const SEA_LAYER: LayerKey = "CUBE";
+const ACTION_LAYER: LayerKey = "CUBE";
 
-export async function monthlySeaSuccess(
+export async function monthlyActionSuccess(
   fromIso: string,
   toIso: string
 ): Promise<{ ym: string; count: number }[] | null> {
-  const cfg = readConfig(SEA_LAYER);
+  const cfg = readConfig(ACTION_LAYER);
   if (!cfg) return null;
   const oracle = await getOracle();
   if (!oracle) return null;
+
+  const failConds = ACTION_FAIL_PHRASES.map(
+    (_, i) => `AND SUM(CASE WHEN RESP_MSG_CTN LIKE :failPhrase${i} THEN 1 ELSE 0 END) = 0`
+  );
+  const failBinds = Object.fromEntries(
+    ACTION_FAIL_PHRASES.map((p, i) => [`failPhrase${i}`, `%${p}%`])
+  );
 
   const sql = `
     SELECT YM, COUNT(*) AS CNT FROM (
@@ -234,7 +242,7 @@ export async function monthlySeaSuccess(
          AND RECV_TM <= TO_TIMESTAMP(:dateTo,   'YYYY-MM-DD"T"HH24:MI:SS')
        GROUP BY TRACE_ID
       HAVING SUM(CASE WHEN ERR_CD IS NOT NULL THEN 1 ELSE 0 END) = 0
-         AND SUM(CASE WHEN RESP_MSG_CTN LIKE :failPhrase THEN 1 ELSE 0 END) = 0
+         ${failConds.join("\n         ")}
     )
     GROUP BY YM
     ORDER BY YM`;
@@ -245,7 +253,7 @@ export async function monthlySeaSuccess(
     conn = await oracle.getConnection(cfg);
     const result = await conn.execute(
       sql,
-      { dateFrom: fromIso, dateTo: toIso, failPhrase: `%${SEASONING_FAIL_PHRASE}%` },
+      { dateFrom: fromIso, dateTo: toIso, ...failBinds },
       { outFormat: oracle.OBJECT }
     );
     const rows = (result.rows ?? []) as Record<string, unknown>[];
@@ -253,10 +261,10 @@ export async function monthlySeaSuccess(
       ym: String(r["YM"] ?? r["ym"] ?? ""),
       count: Number(r["CNT"] ?? r["cnt"] ?? 0),
     }));
-    logger.info("monthlySeaSuccess ok", { months: out.length, ms: Date.now() - t0 });
+    logger.info("monthlyActionSuccess ok", { months: out.length, ms: Date.now() - t0 });
     return out;
   } catch (e) {
-    logger.error("monthlySeaSuccess failed", { ms: Date.now() - t0, err: String(e) });
+    logger.error("monthlyActionSuccess failed", { ms: Date.now() - t0, err: String(e) });
     return null;
   } finally {
     if (conn) {

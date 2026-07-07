@@ -1622,198 +1622,200 @@ a:hover { text-decoration: underline; }
 }
 .dim-legend .lbs-l.pend { color: var(--text-muted); }
 
-/* ── 노드 × 모델 매트릭스 (Tokens 탭) ── */
-.nm-wrap { display: flex; flex-direction: column; gap: 12px; }
-.nm-toolbar {
+/* ── 노드별/모델별 리더보드 카드 (Tokens 탭, TokenBreakdown) ──
+   카드별 색상은 컴포넌트가 inline CSS 변수(--hue/--hue-soft)로 주입한다. */
+.tbd { display: flex; flex-direction: column; gap: 12px; }
+.tbd-toolbar {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
 }
-.nm-metrics {
+.tbd-metrics {
   display: inline-flex;
   gap: 2px;
   padding: 3px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 9px;
 }
-.nm-metric-btn {
+.tbd-metric-btn {
   border: 0;
   background: transparent;
-  padding: 4px 12px;
-  border-radius: 6px;
-  font-size: 12.5px;
+  padding: 6px 16px;
+  border-radius: 7px;
+  font-size: 13.5px;
   font-weight: 600;
   color: var(--text-3);
   cursor: pointer;
   transition: background .1s, color .1s;
 }
-.nm-metric-btn:hover { color: var(--text); }
-.nm-metric-btn.active {
+.tbd-metric-btn:hover { color: var(--text); }
+.tbd-metric-btn.active {
   background: var(--accent);
   color: #fff;
   box-shadow: 0 1px 3px rgba(37, 99, 235, 0.35);
 }
-.nm-toolbar-right {
-  margin-left: auto;
+.tbd-hint { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+
+.tbd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.tbd-board {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tbd-board-head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 9px;
+  padding: 0 4px 12px;
+  border-bottom: 1px solid var(--border);
 }
-.nm-hint { font-size: 11.5px; color: var(--text-muted); }
-.nm-scale { display: inline-flex; align-items: center; gap: 6px; }
-.nm-scale-lbl { font-size: 10.5px; color: var(--text-muted); }
-.nm-scale-bar {
-  width: 70px;
-  height: 8px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-  background: linear-gradient(90deg, rgba(37, 99, 235, 0.06), rgba(37, 99, 235, 0.92));
+.tbd-dot {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 3.5px;
+  background: var(--hue);
 }
-.nm-scale-bar.lat {
-  background: linear-gradient(90deg, rgba(220, 38, 38, 0.06), rgba(220, 38, 38, 0.92));
+.tbd-board-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
-
-.nm-scroll { overflow-x: auto; }
-.nm-grid { display: grid; gap: 4px; min-width: 480px; }
-
-.nm-corner {
-  display: flex;
-  align-items: flex-end;
-  padding: 4px 6px;
-  font-size: 11px;
+.tbd-board-sub {
+  font-size: 11.5px;
   color: var(--text-muted);
-  white-space: nowrap;
-}
-.nm-corner-x { color: var(--border-strong); margin: 0 2px; }
-
-.nm-head {
   font-family: var(--mono);
-  font-size: 12.5px;
+}
+.tbd-filterchip {
+  margin-left: auto;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
   font-weight: 600;
-  color: var(--text-2);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 9px;
+  font-family: var(--mono);
+  color: var(--hue);
+  background: var(--hue-soft);
+}
+
+.tbd-rows { display: flex; flex-direction: column; gap: 2px; }
+.tbd-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 10px 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
   text-align: left;
+  transition: background .12s, border-color .12s;
+}
+button.tbd-row:not(:disabled) { cursor: pointer; }
+button.tbd-row:not(:disabled):hover {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+.tbd-row.active {
+  background: var(--hue-soft);
+  border-color: var(--hue);
+}
+
+.tbd-rank {
+  flex: none;
+  width: 27px;
+  height: 27px;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--surface-3);
+  font-family: var(--mono);
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--text-3);
+}
+.tbd-rank.top { background: var(--hue); color: #fff; }
+
+.tbd-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tbd-line1 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tbd-key {
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: background .1s, border-color .1s, color .1s;
 }
-.nm-head.col { text-align: center; align-self: end; }
-.nm-head.row { display: flex; align-items: center; gap: 7px; }
-.nm-head-key { overflow: hidden; text-overflow: ellipsis; }
-.nm-rank {
+.tbd-key.none { font-style: italic; font-weight: 500; color: var(--text-muted); }
+.tbd-val {
   flex: none;
-  width: 14px;
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-align: right;
-}
-button.nm-head:not(:disabled) { cursor: pointer; }
-button.nm-head:not(:disabled):hover {
-  background: var(--surface);
-  border-color: var(--border-strong);
-}
-.nm-head.hl {
-  background: var(--surface);
-  border-color: var(--border-strong);
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
   color: var(--text);
 }
-.nm-head.active {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.10);
-}
-.nm-head.active .nm-rank { color: var(--accent); }
-.nm-head.none { font-style: italic; color: var(--text-muted); }
-.nm-head.sum {
-  background: transparent;
-  border-color: transparent;
-  color: var(--text-muted);
-  font-family: var(--sans);
-  font-size: 11.5px;
-  font-weight: 600;
-}
-.nm-head.col.sum { text-align: center; }
 
-.nm-cell {
-  min-height: 46px;
-  padding: 6px 9px;
-  border-radius: 6px;
-  background: var(--surface-2);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 2px;
-  transition: background .2s;
-}
-.nm-cell .nm-v {
-  font-family: var(--mono);
-  font-size: 13.5px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-  line-height: 1.2;
-}
-.nm-cell .nm-s {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-3);
-  line-height: 1.2;
-}
-.nm-cell.heat:hover { box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.30); }
-.nm-cell.dark .nm-v { color: #fff; }
-.nm-cell.dark .nm-s { color: rgba(255, 255, 255, 0.82); }
-.nm-cell.empty { background: transparent; border: 1px dashed var(--border); }
-.nm-dash { color: var(--text-muted); font-family: var(--mono); }
-
-/* 합계 셀: 좌측 정렬 + 값·비중 한 줄 + 비중 미니바 */
-.nm-cell.sum {
-  background: var(--surface);
-  border: 1px dashed var(--border-strong);
-  align-items: stretch;
-  gap: 4px;
-}
-.nm-sumline {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-}
-.nm-sbar {
-  display: block;
-  height: 5px;
-  border-radius: 3px;
+.tbd-barrow { display: flex; align-items: center; gap: 9px; }
+.tbd-bar {
+  flex: 1;
+  height: 10px;
+  border-radius: 5px;
   background: var(--surface-3);
   overflow: hidden;
 }
-.nm-sbar-f {
+.tbd-bar-f {
   display: block;
   height: 100%;
-  border-radius: 3px;
-  background: var(--accent);
-  transition: width .25s;
+  border-radius: 5px;
+  transition: width .3s;
 }
-
-/* 전체 합계: 다크 앵커 셀 */
-.nm-cell.grand {
-  background: #1f2937;
-  border: 1px solid #1f2937;
-  align-items: stretch;
+.tbd-pct {
+  flex: none;
+  width: 50px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
 }
-.nm-cell.grand .nm-v { color: #fff; font-size: 14.5px; }
-.nm-cell.grand .nm-s { color: rgba(255, 255, 255, 0.72); }
-
-.nm-note { font-size: 11.5px; color: var(--text-muted); }
+.tbd-meta {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ── token 최근 호출 테이블 ── */
 .dash-title-note { color: var(--text-muted); }

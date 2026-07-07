@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { TokenChart } from "@/components/TokenChart";
 import { TokenLatencyChart, fmtDuration } from "@/components/TokenLatencyChart";
-import { NodeModelMatrix } from "@/components/NodeModelMatrix";
+import { TokenBreakdown } from "@/components/TokenBreakdown";
 import { TokenStatsCards } from "@/components/TokenStatsCards";
 import { QuestionsTable } from "@/components/QuestionsTable";
 import { TopList } from "@/components/TopList";
@@ -262,28 +262,14 @@ export default function TokensPage() {
             </div>
           </section>
 
-          <section className="dash-card">
-            <div className="dash-card-head">
-              <div className="dash-card-title-group">
-                <span className="dash-card-title">노드 × 모델</span>
-                <span className="dash-card-sub">
-                  행=NODE_NM · 열=MODEL_NM · 오른쪽/아래 = 합계
-                  {nodeNm ? ` · 노드 필터: ${nodeNm}` : ""}
-                  {modelNm ? ` · 모델 필터: ${modelNm}` : ""}
-                </span>
-              </div>
-            </div>
-            <div className="dash-card-body">
-              <NodeModelMatrix
-                stats={stats}
-                emptyText="노드/모델 데이터 없음"
-                onSelectNode={onSelectNode}
-                onSelectModel={onSelectModel}
-                selectedNode={nodeNm || undefined}
-                selectedModel={modelNm || undefined}
-              />
-            </div>
-          </section>
+          <TokenBreakdown
+            stats={stats}
+            emptyText="데이터 없음"
+            onSelectNode={onSelectNode}
+            onSelectModel={onSelectModel}
+            selectedNode={nodeNm || undefined}
+            selectedModel={modelNm || undefined}
+          />
 
           <section className="dash-card">
             <div className="dash-card-head">

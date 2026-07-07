@@ -9,8 +9,7 @@ function fteDisplay(fte: number | null): string {
 
 /**
  * 이억수 TL 프로필 카드. 좌측의 "잘 보이는" 신분증 형태 카드.
- * FTE 는 fteStats(데이터 집계)가 있으면 그 연간 FTE 를, 없으면(=DB 미연결)
- * profile.fte(수동 입력)를 폴백으로 표시한다.
+ * FTE 는 fteStats(데이터 집계)의 연간 FTE 를 표시하고, 없으면(=CUBE DB 미연결) '—'.
  */
 export function ProfileCard({
   profile,
@@ -24,10 +23,10 @@ export function ProfileCard({
     .map((s) => s.trim())
     .filter(Boolean);
 
-  const fteValue = fteStats ? fteStats.annualFte : profile.fte;
+  const fteValue = fteStats ? fteStats.annualFte : null;
   const fteNote = fteStats
-    ? `2026-01-01 ~ 현재 · 액션 성공 ${fteStats.totalCount.toLocaleString()}건 × ${fteStats.minutesPerCase}분 환산`
-    : profile.fteNote;
+    ? `2026-01-01 ~ 현재 · 액션 성공 ${fteStats.totalCount.toLocaleString()}건 누적`
+    : "CUBE DB 연결 시 자동 집계됩니다";
 
   return (
     <section className="agent-card">

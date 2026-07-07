@@ -163,8 +163,8 @@ export interface TopItem {
 // Agent profile (이억수 TL 프로필 카드)
 //
 // 통계(Trace)와는 성격이 다른 "에이전트 소개" 데이터. data/agent-profile.json 에
-// 영속 저장하고 ADMIN 페이지에서 편집한다. FTE(성과 지표)는 추후 Dashboard 집계와
-// 연계해 자동 계산할 예정이라 지금은 수동 입력값(또는 null = 측정 예정)으로 둔다.
+// 영속 저장하고 ADMIN 페이지에서 편집한다. FTE(성과 지표)는 실데이터로 자동 집계하며
+// (fte.ts), 계산식 상수(액션별 환산 분 등)만 프로필에 저장해 ADMIN 에서 커스터마이즈한다.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface WorkTask {
@@ -174,6 +174,14 @@ export interface WorkTask {
   desc: string;
   /** 선택: 처리량/성과 같은 짧은 지표 (예: "1,240건/월") */
   metric?: string;
+}
+
+/** FTE 계산식의 액션별 환산 분. action 은 DB 의 ACTION_TYP 값(GAIA 기록)과 일치해야 한다. */
+export interface FteActionMinute {
+  /** ACTION_TYP 값 (예: "SEA", "AUTOQUAL_CANCEL") */
+  action: string;
+  /** 해당 액션 성공 1건당 환산 분(分) */
+  minutes: number;
 }
 
 export interface AgentProfile {
@@ -187,12 +195,10 @@ export interface AgentProfile {
   workingHours: string;
   /** 보유 스킬 */
   skills: string[];
-  /** 성과 지표 FTE. null = 아직 측정 전(Dashboard 연계 예정) */
-  fte: number | null;
-  /** FTE 산정 방식/주석 (UI 보조 설명) */
-  fteNote: string;
-  /** FTE 계산식: 액션 성공 1건당 환산 분(分). ADMIN 에서 편집 가능 (기본 5) */
-  fteMinutesPerCase: number;
+  /** FTE 계산식: ACTION_TYP 값별 성공 1건당 환산 분. ADMIN 에서 편집 (액션마다 다르게 줄 수 있다) */
+  fteActionMinutes: FteActionMinute[];
+  /** FTE 계산식: 위 목록에 없는 액션(ACTION_TYP 미기록 트레이스 포함)의 건당 환산 분 (기본 5) */
+  fteDefaultMinutes: number;
   /** FTE 계산식: 1 FTE(1인 1년)에 해당하는 연간 분(分). ADMIN 에서 편집 가능 (기본 65,984) */
   fteAnnualMinutes: number;
   /** 한 줄 소개 */
@@ -213,9 +219,11 @@ export const DEFAULT_PROFILE: AgentProfile = {
   rank: "CL2 1년차",
   workingHours: "24시간 365일",
   skills: ["시즈닝", "AutoQual 취소"],
-  fte: null,
-  fteNote: "Dashboard 집계 연계 예정 — 산정식 확정 후 자동 반영",
-  fteMinutesPerCase: 5,
+  fteActionMinutes: [
+    { action: "SEA", minutes: 5 },
+    { action: "AUTOQUAL_CANCEL", minutes: 5 },
+  ],
+  fteDefaultMinutes: 5,
   fteAnnualMinutes: 65984,
   tagline: "쉬지 않고 일하는 우리 팀의 AI 에이전트",
   avatar: "🧑‍🍳",
@@ -236,29 +244,28 @@ export const DEFAULT_PROFILE: AgentProfile = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FTE 성과 지표 (이억수 TL)
-//   연간 FTE  = (2026-01-01~현재 액션 성공 트레이스 수) × 건당 분 ÷ 연간 분
-//   월별 FTE  = (해당 월 액션 성공 수) × 건당 분 ÷ 연간 분 × 12   (월 → 연 환산)
-//   건당 분(기본 5)·연간 분(기본 65,984)은 프로필(fteMinutesPerCase/fteAnnualMinutes,
-//   ADMIN 편집)에서 가져온다. FTE 1 = 1년간 1인분(1 person-year)의 일을 했다는 의미.
+//   연간 FTE  = Σ(액션별 성공 수 × 액션별 환산 분) ÷ 연간 분
+//   월별 FTE  = (해당 월 환산 분 합) ÷ 연간 분 × 12   (월 → 연 환산)
+//   계산식 상수(액션별 분/기본 분/연간 분)는 프로필(fteActionMinutes/fteDefaultMinutes/
+//   fteAnnualMinutes, ADMIN 편집)에서 가져온다. FTE 1 = 1년간 1인분(1 person-year).
 //   '액션 성공' = 시즈닝·AutoQual 취소 성공 트레이스 (대시보드 ok 기준: 에러 없고
-//   CUBE 응답에 실패 문구(ACTION_FAIL_PHRASES)가 없는 트레이스).
+//   CUBE 응답에 실패 문구(ACTION_FAIL_PHRASES)가 없는 트레이스). 액션 구분은
+//   GAIA 의 ACTION_TYP (예: SEA/AUTOQUAL_CANCEL) — db.ts monthlyActionSuccess 참고.
 // ─────────────────────────────────────────────────────────────────────────────
 export interface FteMonth {
   /** "YYYY-MM" */
   ym: string;
   /** 해당 월 액션 성공 트레이스 수 */
   count: number;
-  /** 월 환산(annualized) FTE = count × 건당 분 ÷ 연간 분 × 12 */
+  /** 월 환산(annualized) FTE = 해당 월 환산 분 합 ÷ 연간 분 × 12 */
   fte: number;
 }
 
 export interface FteStats {
-  /** 누적 연간 FTE = totalCount × 건당 분 ÷ 연간 분 */
+  /** 누적 연간 FTE = Σ(액션별 성공 수 × 환산 분) ÷ 연간 분 */
   annualFte: number;
   /** 2026-01-01~현재 누적 액션 성공 수 */
   totalCount: number;
-  /** 계산에 적용된 성공 1건당 환산 분 (프로필 상수 echo — UI 주석 표기용) */
-  minutesPerCase: number;
   /** 집계 구간 (ISO, TZ 없음) */
   from: string;
   to: string;

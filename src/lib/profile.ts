@@ -9,7 +9,7 @@
 
 import fs from "fs";
 import path from "path";
-import { AgentProfile, DEFAULT_PROFILE, WorkTask } from "./types";
+import { AgentProfile, DEFAULT_PROFILE, FteActionMinute, WorkTask } from "./types";
 import { logger } from "./logger";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -37,14 +37,6 @@ export function normalizeProfile(raw: unknown): AgentProfile {
   const str = (k: keyof AgentProfile, d: string) =>
     typeof r[k] === "string" ? (r[k] as string) : d;
 
-  let fte: number | null = DEFAULT_PROFILE.fte;
-  if (typeof r.fte === "number" && Number.isFinite(r.fte)) fte = r.fte;
-  else if (r.fte === null) fte = null;
-  else if (typeof r.fte === "string" && r.fte.trim() !== "") {
-    const n = Number(r.fte);
-    fte = Number.isFinite(n) ? n : null;
-  }
-
   const skills = Array.isArray(r.skills)
     ? r.skills.filter((s): s is string => typeof s === "string" && s.trim() !== "")
     : DEFAULT_PROFILE.skills;
@@ -55,15 +47,31 @@ export function normalizeProfile(raw: unknown): AgentProfile {
     return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : d;
   };
 
+  // 액션(ACTION_TYP)별 환산 분: 액션명이 비었거나 분이 0 이하/비숫자인 행은 버린다.
+  // 필드 자체가 없으면(구버전 저장분) 기본 매핑으로 채운다.
+  let fteActionMinutes: FteActionMinute[];
+  if (Array.isArray(r.fteActionMinutes)) {
+    fteActionMinutes = [];
+    for (const item of r.fteActionMinutes) {
+      if (!item || typeof item !== "object") continue;
+      const a = item as Record<string, unknown>;
+      const action = typeof a.action === "string" ? a.action.trim() : "";
+      const minutes = posNum(a.minutes, 0);
+      if (action !== "" && minutes > 0) fteActionMinutes.push({ action, minutes });
+    }
+  } else {
+    fteActionMinutes = DEFAULT_PROFILE.fteActionMinutes.map((a) => ({ ...a }));
+  }
+
   return {
     name:         str("name", DEFAULT_PROFILE.name),
     nickname:     str("nickname", DEFAULT_PROFILE.nickname),
     rank:         str("rank", DEFAULT_PROFILE.rank),
     workingHours: str("workingHours", DEFAULT_PROFILE.workingHours),
     skills,
-    fte,
-    fteNote:      str("fteNote", DEFAULT_PROFILE.fteNote),
-    fteMinutesPerCase: posNum(r.fteMinutesPerCase, DEFAULT_PROFILE.fteMinutesPerCase),
+    fteActionMinutes,
+    // 구버전의 단일 건당 분(fteMinutesPerCase)은 기본 분으로 마이그레이션
+    fteDefaultMinutes: posNum(r.fteDefaultMinutes ?? r.fteMinutesPerCase, DEFAULT_PROFILE.fteDefaultMinutes),
     fteAnnualMinutes:  posNum(r.fteAnnualMinutes, DEFAULT_PROFILE.fteAnnualMinutes),
     tagline:      str("tagline", DEFAULT_PROFILE.tagline),
     avatar:       str("avatar", DEFAULT_PROFILE.avatar),

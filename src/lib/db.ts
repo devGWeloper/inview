@@ -211,22 +211,36 @@ export async function fetchTraceIdsBy(
   }
 }
 
-// FTE 산정용: 월별 '액션 성공' 트레이스 수 (시즈닝·AutoQual 취소 공통).
+// FTE 산정용: 월별·액션별 '액션 성공' 트레이스 수.
 //   성공 = 트레이스의 어떤 행에도 ERR_CD 가 없고, CUBE 응답에 액션 실패 문구
 //   (ACTION_FAIL_PHRASES: 'Seasoning 실패'/'AutoQual 취소 실패')가 없는 트레이스
-//   (대시보드 ok 정의와 일치). 액션 결과는 CUBE 레이어에서 판정되므로
-//   CUBE DB 한 곳에서 집계한다. CUBE 미연결/드라이버 없음이면 null 반환(수동 fte 폴백).
-const ACTION_LAYER: LayerKey = "CUBE";
+//   (대시보드 ok 정의와 일치).
+//   성공 판정·월 귀속(첫 recv)은 CUBE DB 에서, 액션 구분은 ACTION_TYP 을 기록하는
+//   GAIA DB(/api/action-types 와 동일 레이어)에서 조회해 TRACE_ID 로 JS 조인한다.
+//   (액션별 환산 분이 다를 수 있어 액션 단위 분해가 필요 — fte.ts 참고.)
+//   GAIA 미연결/조회 실패 시 action=null 로 집계돼 기본 분으로 계산된다(무해).
+//   CUBE 미연결/드라이버 없음이면 null 반환(카드는 '—' 표시).
+const ACTION_SUCCESS_LAYER: LayerKey = "CUBE";
+const ACTION_TYP_LAYER: LayerKey = "GAIA";
+
+export interface MonthlyActionSuccess {
+  /** "YYYY-MM" */
+  ym: string;
+  /** GAIA 의 ACTION_TYP 값 (예: "SEA"/"AUTOQUAL_CANCEL"). 미기록/GAIA 미연결이면 null */
+  action: string | null;
+  count: number;
+}
 
 export async function monthlyActionSuccess(
   fromIso: string,
   toIso: string
-): Promise<{ ym: string; count: number }[] | null> {
-  const cfg = readConfig(ACTION_LAYER);
+): Promise<MonthlyActionSuccess[] | null> {
+  const cfg = readConfig(ACTION_SUCCESS_LAYER);
   if (!cfg) return null;
   const oracle = await getOracle();
   if (!oracle) return null;
 
+  const dateBinds = { dateFrom: fromIso, dateTo: toIso };
   const failConds = ACTION_FAIL_PHRASES.map(
     (_, i) => `AND SUM(CASE WHEN RESP_MSG_CTN LIKE :failPhrase${i} THEN 1 ELSE 0 END) = 0`
   );
@@ -234,43 +248,89 @@ export async function monthlyActionSuccess(
     ACTION_FAIL_PHRASES.map((p, i) => [`failPhrase${i}`, `%${p}%`])
   );
 
-  const sql = `
-    SELECT YM, COUNT(*) AS CNT FROM (
-      SELECT TRACE_ID, TO_CHAR(MIN(RECV_TM), 'YYYY-MM') AS YM
-        FROM BIZ_AIACTIONTXN_HIS
-       WHERE RECV_TM >= TO_TIMESTAMP(:dateFrom, 'YYYY-MM-DD"T"HH24:MI:SS')
-         AND RECV_TM <= TO_TIMESTAMP(:dateTo,   'YYYY-MM-DD"T"HH24:MI:SS')
-       GROUP BY TRACE_ID
-      HAVING SUM(CASE WHEN ERR_CD IS NOT NULL THEN 1 ELSE 0 END) = 0
-         ${failConds.join("\n         ")}
-    )
-    GROUP BY YM
-    ORDER BY YM`;
+  // 1) CUBE: 성공 트레이스별 귀속 월 (FTE 창 전체라 트레이스당 1행 — TRACE_ID+YM 만 가져와 전송량을 줄인다)
+  const successSql = `
+    SELECT TRACE_ID, TO_CHAR(MIN(RECV_TM), 'YYYY-MM') AS YM
+      FROM BIZ_AIACTIONTXN_HIS
+     WHERE RECV_TM >= TO_TIMESTAMP(:dateFrom, 'YYYY-MM-DD"T"HH24:MI:SS')
+       AND RECV_TM <= TO_TIMESTAMP(:dateTo,   'YYYY-MM-DD"T"HH24:MI:SS')
+     GROUP BY TRACE_ID
+    HAVING SUM(CASE WHEN ERR_CD IS NOT NULL THEN 1 ELSE 0 END) = 0
+       ${failConds.join("\n       ")}`;
 
-  let conn: Awaited<ReturnType<typeof oracle.getConnection>> | undefined;
   const t0 = Date.now();
-  try {
-    conn = await oracle.getConnection(cfg);
-    const result = await conn.execute(
-      sql,
-      { dateFrom: fromIso, dateTo: toIso, ...failBinds },
-      { outFormat: oracle.OBJECT }
-    );
-    const rows = (result.rows ?? []) as Record<string, unknown>[];
-    const out = rows.map((r) => ({
-      ym: String(r["YM"] ?? r["ym"] ?? ""),
-      count: Number(r["CNT"] ?? r["cnt"] ?? 0),
-    }));
-    logger.info("monthlyActionSuccess ok", { months: out.length, ms: Date.now() - t0 });
-    return out;
-  } catch (e) {
-    logger.error("monthlyActionSuccess failed", { ms: Date.now() - t0, err: String(e) });
-    return null;
-  } finally {
-    if (conn) {
-      try { await conn.close(); } catch { /* ignore */ }
+  let successes: { traceId: string; ym: string }[];
+  {
+    let conn: Awaited<ReturnType<typeof oracle.getConnection>> | undefined;
+    try {
+      conn = await oracle.getConnection(cfg);
+      const result = await conn.execute(successSql, { ...dateBinds, ...failBinds }, { outFormat: oracle.OBJECT });
+      const rows = (result.rows ?? []) as Record<string, unknown>[];
+      successes = rows.map((r) => ({
+        traceId: String(r["TRACE_ID"] ?? r["trace_id"] ?? ""),
+        ym: String(r["YM"] ?? r["ym"] ?? ""),
+      }));
+    } catch (e) {
+      logger.error("monthlyActionSuccess failed (CUBE)", { ms: Date.now() - t0, err: String(e) });
+      return null;
+    } finally {
+      if (conn) {
+        try { await conn.close(); } catch { /* ignore */ }
+      }
     }
   }
+
+  // 2) GAIA: TRACE_ID → ACTION_TYP (실패해도 액션 미상(null)으로 계속 진행)
+  const actionByTrace = new Map<string, string>();
+  const gaiaCfg = readConfig(ACTION_TYP_LAYER);
+  if (gaiaCfg && successes.length > 0) {
+    let conn: Awaited<ReturnType<typeof oracle.getConnection>> | undefined;
+    try {
+      conn = await oracle.getConnection(gaiaCfg);
+      const result = await conn.execute(
+        `SELECT TRACE_ID, MAX(ACTION_TYP) AS ACTION_TYP
+           FROM BIZ_AIACTIONTXN_HIS
+          WHERE RECV_TM >= TO_TIMESTAMP(:dateFrom, 'YYYY-MM-DD"T"HH24:MI:SS')
+            AND RECV_TM <= TO_TIMESTAMP(:dateTo,   'YYYY-MM-DD"T"HH24:MI:SS')
+            AND ACTION_TYP IS NOT NULL
+          GROUP BY TRACE_ID`,
+        dateBinds,
+        { outFormat: oracle.OBJECT }
+      );
+      for (const r of (result.rows ?? []) as Record<string, unknown>[]) {
+        const id = (r["TRACE_ID"] ?? r["trace_id"]) as string | null;
+        const action = (r["ACTION_TYP"] ?? r["action_typ"]) as string | null;
+        if (id && action) actionByTrace.set(id, action);
+      }
+    } catch (e) {
+      logger.warn("monthlyActionSuccess: ACTION_TYP lookup failed — 전부 기본 분으로 계산", { err: String(e) });
+    } finally {
+      if (conn) {
+        try { await conn.close(); } catch { /* ignore */ }
+      }
+    }
+  }
+
+  // 3) JS 조인: (월, 액션)별 성공 수 집계
+  const acc = new Map<string, MonthlyActionSuccess>();
+  for (const s of successes) {
+    const action = actionByTrace.get(s.traceId) ?? null;
+    const key = `${s.ym}|${action ?? ""}`;
+    let m = acc.get(key);
+    if (!m) {
+      m = { ym: s.ym, action, count: 0 };
+      acc.set(key, m);
+    }
+    m.count += 1;
+  }
+  const out = Array.from(acc.values()).sort((a, b) => a.ym.localeCompare(b.ym));
+  logger.info("monthlyActionSuccess ok", {
+    traces: successes.length,
+    actionMatched: actionByTrace.size,
+    groups: out.length,
+    ms: Date.now() - t0,
+  });
+  return out;
 }
 
 export async function fetchByTraceId(traceId: string): Promise<TraceRow[]> {

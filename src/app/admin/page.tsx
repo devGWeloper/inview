@@ -15,8 +15,9 @@ export default function AdminPage() {
 
   const [profile, setProfile] = useState<AgentProfile | null>(null);
   const [skillsText, setSkillsText] = useState("");
-  const [fteText, setFteText] = useState("");
-  const [fteMinText, setFteMinText] = useState("");
+  // FTE 계산식 상수 편집용 (입력 중엔 문자열로 두고 저장 시 숫자 검증)
+  const [fteActs, setFteActs] = useState<{ action: string; minutes: string }[]>([]);
+  const [fteDefText, setFteDefText] = useState("");
   const [fteAnnText, setFteAnnText] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -50,8 +51,8 @@ export default function AdminPage() {
         if (!alive) return;
         setProfile(data.profile);
         setSkillsText(data.profile.skills.join(", "));
-        setFteText(data.profile.fte === null ? "" : String(data.profile.fte));
-        setFteMinText(String(data.profile.fteMinutesPerCase));
+        setFteActs(data.profile.fteActionMinutes.map((a) => ({ action: a.action, minutes: String(a.minutes) })));
+        setFteDefText(String(data.profile.fteDefaultMinutes));
         setFteAnnText(String(data.profile.fteAnnualMinutes));
       } catch (e) {
         if (alive) setMsg({ kind: "err", text: "불러오기 실패: " + String(e) });
@@ -91,26 +92,51 @@ export default function AdminPage() {
     });
   }
 
+  function setFteAct(idx: number, field: "action" | "minutes", value: string) {
+    setFteActs((list) => list.map((r, i) => (i === idx ? { ...r, [field]: value } : r)));
+  }
+  function addFteAct() {
+    setFteActs((list) => [...list, { action: "", minutes: "" }]);
+  }
+  function removeFteAct(idx: number) {
+    setFteActs((list) => list.filter((_, i) => i !== idx));
+  }
+
   async function onSave(e: React.FormEvent) {
     e.preventDefault();
     if (!profile) return;
     setSaving(true);
     setMsg(null);
     const skills = skillsText.split(",").map((s) => s.trim()).filter(Boolean);
-    const fte = fteText.trim() === "" ? null : Number(fteText);
-    if (fte !== null && !Number.isFinite(fte)) {
-      setSaving(false);
-      setMsg({ kind: "err", text: "FTE는 숫자여야 합니다 (비우면 '측정 예정')." });
-      return;
+
+    // FTE 계산식 검증: 액션별 분 (완전히 빈 행은 무시, 반쪽 입력·0 이하·중복은 에러)
+    const fteActionMinutes: { action: string; minutes: number }[] = [];
+    const seen = new Set<string>();
+    for (const row of fteActs) {
+      const action = row.action.trim();
+      const minutes = Number(row.minutes);
+      if (action === "" && row.minutes.trim() === "") continue;
+      if (action === "" || row.minutes.trim() === "" || !Number.isFinite(minutes) || minutes <= 0) {
+        setSaving(false);
+        setMsg({ kind: "err", text: "액션별 환산 분: ACTION_TYP 값과 0보다 큰 분을 함께 입력하세요." });
+        return;
+      }
+      if (seen.has(action)) {
+        setSaving(false);
+        setMsg({ kind: "err", text: `액션별 환산 분: '${action}' 이(가) 중복 입력되었습니다.` });
+        return;
+      }
+      seen.add(action);
+      fteActionMinutes.push({ action, minutes });
     }
-    const fteMinutesPerCase = Number(fteMinText);
+    const fteDefaultMinutes = Number(fteDefText);
     const fteAnnualMinutes = Number(fteAnnText);
     if (
-      !Number.isFinite(fteMinutesPerCase) || fteMinutesPerCase <= 0 ||
+      !Number.isFinite(fteDefaultMinutes) || fteDefaultMinutes <= 0 ||
       !Number.isFinite(fteAnnualMinutes) || fteAnnualMinutes <= 0
     ) {
       setSaving(false);
-      setMsg({ kind: "err", text: "FTE 계산식 상수(건당 분·연간 분)는 0보다 큰 숫자여야 합니다." });
+      setMsg({ kind: "err", text: "FTE 계산식 상수(기본 분·연간 분)는 0보다 큰 숫자여야 합니다." });
       return;
     }
     try {
@@ -120,15 +146,15 @@ export default function AdminPage() {
           "Content-Type": "application/json",
           [ADMIN_PASSWORD_HEADER]: ADMIN_PASSWORD,
         },
-        body: JSON.stringify({ ...profile, skills, fte, fteMinutesPerCase, fteAnnualMinutes }),
+        body: JSON.stringify({ ...profile, skills, fteActionMinutes, fteDefaultMinutes, fteAnnualMinutes }),
       });
       if (res.status === 401) throw new Error("비밀번호가 올바르지 않습니다.");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: { profile: AgentProfile } = await res.json();
       setProfile(data.profile);
       setSkillsText(data.profile.skills.join(", "));
-      setFteText(data.profile.fte === null ? "" : String(data.profile.fte));
-      setFteMinText(String(data.profile.fteMinutesPerCase));
+      setFteActs(data.profile.fteActionMinutes.map((a) => ({ action: a.action, minutes: String(a.minutes) })));
+      setFteDefText(String(data.profile.fteDefaultMinutes));
       setFteAnnText(String(data.profile.fteAnnualMinutes));
       setMsg({ kind: "ok", text: "저장되었습니다." });
     } catch (e) {
@@ -202,24 +228,41 @@ export default function AdminPage() {
         </fieldset>
 
         <fieldset className="admin-section">
-          <legend>성과 지표 (FTE) — 자동 집계</legend>
-          <div className="admin-grid">
-            <Field label="성공 1건당 환산 분 (기본 5)">
-              <input value={fteMinText} onChange={(e) => setFteMinText(e.target.value)} placeholder="예: 5" inputMode="decimal" />
+          <legend>성과 지표 (FTE) — 계산식</legend>
+          <p className="admin-hint admin-hint-top">
+            FTE = <b>Σ(액션별 성공 수 × 환산 분) ÷ 연간 분</b> (월별은 ×12 연환산) · 2026-01-01부터 자동 집계.
+            액션은 DB 의 <b>ACTION_TYP</b> 값(예: SEA, AUTOQUAL_CANCEL)과 일치해야 하며,
+            목록에 없는 액션은 기본 환산 분으로 계산됩니다. 저장 즉시 카드/대시보드 FTE 에 반영됩니다.
+          </p>
+          <div className="admin-fte-actions">
+            {fteActs.map((row, i) => (
+              <div className="admin-fte-row" key={i}>
+                <input
+                  value={row.action}
+                  onChange={(e) => setFteAct(i, "action", e.target.value)}
+                  placeholder="ACTION_TYP (예: SEA)"
+                  aria-label="액션 타입"
+                />
+                <input
+                  value={row.minutes}
+                  onChange={(e) => setFteAct(i, "minutes", e.target.value)}
+                  placeholder="환산 분 (예: 5)"
+                  inputMode="decimal"
+                  aria-label="성공 1건당 환산 분"
+                />
+                <button type="button" className="btn ghost xs" onClick={() => removeFteAct(i)} aria-label="삭제">✕</button>
+              </div>
+            ))}
+          </div>
+          <button type="button" className="btn ghost xs" onClick={addFteAct}>+ 액션 추가</button>
+          <div className="admin-grid admin-fte-consts">
+            <Field label="기본 환산 분 (목록에 없는 액션 · 기본 5)">
+              <input value={fteDefText} onChange={(e) => setFteDefText(e.target.value)} placeholder="예: 5" inputMode="decimal" />
             </Field>
             <Field label="1 FTE 연간 분 (기본 65,984)">
               <input value={fteAnnText} onChange={(e) => setFteAnnText(e.target.value)} placeholder="예: 65984" inputMode="numeric" />
             </Field>
-            <Field label="FTE 폴백 값 (DB 미연결 시에만 사용)">
-              <input value={fteText} onChange={(e) => setFteText(e.target.value)} placeholder="예: 4.32" inputMode="decimal" />
-            </Field>
-            <Field label="FTE 주석 (폴백 시 표시)"><input value={profile.fteNote} onChange={(e) => set("fteNote", e.target.value)} /></Field>
           </div>
-          <p className="admin-hint">
-            ※ FTE 는 <b>2026-01-01 ~ 현재 액션 성공 수(시즈닝·AutoQual 취소) × {fteMinText || "?"} ÷ {fteAnnText || "?"}</b> 로
-            자동 집계되며(월별은 ×12 연환산), CUBE DB 가 연결돼 있으면 폴백 입력값 대신 실측값이 표시됩니다.
-            건당 분·연간 분 상수는 저장 즉시 카드/대시보드 FTE 에 반영됩니다.
-          </p>
         </fieldset>
 
         <fieldset className="admin-section">

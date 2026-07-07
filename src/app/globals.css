@@ -2457,6 +2457,7 @@ button.tbd-row:not(:disabled):hover {
 .admin-field input,
 .admin-task-fields input,
 .admin-task-icon,
+.admin-fte-row input,
 .admin-textarea {
   border: 1px solid var(--border-strong); border-radius: 7px;
   padding: 8px 11px; font-size: 14px; background: var(--surface); width: 100%;
@@ -2464,6 +2465,7 @@ button.tbd-row:not(:disabled):hover {
 .admin-field input:focus,
 .admin-task-fields input:focus,
 .admin-task-icon:focus,
+.admin-fte-row input:focus,
 .admin-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .admin-textarea { resize: vertical; font-family: var(--sans); line-height: 1.6; }
 .admin-hint { font-size: 12px; color: var(--text-muted); margin: 10px 0 0; }
@@ -2499,6 +2501,14 @@ button.tbd-row:not(:disabled):hover {
   .admin-grid { grid-template-columns: 1fr; }
   .admin-task-fields { grid-template-columns: 1fr; }
 }
+/* FTE 계산식 — 액션(ACTION_TYP)별 환산 분 편집 행 */
+.admin-fte-actions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.admin-fte-row { display: grid; grid-template-columns: 2fr 1fr auto; gap: 8px; align-items: center; }
+.admin-fte-consts { margin-top: 14px; }
+@media (max-width: 720px) {
+  .admin-fte-row { grid-template-columns: 1fr 1fr auto; }
+}
+
 .admin-footer { display: flex; justify-content: flex-end; padding-top: 4px; }
 
 /* ---- /admin 비밀번호 게이트 ---- */

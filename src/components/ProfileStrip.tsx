@@ -36,7 +36,7 @@ export function ProfileStrip() {
 
   if (!profile) return null;
 
-  const fteValue = fteStats ? fteStats.annualFte : profile.fte;
+  const fteValue = fteStats ? fteStats.annualFte : null;
 
   return (
     <Link href="/agent" className="profile-strip" prefetch={false}>

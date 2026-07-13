@@ -44,19 +44,30 @@ function fmtMetric(v: number | null, m: MetricKey): string {
   return fmtCompact(v);
 }
 
-function rowTitle(d: TokenDimStat): string {
+function rowTitle(d: TokenDimStat, subLabel: string): string {
+  const subLine =
+    d.sub.length > 0
+      ? `\n${subLabel} 구성: ` +
+        d.sub
+          .map((s) => `${s.key} ${d.totalTokens > 0 ? ((s.totalTokens / d.totalTokens) * 100).toFixed(1) : 0}%`)
+          .join(" · ")
+      : "";
   return (
     `${d.key}\n` +
     `호출 ${d.calls.toLocaleString()}\n` +
     `IN ${d.inputTokens.toLocaleString()} · OUT ${d.outputTokens.toLocaleString()}\n` +
     `총 토큰 ${d.totalTokens.toLocaleString()}\n` +
-    `평균 지연 ${d.avgLatencyMs == null ? "측정 없음" : fmtDuration(d.avgLatencyMs)}`
+    `평균 지연 ${d.avgLatencyMs == null ? "측정 없음" : fmtDuration(d.avgLatencyMs)}` +
+    subLine
   );
 }
+
+const SUB_MAX = 3; // 행에 노출할 교차 구성 개수 (나머지는 +N)
 
 function Board({
   title,
   sub,
+  subLabel,
   hue,
   dims,
   metric,
@@ -67,6 +78,8 @@ function Board({
 }: {
   title: string;
   sub: string;
+  /** 교차 구성 라벨 — 노드 보드는 "모델", 모델 보드는 "노드" */
+  subLabel: string;
   hue: { main: string; soft: string };
   dims: TokenDimStat[];
   metric: MetricKey;
@@ -137,7 +150,7 @@ function Board({
                 className={"tbd-row" + (active ? " active" : "")}
                 onClick={clickable ? () => onSelect!(d.key) : undefined}
                 disabled={!clickable}
-                title={rowTitle(d) + (clickable ? `\n\n클릭 = ${active ? "필터 해제" : "이 값으로 필터"}` : "")}
+                title={rowTitle(d, subLabel) + (clickable ? `\n\n클릭 = ${active ? "필터 해제" : "이 값으로 필터"}` : "")}
               >
                 <span className={"tbd-rank" + (i === 0 ? " top" : "")}>{i + 1}</span>
                 <span className="tbd-main">
@@ -158,6 +171,18 @@ function Board({
                     {showShare && v != null && <span className="tbd-pct">{pct.toFixed(1)}%</span>}
                   </span>
                   <span className="tbd-meta">{meta}</span>
+                  {d.sub.length > 0 && (
+                    <span className="tbd-sub">
+                      <span className="tbd-sub-label">{subLabel}</span>
+                      {d.sub.slice(0, SUB_MAX).map((s) => (
+                        <span key={s.key} className="tbd-sub-chip">
+                          {s.key}
+                          <em>{d.totalTokens > 0 ? `${((s.totalTokens / d.totalTokens) * 100).toFixed(0)}%` : "0%"}</em>
+                        </span>
+                      ))}
+                      {d.sub.length > SUB_MAX && <span className="tbd-sub-more">+{d.sub.length - SUB_MAX}</span>}
+                    </span>
+                  )}
                 </span>
               </button>
             );
@@ -212,6 +237,7 @@ export function TokenBreakdown({
         <Board
           title="노드별"
           sub="NODE_NM"
+          subLabel="모델"
           hue={HUE.node}
           dims={stats.byNode}
           metric={metric}
@@ -223,6 +249,7 @@ export function TokenBreakdown({
         <Board
           title="모델별"
           sub="MODEL_NM"
+          subLabel="노드"
           hue={HUE.model}
           dims={stats.byModel}
           metric={metric}

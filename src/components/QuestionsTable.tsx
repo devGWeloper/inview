@@ -13,12 +13,23 @@ function fmtInt(n: number): string {
   return Math.round(n).toLocaleString();
 }
 
-type SortKey = "total" | "time";
+// 정렬 가능한 컬럼. 헤더 클릭 = 정렬 (같은 컬럼 재클릭 = 방향 토글)
+type SortKey = "time" | "in" | "out" | "total" | "calls";
+type SortDir = "asc" | "desc";
+
+const sortVal = (r: TokenQuestion, k: SortKey): number | string =>
+  k === "time" ? r.lastTm ?? "" :
+  k === "in" ? r.inputTokens :
+  k === "out" ? r.outputTokens :
+  k === "calls" ? r.calls :
+  r.totalTokens;
 
 // 질문(TRACE_ID) 단위 토큰 사용량 표.
-//  - TOTAL 정렬(기본)로 "토큰 많이 먹은 질문" 위로
-//  - 검색창으로 TRACE_ID/USER/NODE 즉시 필터 (로드된 상위 질문 범위 내)
-//  - 호출이 여러 건인 질문은 행을 펼쳐 호출별 내역 확인 (onExpand 로 on-demand 조회)
+//  - 노드/모델은 대표값이 아니라 그 질문이 실제 거친 전부를 칩으로 표시
+//    (예: actionRouterNode→SeasoningNode 흐름이면 노드 칩 2개, 모델 칩 2개)
+//  - 컬럼별 필터: TRACE_ID/USER 텍스트, NODE/MODEL 셀렉트 (로드된 상위 질문 범위 내)
+//  - 숫자/시간 헤더 클릭 = 정렬
+//  - 행 펼침 = 호출별 내역(#순서 · 노드 · 모델 · 토큰 · 실제 LLM 쿼리)
 export function QuestionsTable({
   questions,
   onExpand,
@@ -27,32 +38,52 @@ export function QuestionsTable({
   /** 질문(traceId)의 호출별 행을 가져온다 (행 펼침). */
   onExpand: (traceId: string) => Promise<TokenRow[]>;
 }) {
-  const [sort, setSort] = useState<SortKey>("total");
-  const [q, setQ] = useState("");
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "total", dir: "desc" });
+  const [fTrace, setFTrace] = useState("");
+  const [fUser, setFUser] = useState("");
+  const [fNode, setFNode] = useState("");
+  const [fModel, setFModel] = useState("");
   const [page, setPage] = useState(0);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [cache, setCache] = useState<Record<string, TokenRow[] | "loading">>({});
 
+  // NODE/MODEL 필터 옵션은 로드된 질문들에서 도출
+  const nodeOptions = useMemo(
+    () => Array.from(new Set(questions.flatMap((x) => x.nodes))).sort((a, b) => a.localeCompare(b)),
+    [questions]
+  );
+  const modelOptions = useMemo(
+    () => Array.from(new Set(questions.flatMap((x) => x.models))).sort((a, b) => a.localeCompare(b)),
+    [questions]
+  );
+
+  const hasFilter = !!(fTrace.trim() || fUser.trim() || fNode || fModel);
+  const clearFilters = () => {
+    setFTrace("");
+    setFUser("");
+    setFNode("");
+    setFModel("");
+  };
+
   const rows = useMemo(() => {
     let list = questions;
-    const t = q.trim().toLowerCase();
-    if (t) {
-      list = list.filter(
-        (x) =>
-          (x.traceId ?? "").toLowerCase().includes(t) ||
-          (x.userId ?? "").toLowerCase().includes(t) ||
-          (x.nodeNm ?? "").toLowerCase().includes(t)
-      );
-    }
-    return [...list].sort((a, b) =>
-      sort === "total"
-        ? b.totalTokens - a.totalTokens
-        : (b.lastTm ?? "").localeCompare(a.lastTm ?? "")
-    );
-  }, [questions, q, sort]);
+    const t = fTrace.trim().toLowerCase();
+    const u = fUser.trim().toLowerCase();
+    if (t) list = list.filter((x) => (x.traceId ?? "").toLowerCase().includes(t));
+    if (u) list = list.filter((x) => (x.userId ?? "").toLowerCase().includes(u));
+    if (fNode) list = list.filter((x) => x.nodes.includes(fNode));
+    if (fModel) list = list.filter((x) => x.models.includes(fModel));
+    const mul = sort.dir === "asc" ? 1 : -1;
+    return [...list].sort((a, b) => {
+      const va = sortVal(a, sort.key);
+      const vb = sortVal(b, sort.key);
+      const c = typeof va === "string" ? va.localeCompare(vb as string) : (va as number) - (vb as number);
+      return c * mul;
+    });
+  }, [questions, fTrace, fUser, fNode, fModel, sort]);
 
-  // 검색/정렬/데이터가 바뀌면 첫 페이지로
-  useEffect(() => { setPage(0); }, [q, sort, questions]);
+  // 필터/정렬/데이터가 바뀌면 첫 페이지로
+  useEffect(() => { setPage(0); }, [fTrace, fUser, fNode, fModel, sort, questions]);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const curPage = Math.min(page, pageCount - 1);
@@ -82,35 +113,32 @@ export function QuestionsTable({
     }
   };
 
+  const onSort = (key: SortKey) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === "desc" ? "asc" : "desc" } : { key, dir: "desc" }));
+
+  const SortTh = ({ k, label, num }: { k: SortKey; label: string; num?: boolean }) => (
+    <th className={num ? "num" : undefined} aria-sort={sort.key === k ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}>
+      <button type="button" className={"qth-sort" + (sort.key === k ? " active" : "")} onClick={() => onSort(k)}>
+        {label}
+        <span className="qth-arrow" aria-hidden>{sort.key === k ? (sort.dir === "asc" ? "▲" : "▼") : "↕"}</span>
+      </button>
+    </th>
+  );
+
   if (questions.length === 0) return <div className="top-empty">질문 없음</div>;
 
   return (
     <div className="qtable-wrap">
       <div className="qtable-controls">
-        <input
-          type="text"
-          className="qtable-search"
-          placeholder="🔍 TRACE_ID / USER / NODE 검색"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <div className="qtable-sort">
-          <button
-            type="button"
-            className={"qsort-btn" + (sort === "total" ? " active" : "")}
-            onClick={() => setSort("total")}
-          >
-            토큰순
+        <span className="qtable-meta">
+          {rows.length.toLocaleString()}
+          {hasFilter && ` / ${questions.length.toLocaleString()}`} 질문
+        </span>
+        {hasFilter && (
+          <button type="button" className="qfilter-clear" onClick={clearFilters}>
+            컬럼 필터 초기화 ✕
           </button>
-          <button
-            type="button"
-            className={"qsort-btn" + (sort === "time" ? " active" : "")}
-            onClick={() => setSort("time")}
-          >
-            시간순
-          </button>
-        </div>
-        <span className="qtable-meta">{rows.length.toLocaleString()} 질문</span>
+        )}
       </div>
 
       <div className="token-recent-wrap">
@@ -118,14 +146,52 @@ export function QuestionsTable({
           <thead>
             <tr>
               <th className="qcell-exp" aria-label="expand" />
-              <th>LAST_TM</th>
+              <SortTh k="time" label="LAST_TM" />
               <th>TRACE_ID (질문)</th>
+              <th>USER</th>
               <th>NODE</th>
               <th>MODEL</th>
-              <th className="num">IN</th>
-              <th className="num">OUT</th>
-              <th className="num">TOTAL</th>
-              <th className="num">CALLS</th>
+              <SortTh k="in" label="IN" num />
+              <SortTh k="out" label="OUT" num />
+              <SortTh k="total" label="TOTAL" num />
+              <SortTh k="calls" label="CALLS" num />
+            </tr>
+            <tr className="qfilter-row">
+              <th />
+              <th />
+              <th>
+                <input
+                  type="text"
+                  className="qft-input"
+                  placeholder="검색"
+                  value={fTrace}
+                  onChange={(e) => setFTrace(e.target.value)}
+                  aria-label="TRACE_ID 필터"
+                />
+              </th>
+              <th>
+                <input
+                  type="text"
+                  className="qft-input"
+                  placeholder="검색"
+                  value={fUser}
+                  onChange={(e) => setFUser(e.target.value)}
+                  aria-label="USER 필터"
+                />
+              </th>
+              <th>
+                <select className="qft-select" value={fNode} onChange={(e) => setFNode(e.target.value)} aria-label="NODE 필터">
+                  <option value="">전체</option>
+                  {nodeOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </th>
+              <th>
+                <select className="qft-select" value={fModel} onChange={(e) => setFModel(e.target.value)} aria-label="MODEL 필터">
+                  <option value="">전체</option>
+                  {modelOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </th>
+              <th colSpan={4} />
             </tr>
           </thead>
           <tbody>
@@ -143,8 +209,17 @@ export function QuestionsTable({
                     <td className="qcell-exp">{expandable ? (isOpen ? "▾" : "▸") : ""}</td>
                     <td className="mono">{fmtTs(r.lastTm)}</td>
                     <td className="mono strong">{r.traceId ?? <span className="muted">(no trace)</span>}</td>
-                    <td><span className="qnode">{r.nodeNm ?? "—"}</span></td>
-                    <td className="mono">{r.modelNm ?? "—"}</td>
+                    <td className="mono">{r.userId ?? "—"}</td>
+                    <td>
+                      <span className="qchips">
+                        {r.nodes.length === 0 ? "—" : r.nodes.map((n) => <span key={n} className="qnode">{n}</span>)}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="qchips">
+                        {r.models.length === 0 ? "—" : r.models.map((m) => <span key={m} className="qmodel">{m}</span>)}
+                      </span>
+                    </td>
                     <td className="num mono">{fmtInt(r.inputTokens)}</td>
                     <td className="num mono">{fmtInt(r.outputTokens)}</td>
                     <td className="num mono strong qtotal">
@@ -156,7 +231,7 @@ export function QuestionsTable({
                   {isOpen && (
                     <tr className="qsubrow">
                       <td />
-                      <td colSpan={8} className="qsub">
+                      <td colSpan={9} className="qsub">
                         {sub === "loading" || sub === undefined ? (
                           <span className="muted">불러오는 중…</span>
                         ) : sub.length === 0 ? (
@@ -164,19 +239,20 @@ export function QuestionsTable({
                         ) : (
                           <table className="qsub-table">
                             <tbody>
-                              {sub.map((c) => (
+                              {[...sub].reverse().map((c, i) => (
                                 <Fragment key={c.tokenId}>
                                   <tr>
+                                    <td className="qcall-idx-cell"><span className="qcall-idx">#{i + 1}</span></td>
                                     <td className="mono">{fmtTs(c.callTm)}</td>
                                     <td><span className="qnode">{c.nodeNm ?? "—"}</span></td>
-                                    <td className="mono">{c.modelNm ?? "—"}</td>
+                                    <td><span className="qmodel">{c.modelNm ?? "—"}</span></td>
                                     <td className="num mono">IN {fmtInt(c.inputTokens)}</td>
                                     <td className="num mono">OUT {fmtInt(c.outputTokens)}</td>
                                     <td className="num mono strong">{fmtInt(c.totalTokens)}</td>
                                   </tr>
                                   <tr className="qquery-row">
                                     <td />
-                                    <td colSpan={5}>
+                                    <td colSpan={6}>
                                       {c.queryCtn ? (
                                         <pre className="qquery">{c.queryCtn}</pre>
                                       ) : (

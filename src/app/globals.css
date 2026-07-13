@@ -1817,6 +1817,44 @@ button.tbd-row:not(:disabled):hover {
   text-overflow: ellipsis;
 }
 
+/* 교차 구성 — 노드 행이 실제 쓴 모델들(모델 행이면 노드들)과 토큰 비중. "노드=모델 1개" 오해 방지 */
+.tbd-sub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+.tbd-sub-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  margin-right: 2px;
+}
+.tbd-sub-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--mono);
+  background: color-mix(in srgb, var(--hue) 9%, transparent);
+  color: var(--text-2);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tbd-sub-chip em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--hue);
+}
+.tbd-sub-more { font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+
 /* ── token 최근 호출 테이블 ── */
 .dash-title-note { color: var(--text-muted); }
 .token-recent-wrap { overflow-x: auto; }
@@ -1850,33 +1888,58 @@ button.tbd-row:not(:disabled):hover {
   gap: 10px;
   margin-bottom: 10px;
 }
-.qtable-search {
-  flex: 1;
-  min-width: 0;
-  padding: 7px 10px;
-  font-size: 12.5px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text);
-}
-.qtable-sort { display: inline-flex; gap: 4px; }
-.qsort-btn {
-  padding: 6px 10px;
-  font-size: 12px;
+.qtable-meta { font-size: 12px; color: var(--text-muted); font-family: var(--mono); white-space: nowrap; }
+.qfilter-clear {
+  padding: 4px 10px;
+  font-size: 11.5px;
   font-weight: 600;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 999px;
   background: var(--surface);
   color: var(--text-2);
   cursor: pointer;
 }
-.qsort-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+.qfilter-clear:hover { border-color: var(--border-strong); background: var(--surface-2); }
+
+/* 정렬 가능한 헤더 — 클릭 = 정렬, 재클릭 = 방향 토글 */
+.qth-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
 }
-.qtable-meta { font-size: 12px; color: var(--text-muted); font-family: var(--mono); white-space: nowrap; }
+.qth-sort:hover { color: var(--text); }
+.qth-sort.active { color: var(--accent); }
+.qth-arrow { font-size: 9px; opacity: 0.55; }
+.qth-sort.active .qth-arrow { opacity: 1; }
+
+/* 컬럼별 필터 행 (thead 2번째 줄) */
+.qfilter-row th { padding: 4px 6px 8px; }
+.qft-input,
+.qft-select {
+  width: 100%;
+  min-width: 72px;
+  box-sizing: border-box;
+  padding: 4px 7px;
+  font-size: 12px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+.qft-input::placeholder { color: var(--text-muted); }
+.qft-input:focus,
+.qft-select:focus { outline: none; border-color: var(--accent); }
 
 /* ── 질문별 토큰 표 페이징 ── */
 .qpager {
@@ -1907,12 +1970,36 @@ button.tbd-row:not(:disabled):hover {
 .qrow.open { background: var(--surface-2); }
 .qrow .muted { color: var(--text-muted); }
 
-.qnode {
+/* 노드/모델 칩 — 질문이 실제 거친 전부를 나열 (TokenBreakdown 색과 동일: 노드=파랑, 모델=보라) */
+.qchips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.qnode,
+.qmodel {
   display: inline-block;
   padding: 1px 8px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
+  font-family: var(--mono);
+}
+.qnode {
+  background: color-mix(in srgb, #2563eb 11%, transparent);
+  color: #2563eb;
+}
+.qmodel {
+  background: color-mix(in srgb, #7c3aed 11%, transparent);
+  color: #7c3aed;
+}
+
+/* 펼침 상세의 호출 순번 배지 (#1 = 시간순 첫 호출) */
+.qsub-table .qcall-idx-cell { width: 34px; }
+.qcall-idx {
+  display: inline-block;
+  min-width: 22px;
+  text-align: center;
+  padding: 0 4px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
   font-family: var(--mono);
   background: var(--surface-3);
   color: var(--text-2);

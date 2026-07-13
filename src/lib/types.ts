@@ -304,10 +304,13 @@ export interface TokenQuestion {
   qKey: string;
   /** 질문의 TRACE_ID (없으면 null) */
   traceId: string | null;
-  /** 이 질문이 탄 노드 (보통 1개; 혼합 시 대표값) */
-  nodeNm: string | null;
-  /** 대표 모델 */
-  modelNm: string | null;
+  /**
+   * 이 질문의 LLM 호출이 거친 노드 전부 (첫 호출 순서, 중복 제거).
+   * 대표값 하나만 보여주면 "이 노드는 이 모델만 쓴다" 로 오해하게 되어 전체를 내린다.
+   */
+  nodes: string[];
+  /** 이 질문의 호출에 사용된 모델 전부 (첫 호출 순서, 중복 제거) */
+  models: string[];
   userId: string | null;
   /** 이 질문에서 발생한 LLM 호출 수 */
   calls: number;
@@ -340,6 +343,13 @@ export interface TokenBucket {
   avgLatencyMs: number | null;
 }
 
+/** 교차 차원 구성 항목 — 노드별 카드에선 그 노드가 쓴 모델들, 모델별 카드에선 그 모델을 쓴 노드들 */
+export interface TokenDimSub {
+  key: string;
+  calls: number;
+  totalTokens: number;
+}
+
 /** byNode / byModel 공용 — 차원 값별 토큰 집계 */
 export interface TokenDimStat {
   /** node 명 또는 model 명. null/empty 는 '(none)' 로 정규화 */
@@ -350,6 +360,8 @@ export interface TokenDimStat {
   totalTokens: number;
   /** 차원 값별 평균 LLM 호출 소요시간(ms). LATENCY_MS 기록이 없으면 null */
   avgLatencyMs: number | null;
+  /** 교차 구성 (totalTokens desc). byNode 행 = 모델 구성, byModel 행 = 노드 구성 */
+  sub: TokenDimSub[];
 }
 
 export interface TokenStatsResponse {

@@ -25,12 +25,14 @@ const sortVal = (r: TokenQuestion, k: SortKey): number | string =>
   k === "calls" ? r.calls :
   r.totalTokens;
 
-// 질문(TRACE_ID) 단위 토큰 사용량 표.
+// 질문(TRACE_ID) 단위 토큰 사용량 표 — "첫 원본 질의가 곧 질문" 관점.
+//  - 질문 셀 = 원본 질의(크게) + TRACE_ID(작게) 2줄. 한 질문의 호출들은 QUERY_CTN 을
+//    공유하는 게 보통이므로 질의를 질문 단위 대표 정보로 취급한다.
 //  - 노드/모델은 대표값이 아니라 그 질문이 실제 거친 전부를 칩으로 표시
 //    (예: actionRouterNode→SeasoningNode 흐름이면 노드 칩 2개, 모델 칩 2개)
-//  - 컬럼별 필터: TRACE_ID/USER 텍스트, NODE/MODEL 셀렉트 (로드된 상위 질문 범위 내)
-//  - 숫자/시간 헤더 클릭 = 정렬
-//  - 행 펼침 = 호출별 내역(#순서 · 노드 · 모델 · 토큰 · 실제 LLM 쿼리)
+//  - 컬럼별 필터: 질문(질의+TRACE_ID)/USER 텍스트, NODE/MODEL 셀렉트 (로드된 상위 질문 범위 내)
+//  - 숫자/시간 헤더 클릭 = 정렬 (기본 LAST_TM desc)
+//  - 행 펼침 = 원본 질의 + 호출 타임라인 (쿼리는 원본과 다른 호출에만 다시 표시)
 export function QuestionsTable({
   questions,
   onExpand,
@@ -70,7 +72,10 @@ export function QuestionsTable({
     let list = questions;
     const t = fTrace.trim().toLowerCase();
     const u = fUser.trim().toLowerCase();
-    if (t) list = list.filter((x) => (x.traceId ?? "").toLowerCase().includes(t));
+    if (t)
+      list = list.filter(
+        (x) => (x.traceId ?? "").toLowerCase().includes(t) || (x.queryCtn ?? "").toLowerCase().includes(t)
+      );
     if (u) list = list.filter((x) => (x.userId ?? "").toLowerCase().includes(u));
     if (fNode) list = list.filter((x) => x.nodes.includes(fNode));
     if (fModel) list = list.filter((x) => x.models.includes(fModel));
@@ -148,7 +153,7 @@ export function QuestionsTable({
             <tr>
               <th className="qcell-exp" aria-label="expand" />
               <SortTh k="time" label="LAST_TM" />
-              <th>TRACE_ID (질문)</th>
+              <th>질문 (원본 질의 · TRACE_ID)</th>
               <th>USER</th>
               <th>NODE</th>
               <th>MODEL</th>
@@ -164,10 +169,10 @@ export function QuestionsTable({
                 <input
                   type="text"
                   className="qft-input"
-                  placeholder="검색"
+                  placeholder="질의 / TRACE_ID 검색"
                   value={fTrace}
                   onChange={(e) => setFTrace(e.target.value)}
-                  aria-label="TRACE_ID 필터"
+                  aria-label="질문 필터"
                 />
               </th>
               <th>
@@ -209,7 +214,14 @@ export function QuestionsTable({
                   >
                     <td className="qcell-exp">{expandable ? (isOpen ? "▾" : "▸") : ""}</td>
                     <td className="mono">{fmtTs(r.lastTm)}</td>
-                    <td className="mono strong">{r.traceId ?? <span className="muted">(no trace)</span>}</td>
+                    <td className="qcell-q">
+                      {r.queryCtn ? (
+                        <span className="qq-text" title={r.queryCtn}>{r.queryCtn}</span>
+                      ) : (
+                        <span className="qq-text muted">(질의 미기록)</span>
+                      )}
+                      <span className="qq-trace mono">{r.traceId ?? "(no trace)"}</span>
+                    </td>
                     <td className="mono">{r.userId ?? "—"}</td>
                     <td>
                       <span className="qchips">
@@ -238,7 +250,7 @@ export function QuestionsTable({
                         ) : sub.length === 0 ? (
                           <span className="muted">호출 내역 없음</span>
                         ) : (
-                          <CallsDetail calls={sub} />
+                          <CallsDetail calls={sub} originQuery={r.queryCtn} />
                         )}
                       </td>
                     </tr>
@@ -289,23 +301,38 @@ const parseMs = (ts: string | null): number | null => {
   return Number.isNaN(ms) ? null : ms;
 };
 
-// 펼침 상세 — 호출 타임라인.
-// 호출이 여러 건일 때 흐름(#1 라우터 → #2 실행 노드…)이 한눈에 읽히도록
-// 요약 스트립 + 순번 레일 + 호출 카드 구조로 그린다. 긴 QUERY_CTN 은 접힌
-// 미리보기 한 줄만 보여주고 클릭 시 전체를 펼친다.
-function CallsDetail({ calls }: { calls: TokenRow[] }) {
-  const [openQ, setOpenQ] = useState<Set<string>>(new Set());
+/** 비교용 정규화 — 공백 차이만 나는 쿼리는 같은 질의로 본다 */
+const normQ = (s: string | null): string => (s ?? "").replace(/\s+/g, " ").trim();
+
+const LONG_QUERY = 280; // 이보다 길면 접어서(3줄) 보여주고 "더 보기"
+
+/** 질의 본문 — 기본 전체 노출, 아주 길 때만 3줄로 접고 더 보기 토글 */
+function QueryText({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const long = text.length > LONG_QUERY;
+  return (
+    <>
+      <div className={"qtext" + (long && !expanded ? " clamped" : "")}>{text}</div>
+      {long && (
+        <button type="button" className="qtext-more" onClick={() => setExpanded((v) => !v)}>
+          {expanded ? "접기 ▴" : "더 보기 ▾"}
+        </button>
+      )}
+    </>
+  );
+}
+
+// 펼침 상세 — 원본 질의 + 호출 타임라인.
+// 한 질문의 호출들은 QUERY_CTN 을 공유하는 게 보통이므로, 질의는 상단에 한 번만
+// 크게 보여주고 호출 카드에는 원본과 다른 쿼리가 들어간 호출에만 다시 표시한다.
+function CallsDetail({ calls, originQuery }: { calls: TokenRow[]; originQuery: string | null }) {
   const ordered = useMemo(() => [...calls].reverse(), [calls]); // API 는 최신순 → 시간순으로
   const maxTok = Math.max(1, ...ordered.map((c) => c.totalTokens));
   const totalTok = ordered.reduce((a, c) => a + c.totalTokens, 0);
 
-  const toggleQ = (id: string) =>
-    setOpenQ((s) => {
-      const n = new Set(s);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
+  // 원본 질의 — 질문 행의 값이 우선, 없으면(노드/모델 필터로 좁혀진 경우 등) 호출에서 도출
+  const origin = originQuery ?? ordered.find((c) => c.queryCtn)?.queryCtn ?? null;
+  const originNorm = normQ(origin);
 
   // 노드 흐름 (연속 중복만 접음: action → action → judge ⇒ action → judge)
   const flow: string[] = [];
@@ -319,6 +346,18 @@ function CallsDetail({ calls }: { calls: TokenRow[] }) {
 
   return (
     <div className="qcalls">
+      {origin ? (
+        <div className="qorigin">
+          <span className="qorigin-label">원본 질의</span>
+          <QueryText text={origin} />
+        </div>
+      ) : (
+        <div className="qorigin none">
+          <span className="qorigin-label">원본 질의</span>
+          <span className="muted">질의 미기록</span>
+        </div>
+      )}
+
       <div className="qcalls-summary">
         <span className="qcalls-count">호출 {ordered.length}건</span>
         <span className="qcalls-flow">
@@ -338,8 +377,8 @@ function CallsDetail({ calls }: { calls: TokenRow[] }) {
           const prevMs = i > 0 ? parseMs(ordered[i - 1].callTm) : null;
           const curMs = parseMs(c.callTm);
           const gap = prevMs != null && curMs != null && curMs >= prevMs ? curMs - prevMs : null;
-          const qOpen = openQ.has(c.tokenId);
-          const preview = c.queryCtn ? c.queryCtn.replace(/\s+/g, " ").trim() : null;
+          // 원본과 다른 쿼리가 들어간 호출만 카드 안에 쿼리를 다시 보여준다
+          const differs = !!c.queryCtn && normQ(c.queryCtn) !== originNorm;
           return (
             <li className="qcall" key={c.tokenId}>
               <span className="qcall-rail" aria-hidden>
@@ -366,18 +405,11 @@ function CallsDetail({ calls }: { calls: TokenRow[] }) {
                     IN {fmtInt(c.inputTokens)} · OUT {fmtInt(c.outputTokens)} · <b>{fmtInt(c.totalTokens)} tok</b>
                   </span>
                 </div>
-                {preview ? (
-                  <div className="qcall-query">
-                    <button type="button" className="qcall-qbtn" onClick={() => toggleQ(c.tokenId)}>
-                      <span className="qcall-qarrow" aria-hidden>{qOpen ? "▾" : "▸"}</span>
-                      <span className="qcall-qlabel">쿼리 {qOpen ? "접기" : "보기"}</span>
-                      <span className="qcall-qlen">({c.queryCtn!.length.toLocaleString()}자)</span>
-                      {!qOpen && <span className="qcall-qpreview">{preview}</span>}
-                    </button>
-                    {qOpen && <pre className="qquery">{c.queryCtn}</pre>}
+                {differs && (
+                  <div className="qcall-qdiff">
+                    <span className="qcall-qdiff-label">이 호출의 쿼리 (원본과 다름)</span>
+                    <QueryText text={c.queryCtn!} />
                   </div>
-                ) : (
-                  <span className="muted qcall-noquery">쿼리 미기록</span>
                 )}
               </div>
             </li>

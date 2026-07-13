@@ -250,19 +250,23 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     //    TRACE_ID 있는 호출은 그룹핑, 없는(액션 무관) 호출은 1건=1질문으로 개별 노출.
     //    노드/모델은 MAX 대표값이 아니라 거쳐간 전부를 LISTAGG 로 내린다(중복 제거는 JS).
     //    한 질문의 호출 수는 작아 4000자 한도는 사실상 안 넘지만 ON OVERFLOW TRUNCATE 로 방어.
+    //    QCTN(원본 질의) = 가장 이른 호출의 QUERY_CTN — non-null 우선(NVL2 정렬) 후 CALL_TM 순.
+    //    호출들이 같은 QUERY_CTN 을 공유하는 게 보통이라 질문 단위 대표 정보로 내린다.
     const grpWhere = (nullCond: string) => `${where}${where ? " AND" : " WHERE"} ${nullCond}`;
     const agg = (col: string) =>
       `LISTAGG(${col}, ',' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY CALL_TM)`;
     const questionsSql =
-      `SELECT QKEY, TRACE_ID, NODES, MODELS, USR, CALLS, P, C, T, LAST_TM FROM (` +
+      `SELECT QKEY, TRACE_ID, NODES, MODELS, QCTN, USR, CALLS, P, C, T, LAST_TM FROM (` +
         `SELECT TRACE_ID AS QKEY, TRACE_ID,` +
         ` ${agg("NODE_NM")} AS NODES, ${agg("MODEL_NM")} AS MODELS,` +
+        ` MIN(QUERY_CTN) KEEP (DENSE_RANK FIRST ORDER BY NVL2(QUERY_CTN, 0, 1), CALL_TM) AS QCTN,` +
         ` MAX(USER_ID) AS USR, COUNT(*) AS CALLS,` +
         ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T,` +
         ` TO_CHAR(MAX(CALL_TM), 'YYYY-MM-DD"T"HH24:MI:SS') AS LAST_TM` +
         ` FROM TRX_TOKEN_DET${grpWhere("TRACE_ID IS NOT NULL")} GROUP BY TRACE_ID` +
         ` UNION ALL ` +
         `SELECT 'token:' || TOKEN_ID AS QKEY, NULL AS TRACE_ID, NODE_NM AS NODES, MODEL_NM AS MODELS,` +
+        ` QUERY_CTN AS QCTN,` +
         ` USER_ID AS USR, 1 AS CALLS,` +
         ` INPUT_TOKENS AS P, OUTPUT_TOKENS AS C, TOTAL_TOKENS AS T,` +
         ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS') AS LAST_TM` +
@@ -273,6 +277,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       traceId: str(r.TRACE_ID ?? r.trace_id),
       nodes: dedupeCsv(str(r.NODES ?? r.nodes)),
       models: dedupeCsv(str(r.MODELS ?? r.models)),
+      queryCtn: str(r.QCTN ?? r.qctn),
       userId: str(r.USR ?? r.usr),
       calls: num(r.CALLS ?? r.calls),
       inputTokens: num(r.P ?? r.p),

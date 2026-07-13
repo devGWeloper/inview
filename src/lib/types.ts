@@ -313,6 +313,11 @@ export interface TokenQuestion {
   nodes: string[];
   /** 이 질문의 호출에 사용된 모델 전부 (첫 호출 순서, 중복 제거) */
   models: string[];
+  /**
+   * 원본 질의 — 가장 이른 호출의 QUERY_CTN (non-null 우선).
+   * 한 질문의 호출들은 보통 같은 QUERY_CTN 을 공유하므로 질문 단위 대표 정보로 취급한다.
+   */
+  queryCtn: string | null;
   userId: string | null;
   /** 이 질문에서 발생한 LLM 호출 수 */
   calls: number;

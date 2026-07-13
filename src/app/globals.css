@@ -1964,20 +1964,42 @@ button.tbd-row:not(:disabled):hover {
 .qpage-info { font-size: 12.5px; font-family: var(--mono); color: var(--text-2); font-weight: 600; }
 .qpage-range { color: var(--text-muted); font-weight: 400; }
 
+/* 질문 표는 기본 표보다 글자를 키워 눈에 들어오게 */
+.qtable { font-size: 13px; }
+.qtable th, .qtable td { padding: 9px 10px; }
 .qtable .qcell-exp { width: 22px; text-align: center; color: var(--text-muted); }
 .qrow.expandable { cursor: pointer; }
 .qrow.expandable:hover { background: var(--surface-2); }
 .qrow.open { background: var(--surface-2); }
 .qrow .muted { color: var(--text-muted); }
 
+/* 질문 셀 — 원본 질의(주인공) 위, TRACE_ID(참조 정보) 아래 */
+.qcell-q { max-width: 420px; }
+.qq-text {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.qq-trace {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
 /* 노드/모델 칩 — 질문이 실제 거친 전부를 나열 (TokenBreakdown 색과 동일: 노드=파랑, 모델=보라) */
 .qchips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 .qnode,
 .qmodel {
   display: inline-block;
-  padding: 1px 8px;
+  padding: 2px 9px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 600;
   font-family: var(--mono);
 }
@@ -2016,9 +2038,9 @@ button.tbd-row:not(:disabled):hover {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px 10px;
-  padding: 7px 10px;
-  font-size: 12px;
+  gap: 6px 12px;
+  padding: 8px 11px;
+  font-size: 13px;
   color: var(--text-2);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -2026,7 +2048,7 @@ button.tbd-row:not(:disabled):hover {
 }
 .qcalls-count { font-weight: 700; color: var(--text); }
 .qcalls-flow { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
-.qcalls-aux { font-size: 11.5px; color: var(--text-muted); }
+.qcalls-aux { font-size: 12px; color: var(--text-muted); }
 .qcall-arrow { color: var(--text-muted); font-size: 11px; }
 
 .qcall-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
@@ -2077,7 +2099,7 @@ button.tbd-row:not(:disabled):hover {
   background: color-mix(in srgb, #dc2626 9%, transparent);
   color: #dc2626;
 }
-.qcall-time { margin-left: auto; font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
+.qcall-time { margin-left: auto; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 .qcall-gap { color: var(--text-3); }
 
 .qcall-tok { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -2095,57 +2117,76 @@ button.tbd-row:not(:disabled):hover {
   border-radius: 3px;
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 60%, transparent), var(--accent));
 }
-.qcall-toknum { font-size: 11.5px; color: var(--text-2); white-space: nowrap; }
+.qcall-toknum { font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
 .qcall-toknum b { font-weight: 700; color: var(--text); }
 
-.qcall-qbtn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  min-width: 0;
-  margin: 0;
-  padding: 4px 6px;
-  border: 0;
-  border-radius: 7px;
-  background: none;
-  font-size: 12px;
-  text-align: left;
+/* ── 질의 본문 (원본 질의 블록 / 호출 카드의 다른 쿼리 공용) ──
+   사용자 질문은 자연어 → 산세리프로 크게, 기본 전체 노출. 아주 길면 3줄 접힘 + 더 보기 */
+.qtext {
+  font-size: 14px;
+  line-height: 1.6;
+  font-weight: 500;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.qtext.clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.qtext-more {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 11.5px;
+  font-weight: 600;
   color: var(--text-2);
   cursor: pointer;
 }
-.qcall-qbtn:hover { background: var(--surface-2); color: var(--text); }
-.qcall-qarrow { flex: none; font-size: 10px; color: var(--text-muted); }
-.qcall-qlabel { flex: none; font-weight: 600; }
-.qcall-qlen { flex: none; font-size: 11px; color: var(--text-muted); }
-.qcall-qpreview {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--text-muted);
-}
-.qcall-query .qquery { margin: 2px 0 2px 22px; }
-.qcall-noquery { font-size: 12px; }
+.qtext-more:hover { border-color: var(--border-strong); background: var(--surface-2); }
 
-/* 호출별 실제 LLM 쿼리(QUERY_CTN) — 길 수 있어 줄바꿈 허용 + 스크롤 */
-.qquery {
-  margin: 2px 0 6px;
-  padding: 8px 10px;
-  max-height: 220px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text);
+/* 원본 질의 — 펼침 상세의 헤드라인. 이 질문이 무엇이었는지가 가장 먼저 보이게 */
+.qorigin {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 11px 14px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-left: 4px solid var(--accent);
+  border-radius: 10px;
+}
+.qorigin.none { border-left-color: var(--border-strong); background: var(--surface); }
+.qorigin-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.qorigin.none .qorigin-label { color: var(--text-muted); }
+
+/* 호출 카드 안: 원본과 다른 쿼리가 들어간 호출에만 표시 */
+.qcall-qdiff {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 12px;
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+}
+.qcall-qdiff .qtext { font-size: 13px; }
+.qcall-qdiff-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
 }
 
 /* ── toast ──────────────────────────────────────────────────────────────── */

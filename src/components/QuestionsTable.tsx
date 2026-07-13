@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { TokenQuestion, TokenRow } from "@/lib/types";
+import { fmtDuration } from "@/components/TokenLatencyChart";
 
 const PAGE_SIZE = 20; // 한 페이지에 보여줄 질문 수
 
@@ -38,7 +39,7 @@ export function QuestionsTable({
   /** 질문(traceId)의 호출별 행을 가져온다 (행 펼침). */
   onExpand: (traceId: string) => Promise<TokenRow[]>;
 }) {
-  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "total", dir: "desc" });
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "time", dir: "desc" });
   const [fTrace, setFTrace] = useState("");
   const [fUser, setFUser] = useState("");
   const [fNode, setFNode] = useState("");
@@ -237,33 +238,7 @@ export function QuestionsTable({
                         ) : sub.length === 0 ? (
                           <span className="muted">호출 내역 없음</span>
                         ) : (
-                          <table className="qsub-table">
-                            <tbody>
-                              {[...sub].reverse().map((c, i) => (
-                                <Fragment key={c.tokenId}>
-                                  <tr>
-                                    <td className="qcall-idx-cell"><span className="qcall-idx">#{i + 1}</span></td>
-                                    <td className="mono">{fmtTs(c.callTm)}</td>
-                                    <td><span className="qnode">{c.nodeNm ?? "—"}</span></td>
-                                    <td><span className="qmodel">{c.modelNm ?? "—"}</span></td>
-                                    <td className="num mono">IN {fmtInt(c.inputTokens)}</td>
-                                    <td className="num mono">OUT {fmtInt(c.outputTokens)}</td>
-                                    <td className="num mono strong">{fmtInt(c.totalTokens)}</td>
-                                  </tr>
-                                  <tr className="qquery-row">
-                                    <td />
-                                    <td colSpan={6}>
-                                      {c.queryCtn ? (
-                                        <pre className="qquery">{c.queryCtn}</pre>
-                                      ) : (
-                                        <span className="muted">쿼리 미기록</span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                </Fragment>
-                              ))}
-                            </tbody>
-                          </table>
+                          <CallsDetail calls={sub} />
                         )}
                       </td>
                     </tr>
@@ -304,6 +279,111 @@ export function QuestionsTable({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+const parseMs = (ts: string | null): number | null => {
+  if (!ts) return null;
+  const ms = Date.parse(ts);
+  return Number.isNaN(ms) ? null : ms;
+};
+
+// 펼침 상세 — 호출 타임라인.
+// 호출이 여러 건일 때 흐름(#1 라우터 → #2 실행 노드…)이 한눈에 읽히도록
+// 요약 스트립 + 순번 레일 + 호출 카드 구조로 그린다. 긴 QUERY_CTN 은 접힌
+// 미리보기 한 줄만 보여주고 클릭 시 전체를 펼친다.
+function CallsDetail({ calls }: { calls: TokenRow[] }) {
+  const [openQ, setOpenQ] = useState<Set<string>>(new Set());
+  const ordered = useMemo(() => [...calls].reverse(), [calls]); // API 는 최신순 → 시간순으로
+  const maxTok = Math.max(1, ...ordered.map((c) => c.totalTokens));
+  const totalTok = ordered.reduce((a, c) => a + c.totalTokens, 0);
+
+  const toggleQ = (id: string) =>
+    setOpenQ((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
+  // 노드 흐름 (연속 중복만 접음: action → action → judge ⇒ action → judge)
+  const flow: string[] = [];
+  for (const c of ordered) {
+    const n = c.nodeNm ?? "—";
+    if (flow[flow.length - 1] !== n) flow.push(n);
+  }
+  const firstMs = parseMs(ordered[0]?.callTm ?? null);
+  const lastMs = parseMs(ordered[ordered.length - 1]?.callTm ?? null);
+  const spanMs = ordered.length > 1 && firstMs != null && lastMs != null && lastMs >= firstMs ? lastMs - firstMs : null;
+
+  return (
+    <div className="qcalls">
+      <div className="qcalls-summary">
+        <span className="qcalls-count">호출 {ordered.length}건</span>
+        <span className="qcalls-flow">
+          {flow.map((n, i) => (
+            <Fragment key={`${n}-${i}`}>
+              {i > 0 && <span className="qcall-arrow" aria-hidden>→</span>}
+              <span className="qnode">{n}</span>
+            </Fragment>
+          ))}
+        </span>
+        <span className="qcalls-aux mono">총 {fmtInt(totalTok)} tok</span>
+        {spanMs != null && <span className="qcalls-aux mono">첫→마지막 호출 {fmtDuration(spanMs)}</span>}
+      </div>
+
+      <ol className="qcall-list">
+        {ordered.map((c, i) => {
+          const prevMs = i > 0 ? parseMs(ordered[i - 1].callTm) : null;
+          const curMs = parseMs(c.callTm);
+          const gap = prevMs != null && curMs != null && curMs >= prevMs ? curMs - prevMs : null;
+          const qOpen = openQ.has(c.tokenId);
+          const preview = c.queryCtn ? c.queryCtn.replace(/\s+/g, " ").trim() : null;
+          return (
+            <li className="qcall" key={c.tokenId}>
+              <span className="qcall-rail" aria-hidden>
+                <span className="qcall-dot">{i + 1}</span>
+              </span>
+              <div className="qcall-body">
+                <div className="qcall-head">
+                  <span className="qnode">{c.nodeNm ?? "—"}</span>
+                  <span className="qcall-arrow" aria-hidden>→</span>
+                  <span className="qmodel">{c.modelNm ?? "—"}</span>
+                  {c.latencyMs != null && (
+                    <span className="qcall-lat mono" title="LLM 요청→응답 소요시간">⏱ {fmtDuration(c.latencyMs)}</span>
+                  )}
+                  <span className="qcall-time mono">
+                    {fmtTs(c.callTm)}
+                    {gap != null && gap > 0 && <span className="qcall-gap" title="직전 호출과의 간격"> (+{fmtDuration(gap)})</span>}
+                  </span>
+                </div>
+                <div className="qcall-tok">
+                  <span className="qcall-tokbar" aria-hidden>
+                    <span style={{ width: `${(c.totalTokens / maxTok) * 100}%` }} />
+                  </span>
+                  <span className="qcall-toknum mono">
+                    IN {fmtInt(c.inputTokens)} · OUT {fmtInt(c.outputTokens)} · <b>{fmtInt(c.totalTokens)} tok</b>
+                  </span>
+                </div>
+                {preview ? (
+                  <div className="qcall-query">
+                    <button type="button" className="qcall-qbtn" onClick={() => toggleQ(c.tokenId)}>
+                      <span className="qcall-qarrow" aria-hidden>{qOpen ? "▾" : "▸"}</span>
+                      <span className="qcall-qlabel">쿼리 {qOpen ? "접기" : "보기"}</span>
+                      <span className="qcall-qlen">({c.queryCtn!.length.toLocaleString()}자)</span>
+                      {!qOpen && <span className="qcall-qpreview">{preview}</span>}
+                    </button>
+                    {qOpen && <pre className="qquery">{c.queryCtn}</pre>}
+                  </div>
+                ) : (
+                  <span className="muted qcall-noquery">쿼리 미기록</span>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }

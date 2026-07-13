@@ -292,6 +292,8 @@ export interface TokenRow {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  /** LLM 요청→응답 소요시간(ms). GAIA 가 측정 못 했으면 null */
+  latencyMs: number | null;
   /** LLM 에 실제로 들어간 쿼리/프롬프트 (디버깅용, 없으면 null) */
   queryCtn: string | null;
   /** ISO 형태 호출 시각 (TZ 없음) */

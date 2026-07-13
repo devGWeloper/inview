@@ -286,21 +286,25 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     if (filter.traceId) {
       const callsSql =
         `SELECT TOKEN_ID, TRACE_ID, NODE_NM, MODEL_NM, USER_ID,` +
-        ` INPUT_TOKENS, OUTPUT_TOKENS, TOTAL_TOKENS, QUERY_CTN,` +
+        ` INPUT_TOKENS, OUTPUT_TOKENS, TOTAL_TOKENS, LATENCY_MS, QUERY_CTN,` +
         ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS CALL_TM` +
         ` FROM TRX_TOKEN_DET${where} ORDER BY CALL_TM DESC FETCH FIRST ${CALL_LIMIT} ROWS ONLY`;
-      calls = rowsOf(await conn.execute(callsSql, binds, opts)).map((r) => ({
-        tokenId: String(r.TOKEN_ID ?? r.token_id ?? ""),
-        traceId: str(r.TRACE_ID ?? r.trace_id),
-        nodeNm: str(r.NODE_NM ?? r.node_nm),
-        modelNm: str(r.MODEL_NM ?? r.model_nm),
-        userId: str(r.USER_ID ?? r.user_id),
-        inputTokens: num(r.INPUT_TOKENS ?? r.input_tokens),
-        outputTokens: num(r.OUTPUT_TOKENS ?? r.output_tokens),
-        totalTokens: num(r.TOTAL_TOKENS ?? r.total_tokens),
-        queryCtn: str(r.QUERY_CTN ?? r.query_ctn),
-        callTm: str(r.CALL_TM ?? r.call_tm),
-      }));
+      calls = rowsOf(await conn.execute(callsSql, binds, opts)).map((r) => {
+        const lat = r.LATENCY_MS ?? r.latency_ms;
+        return {
+          tokenId: String(r.TOKEN_ID ?? r.token_id ?? ""),
+          traceId: str(r.TRACE_ID ?? r.trace_id),
+          nodeNm: str(r.NODE_NM ?? r.node_nm),
+          modelNm: str(r.MODEL_NM ?? r.model_nm),
+          userId: str(r.USER_ID ?? r.user_id),
+          inputTokens: num(r.INPUT_TOKENS ?? r.input_tokens),
+          outputTokens: num(r.OUTPUT_TOKENS ?? r.output_tokens),
+          totalTokens: num(r.TOTAL_TOKENS ?? r.total_tokens),
+          latencyMs: lat == null ? null : num(lat),
+          queryCtn: str(r.QUERY_CTN ?? r.query_ctn),
+          callTm: str(r.CALL_TM ?? r.call_tm),
+        };
+      });
     }
 
     logger.info("fetchTokenStats ok", { calls: totals.calls, questions: questions.length, ms: Date.now() - t0 });

@@ -216,11 +216,17 @@ export function QuestionsTable({
                     <td className="mono">{fmtTs(r.lastTm)}</td>
                     <td className="qcell-q">
                       {r.queryCtn ? (
-                        <span className="qq-text" title={r.queryCtn}>{r.queryCtn}</span>
+                        <>
+                          <span className="qq-text" title={r.queryCtn}>{r.queryCtn}</span>
+                          <span className="qq-trace mono">{r.traceId ?? "(no trace)"}</span>
+                        </>
                       ) : (
-                        <span className="qq-text muted">(질의 미기록)</span>
+                        // 질의 미기록 질문은 TRACE_ID 가 대표 정보 — 잔글씨로 내리지 않고 크게
+                        <>
+                          <span className="qq-text mono">{r.traceId ?? <span className="muted">(no trace)</span>}</span>
+                          <span className="qq-trace muted">질의 미기록</span>
+                        </>
                       )}
-                      <span className="qq-trace mono">{r.traceId ?? "(no trace)"}</span>
                     </td>
                     <td className="mono">{r.userId ?? "—"}</td>
                     <td>

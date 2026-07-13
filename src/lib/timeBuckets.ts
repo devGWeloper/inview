@@ -42,6 +42,16 @@ export function parseTs(ts: string | null): number | null {
 }
 
 /**
+ * 해당 버킷이 아직 집계 중(현재 시각이 버킷 구간 안)인지.
+ * 합계형 차트에서 마지막 버킷을 "집계 중" 스타일로 구분하는 데 사용한다.
+ */
+export function isBucketInProgress(ts: string, g: Granularity, nowMs = Date.now()): boolean {
+  const start = parseTs(ts);
+  if (start === null) return false;
+  return start + bucketMs(g) > nowMs;
+}
+
+/**
  * from~to 구간을 덮는 버킷 시작 시각(ms) 목록을 오름차순으로 반환.
  * 시계열 차트가 빈 구간도 균일하게 보이도록 "빈 버킷 채우기"에 사용한다.
  */

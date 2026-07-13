@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { StatsResponse, TimeBucket } from "@/lib/types";
+import { isBucketInProgress } from "@/lib/timeBuckets";
 
 const STATUS_KEYS = ["ok", "fail", "pending"] as const;
 type StatusKey = typeof STATUS_KEYS[number];
@@ -39,7 +40,10 @@ function fmtFullTs(ts: string, g: StatsResponse["granularity"]): string {
   return ts.slice(0, 16).replace("T", " ");
 }
 
-type Row = { ts: string; tick: string; total: number } & Record<StatusKey, number>;
+// k: 실제 값(툴팁/통계용) · kDone: 완결 구간 실선 · kLive: 집계 중 꼬리(점선, 앵커+마지막 점만)
+type Row = { ts: string; tick: string; total: number; live?: boolean } &
+  Record<StatusKey, number> &
+  Record<`${StatusKey}Done` | `${StatusKey}Live`, number | null>;
 
 function CustomTooltip({
   active, payload, label, granularity,
@@ -54,7 +58,10 @@ function CustomTooltip({
   const fullTs = fmtFullTs(row.ts, granularity);
   return (
     <div className="ts-tooltip">
-      <div className="ts-tooltip-head">{fullTs}</div>
+      <div className="ts-tooltip-head">
+        {fullTs}
+        {row.live && <span className="ts-tooltip-live">집계 중</span>}
+      </div>
       <div className="ts-tooltip-body">
         {STATUS_KEYS.map((k) => {
           const v = row[k] ?? 0;
@@ -82,21 +89,36 @@ export function TimeSeriesChart({ stats }: { stats: StatsResponse }) {
     ok: false, fail: false, pending: false,
   });
 
-  const data: Row[] = useMemo(() => {
-    return stats.buckets.map((b: TimeBucket) => ({
-      ts: b.ts,
-      tick: fmtTick(b.ts, granularity),
-      ok: b.ok,
-      fail: b.fail,
-      pending: b.pending,
-      total: b.ok + b.fail + b.pending,
-    }));
+  // 마지막 버킷이 아직 집계 중이면 그 인덱스 (아니면 -1)
+  const liveIdx = useMemo(() => {
+    const last = stats.buckets[stats.buckets.length - 1];
+    if (!last) return -1;
+    return isBucketInProgress(last.ts, granularity) ? stats.buckets.length - 1 : -1;
   }, [stats.buckets, granularity]);
+
+  const data: Row[] = useMemo(() => {
+    return stats.buckets.map((b: TimeBucket, i) => {
+      const row = {
+        ts: b.ts,
+        tick: fmtTick(b.ts, granularity),
+        ok: b.ok,
+        fail: b.fail,
+        pending: b.pending,
+        total: b.ok + b.fail + b.pending,
+        live: i === liveIdx,
+      } as Row;
+      for (const k of STATUS_KEYS) {
+        row[`${k}Done`] = i === liveIdx ? null : row[k];
+        row[`${k}Live`] = liveIdx >= 0 && i >= liveIdx - 1 ? row[k] : null;
+      }
+      return row;
+    });
+  }, [stats.buckets, granularity, liveIdx]);
 
   const { peakIdx, peakVal, peakTs, avgSuccess } = useMemo(() => {
     let pIdx = -1, pVal = 0, totalAll = 0, okAll = 0;
     data.forEach((d, i) => {
-      if (d.total > pVal) { pVal = d.total; pIdx = i; }
+      if (!d.live && d.total > pVal) { pVal = d.total; pIdx = i; }
       totalAll += d.total;
       okAll += d.ok;
     });
@@ -127,6 +149,7 @@ export function TimeSeriesChart({ stats }: { stats: StatsResponse }) {
           </button>
         ))}
         <span className="ts-legend-spacer" />
+        {liveIdx >= 0 && <span className="ts-live-badge">마지막 구간 집계 중</span>}
         {avgSuccess !== null && (
           <span className="ts-meta">avg success {avgSuccess.toFixed(1)}%</span>
         )}
@@ -189,12 +212,31 @@ export function TimeSeriesChart({ stats }: { stats: StatsResponse }) {
               <Area
                 key={k}
                 type="monotone"
-                dataKey={k}
+                dataKey={`${k}Done`}
                 name={STATUS_LABEL[k]}
                 stackId="status"
                 stroke={STATUS_COLOR[k]}
                 strokeWidth={k === "ok" ? 1.8 : 1}
                 fill={`url(#ts-grad-${k})`}
+                hide={hidden[k]}
+                isAnimationActive
+                animationDuration={500}
+                activeDot={{ r: 3, stroke: "var(--surface)", strokeWidth: 1.5 }}
+              />
+            ))}
+            {/* 집계 중 꼬리 — 마지막 완결점→진행 버킷 구간만 점선 + 옅은 채움으로 */}
+            {liveIdx >= 0 && STATUS_KEYS.map((k) => (
+              <Area
+                key={`${k}-live`}
+                type="monotone"
+                dataKey={`${k}Live`}
+                name={STATUS_LABEL[k]}
+                stackId="statusLive"
+                stroke={STATUS_COLOR[k]}
+                strokeWidth={k === "ok" ? 1.8 : 1}
+                strokeDasharray="5 4"
+                fill={`url(#ts-grad-${k})`}
+                fillOpacity={0.45}
                 hide={hidden[k]}
                 isAnimationActive
                 animationDuration={500}

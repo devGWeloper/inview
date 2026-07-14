@@ -1,11 +1,11 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// /report — 종합 실적 리포트 (주간 기본).
+// /report — 종합 실적 리포트 (주간 기본 · 일간 지원). AdminGate 뒤에 있다.
 //
 // 관리자가 매주 수기로 옮겨 적던 실적을 한 화면에 모아 보여주고(FullScope 차트),
 // "전체 복사" 한 번으로 보고용 텍스트를 클립보드에 담는다.
-//   - 기간 기본 = 주 단위 (월요일 00:00 ~ 다음주 월요일 00:00), ◀▶ 로 주 이동
+//   - 주간 = 월요일 00:00 ~ 다음주 월요일 00:00 / 일간 = 자정 ~ 다음날 자정, ◀▶ 로 기간 이동
 //   - 직접 설정 모드에서 시각까지 자유 지정 가능
 //   - Action Agent 실적: /api/stats (트레이스 단위 — 성공률/지연/사용자 수/액션별/에러)
 //   - LLM 토큰 실적: /api/tokens (TRX_TOKEN_DET — action 외 judge/setup_guide 노드 구분 포함)
@@ -22,9 +22,11 @@ import { TokenChart } from "@/components/TokenChart";
 import { TokenLatencyChart, fmtDuration } from "@/components/TokenLatencyChart";
 import { TokenStatsCards } from "@/components/TokenStatsCards";
 import { TopList } from "@/components/TopList";
+import { AdminGate } from "@/components/AdminGate";
 import { AgentProfile, StatsResponse, TokenStatsResponse } from "@/lib/types";
 
-type RangeMode = "week" | "custom";
+type PeriodUnit = "day" | "week";
+type RangeMode = PeriodUnit | "custom";
 
 const DAY_KO = ["일", "월", "화", "수", "목", "금", "토"] as const;
 
@@ -48,12 +50,32 @@ function weekRange(offset: number): { from: Date; to: Date } {
   return { from, to };
 }
 
+/** offset 일(0 = 오늘, -1 = 어제)의 [자정, 다음날 자정) */
+function dayRange(offset: number): { from: Date; to: Date } {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + offset);
+  const from = new Date(d);
+  const to = new Date(d);
+  to.setDate(to.getDate() + 1);
+  return { from, to };
+}
+
+function periodRange(unit: PeriodUnit, offset: number): { from: Date; to: Date } {
+  return unit === "day" ? dayRange(offset) : weekRange(offset);
+}
+
 function fmtDateKo(d: Date, withTime: boolean): string {
   const base = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} (${DAY_KO[d.getDay()]})`;
   return withTime ? `${base} ${pad(d.getHours())}:${pad(d.getMinutes())}` : base;
 }
 
-function weekBadge(offset: number): string {
+function periodBadge(unit: PeriodUnit, offset: number): string {
+  if (unit === "day") {
+    if (offset === 0) return "오늘";
+    if (offset === -1) return "어제";
+    return `${-offset}일 전`;
+  }
   if (offset === 0) return "이번 주";
   if (offset === -1) return "지난주";
   return `${-offset}주 전`;
@@ -216,8 +238,21 @@ function ReportKpis({ stats }: { stats: StatsResponse }) {
 }
 
 export default function ReportPage() {
+  return (
+    <AdminGate
+      title="실적 리포트"
+      sub="관리자 전용 화면입니다. 비밀번호를 입력하면 실적을 볼 수 있습니다."
+      icon="📋"
+    >
+      <ReportContent />
+    </AdminGate>
+  );
+}
+
+function ReportContent() {
   const [mode, setMode] = useState<RangeMode>("week");
-  const [weekOffset, setWeekOffset] = useState(0);
+  // 일간/주간 공통 기간 오프셋 (0 = 오늘/이번 주). 단위 전환 시 프리셋 버튼이 다시 지정한다.
+  const [offset, setOffset] = useState(0);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   // 실제 조회에 적용된 기간 (week 이동/custom 적용 시 갱신)
@@ -283,10 +318,10 @@ export default function ReportPage() {
     load(applied.from, applied.to);
   }, [applied, load]);
 
-  const goWeek = (offset: number) => {
-    setMode("week");
-    setWeekOffset(offset);
-    const { from, to } = weekRange(offset);
+  const goPeriod = (unit: PeriodUnit, next: number) => {
+    setMode(unit);
+    setOffset(next);
+    const { from, to } = periodRange(unit, next);
     setApplied({ from: isoLocal(from), to: isoLocal(to) });
   };
 
@@ -357,20 +392,28 @@ export default function ReportPage() {
           <div className="dash-title-main">실적 리포트</div>
           <div className="dash-title-sub">
             {rangeLabel}
-            {mode === "week" && <span className="report-week-badge">{weekBadge(weekOffset)}</span>}
+            {mode !== "custom" && (
+              <span className="report-week-badge">{periodBadge(mode, offset)}</span>
+            )}
           </div>
         </div>
 
         <div className="dash-filter report-controls">
-          {mode === "week" && (
-            <div className="week-nav" role="group" aria-label="주 이동">
-              <button type="button" onClick={() => goWeek(weekOffset - 1)} aria-label="이전 주">◀</button>
-              <span className="week-nav-label">{weekBadge(weekOffset)}</span>
+          {mode !== "custom" && (
+            <div className="week-nav" role="group" aria-label="기간 이동">
               <button
                 type="button"
-                onClick={() => goWeek(weekOffset + 1)}
-                disabled={weekOffset >= 0}
-                aria-label="다음 주"
+                onClick={() => goPeriod(mode, offset - 1)}
+                aria-label={mode === "day" ? "이전 일" : "이전 주"}
+              >
+                ◀
+              </button>
+              <span className="week-nav-label">{periodBadge(mode, offset)}</span>
+              <button
+                type="button"
+                onClick={() => goPeriod(mode, offset + 1)}
+                disabled={offset >= 0}
+                aria-label={mode === "day" ? "다음 일" : "다음 주"}
               >
                 ▶
               </button>
@@ -379,15 +422,29 @@ export default function ReportPage() {
           <div className="preset-group" role="tablist" aria-label="기간 모드">
             <button
               type="button"
-              className={"preset-btn" + (mode === "week" && weekOffset === 0 ? " active" : "")}
-              onClick={() => goWeek(0)}
+              className={"preset-btn" + (mode === "day" && offset === 0 ? " active" : "")}
+              onClick={() => goPeriod("day", 0)}
+            >
+              오늘
+            </button>
+            <button
+              type="button"
+              className={"preset-btn" + (mode === "day" && offset === -1 ? " active" : "")}
+              onClick={() => goPeriod("day", -1)}
+            >
+              어제
+            </button>
+            <button
+              type="button"
+              className={"preset-btn" + (mode === "week" && offset === 0 ? " active" : "")}
+              onClick={() => goPeriod("week", 0)}
             >
               이번 주
             </button>
             <button
               type="button"
-              className={"preset-btn" + (mode === "week" && weekOffset === -1 ? " active" : "")}
-              onClick={() => goWeek(-1)}
+              className={"preset-btn" + (mode === "week" && offset === -1 ? " active" : "")}
+              onClick={() => goPeriod("week", -1)}
             >
               지난주
             </button>

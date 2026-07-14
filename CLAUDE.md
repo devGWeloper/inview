@@ -94,13 +94,14 @@ The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTI
 
 ### 실적 리포트 — `/report`
 
-관리자가 매주 수기로 옮겨 적던 실적을 원클릭 복사로 대체하는 종합 리포트 화면. `/agent` 페이지 헤드의 "📋 실적 리포트" 버튼으로 진입.
+관리자가 매주 수기로 옮겨 적던 실적을 원클릭 복사로 대체하는 종합 리포트 화면. `/agent` 페이지 헤드의 "📋 실적 리포트" 버튼(`agent-action` 스타일 — 관리자 편집 버튼과 한 쌍)으로 진입.
 
-- **기간**: 기본 주 단위 — **월요일 00:00 ~ 다음주 월요일 00:00** (`weekRange()`, 이번 주/지난주 프리셋 + ◀▶ 주 이동, 미래 주는 비활성). "직접 설정" 모드에서 `datetime-local` 로 시각까지 자유 지정.
+- **접근 제어**: `AdminGate`(`src/components/AdminGate.tsx`) 뒤에 있다 — `/admin` 과 동일한 관리자 비밀번호(`adminAuth.ts`) 게이트를 공용 컴포넌트로 추출했고, sessionStorage 키(`admin-unlocked`)를 공유해 한쪽에서 해제하면 세션 동안 둘 다 열린다. 게이트 통과 후에만 컨텐츠가 마운트되므로 데이터 fetch 도 그때 시작.
+- **기간**: 기본 주 단위 — **월요일 00:00 ~ 다음주 월요일 00:00** (`weekRange()`). **일간 모드**(`dayRange()`, 자정~다음날 자정)도 지원: 오늘/어제/이번 주/지난주 프리셋 + ◀▶ 로 현재 단위(일/주) 기준 기간 이동(미래는 비활성). "직접 설정" 모드에서 `datetime-local` 로 시각까지 자유 지정.
 - **데이터**: 적용 기간으로 `GET /api/stats` + `GET /api/tokens` 를 병렬 호출 (필터 없음 = FullScope). 보조로 `/api/profile`(리포트 제목의 에이전트 이름)과 `/api/error-codes`(에러 의미)도 로드하며 실패해도 무해.
 - **화면 구성**: ① Action Agent 실적 — KPI 5칸(총 실행/성공률/실패/평균 응답시간/**사용자 수**), 사용 추이(`TimeSeriesChart`), 평균 응답 지연(`CubeLatencyChart`), 상태 분포+주요 에러, 액션 타입별+주간 사용자(`TopList`), FAC별/AREA별 ② LLM 토큰 — `TokenStatsCards`/`TokenChart`/`TokenLatencyChart` + **노드별 구분**(`TokenBreakdown`, action 외 judge/setup_guide 노드 실적 분리 — 리포트에선 필터 없이 조회 전용) ③ 리포트 텍스트 미리보기(`<pre>`) — 복사될 내용 그대로 노출. 기존 대시보드/Tokens 탭 컴포넌트를 그대로 재사용한다.
 - **전체 복사**: `buildReportText()` 가 두 응답을 보고용 플레인 텍스트로 조립(액션별 성공/실패, 주요 에러+의미, Top 사용자, FAC/AREA top5, 노드별/모델별 토큰) → `navigator.clipboard.writeText` (실패 시 textarea+`execCommand` 폴백) → 버튼이 2초간 "✓ 복사됨" 으로 바뀜.
-- **사용자 수**: `/api/stats` 가 `uniqueUsers`(USER_ID distinct, 트레이스 단위, optional 필드) 를 함께 내린다 — "주간 몇 명이 사용했나" 용도.
+- **사용자 수**: `/api/stats` 가 `uniqueUsers`(optional 필드) 를 함께 내린다 — "기간 내 몇 명이 사용했나". 정의: 트레이스별 **대표 사용자의 distinct 수** (한 사용자가 100번 요청해도 1명). 대표 사용자는 `traceUserId()` 가 **진입 레이어(CUBE) 우선**으로 첫 non-null `USER_ID` 를 고르고 공백을 trim 한다 — USER_ID 는 전 레이어가 INSERT 시 기록하므로 행 순서대로 집으면 하위 레이어의 시스템 계정 값이 섞여 부풀 수 있어서다. `topUsers` 도 같은 대표 사용자 기준.
 
 ## 두 가지 지연 지표 (둘 다 정규 — 재는 대상이 다름)
 

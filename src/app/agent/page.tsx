@@ -18,8 +18,14 @@ export default async function AgentPage() {
             <div className="agent-page-sub">우리 팀의 AI 에이전트, {profile.name}</div>
           </div>
           <div className="agent-page-actions">
-            <Link href="/report" className="btn primary" prefetch={false}>📋 실적 리포트</Link>
-            <Link href="/admin" className="btn ghost" prefetch={false}>관리자 편집</Link>
+            <Link href="/report" className="agent-action primary" prefetch={false}>
+              <span className="agent-action-ico" aria-hidden>📋</span>
+              실적 리포트
+            </Link>
+            <Link href="/admin" className="agent-action" prefetch={false}>
+              <span className="agent-action-ico" aria-hidden>⚙️</span>
+              관리자 편집
+            </Link>
           </div>
         </div>
 

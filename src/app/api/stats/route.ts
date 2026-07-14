@@ -36,6 +36,23 @@ function classify(rows: TraceRow[], allComplete: boolean): DashStatus {
   return "fail";
 }
 
+/**
+ * 트레이스의 대표 사용자 — 진입 레이어(CUBE) 우선으로 첫 non-null USER_ID 를 고른다.
+ * USER_ID 는 전 레이어가 INSERT 시 기록하므로 행 순서에 따라 하위 레이어 값(시스템 계정 등)이
+ * 잡히면 사용자 수가 부풀 수 있다. 공백/빈 문자열도 정규화해 같은 사용자가 두 번 세어지지 않게 한다.
+ * (uniqueUsers = 이 대표 사용자의 distinct 수 — 한 사용자가 100번 요청해도 1명)
+ */
+function traceUserId(list: TraceRow[]): string | null {
+  for (const layer of LAYER_ORDER) {
+    for (const r of list) {
+      if (r.layer !== layer) continue;
+      const u = r.userId?.trim();
+      if (u) return u;
+    }
+  }
+  return null;
+}
+
 function topN(map: Map<string, number>, n: number): TopItem[] {
   return Array.from(map.entries())
     .map(([key, count]) => ({ key, count }))
@@ -147,8 +164,8 @@ export async function GET(req: NextRequest) {
       const status = classify(list, allComplete);
       totals[status] += 1;
 
-      // user
-      const u = list.find((r) => r.userId)?.userId;
+      // user — CUBE(진입 레이어) 우선 대표 사용자 (traceUserId 참고)
+      const u = traceUserId(list);
       if (u) userCount.set(u, (userCount.get(u) ?? 0) + 1);
 
       // action: 트레이스 내 첫 번째 비어있지 않은 값을 채택 (상위 레이어가 INSERT 시 기록)

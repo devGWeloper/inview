@@ -4,15 +4,19 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AgentProfile, WorkTask } from "@/lib/types";
 import { ADMIN_PASSWORD, ADMIN_PASSWORD_HEADER } from "@/lib/adminAuth";
+import { AdminGate } from "@/components/AdminGate";
 
 const EMPTY_TASK: WorkTask = { icon: "•", title: "", desc: "" };
-const UNLOCK_KEY = "admin-unlocked";
 
 export default function AdminPage() {
-  const [unlocked, setUnlocked] = useState(false);
-  const [pwInput, setPwInput] = useState("");
-  const [pwError, setPwError] = useState(false);
+  return (
+    <AdminGate title="관리자 편집" sub="비밀번호를 입력하면 프로필을 수정할 수 있습니다.">
+      <AdminEditor />
+    </AdminGate>
+  );
+}
 
+function AdminEditor() {
   const [profile, setProfile] = useState<AgentProfile | null>(null);
   const [skillsText, setSkillsText] = useState("");
   // FTE 계산식 상수 편집용 (입력 중엔 문자열로 두고 저장 시 숫자 검증)
@@ -23,26 +27,7 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
-  // 세션 동안 잠금 해제 상태 유지
   useEffect(() => {
-    if (typeof window !== "undefined" && sessionStorage.getItem(UNLOCK_KEY) === "1") {
-      setUnlocked(true);
-    }
-  }, []);
-
-  function onUnlock(e: React.FormEvent) {
-    e.preventDefault();
-    if (pwInput === ADMIN_PASSWORD) {
-      setUnlocked(true);
-      setPwError(false);
-      sessionStorage.setItem(UNLOCK_KEY, "1");
-    } else {
-      setPwError(true);
-    }
-  }
-
-  useEffect(() => {
-    if (!unlocked) return;
     let alive = true;
     (async () => {
       try {
@@ -61,7 +46,7 @@ export default function AdminPage() {
       }
     })();
     return () => { alive = false; };
-  }, [unlocked]);
+  }, []);
 
   function set<K extends keyof AgentProfile>(key: K, value: AgentProfile[K]) {
     setProfile((p) => (p ? { ...p, [key]: value } : p));
@@ -162,32 +147,6 @@ export default function AdminPage() {
     } finally {
       setSaving(false);
     }
-  }
-
-  if (!unlocked) {
-    return (
-      <div className="admin-page">
-        <form className="admin-lock" onSubmit={onUnlock}>
-          <div className="admin-lock-icon" aria-hidden>🔒</div>
-          <div className="admin-lock-title">관리자 편집</div>
-          <div className="admin-lock-sub">비밀번호를 입력하면 프로필을 수정할 수 있습니다.</div>
-          <input
-            type="password"
-            className={"admin-lock-input" + (pwError ? " error" : "")}
-            value={pwInput}
-            onChange={(e) => { setPwInput(e.target.value); setPwError(false); }}
-            placeholder="비밀번호"
-            autoFocus
-            aria-label="관리자 비밀번호"
-          />
-          {pwError && <div className="admin-lock-error">비밀번호가 올바르지 않습니다.</div>}
-          <div className="admin-lock-actions">
-            <Link href="/agent" className="btn ghost" prefetch={false}>취소</Link>
-            <button type="submit" className="btn primary">잠금 해제</button>
-          </div>
-        </form>
-      </div>
-    );
   }
 
   if (loading) return <div className="admin-page"><div className="dash-banner loading">불러오는 중…</div></div>;

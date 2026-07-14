@@ -90,7 +90,7 @@ The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTI
 - **영속 저장**: `src/lib/profile.ts` → `data/agent-profile.json` (DB 아님, gitignore 됨). `normalizeProfile()` 가 부분/구버전 데이터를 항상 완전한 객체로 보정하며, 구버전의 `formalTasks`/`informalTasks` 는 읽을 때 `tasks` 로 자동 병합(마이그레이션).
 - **API**: `GET/PUT /api/profile`. PUT 은 헤더 `x-admin-password` 가 `ADMIN_PASSWORD`(`src/lib/adminAuth.ts`, 하드코딩 `"admin"`)와 일치해야 저장. ⚠️ 클라이언트 번들에도 노출되는 **단순 게이트** — 실제 보안 아님.
 - **화면**: `/agent`(서버 컴포넌트, `ProfileCard` + `WorkShowcase`), 대시보드 상단 `ProfileStrip`(클라이언트), `/admin`(비밀번호 게이트 후 편집 폼, 업무 순서 드래그앤드롭). 사진은 `public/` 에 올리고 `avatarImage` 에 `/파일명` 지정(없거나 로드 실패 시 `avatar` 이모지로 폴백, `AgentAvatar`).
-- **FTE 성과 지표**: `src/lib/fte.ts` `computeFteStats(profile)` 가 **실데이터로 계산**한다. `db.ts.monthlyActionSuccess()` 가 2026-01-01~현재 '액션 성공' 수를 **월별·액션별**로 집계: 성공 판정(에러 없고 CUBE RESP 에 실패 문구 — `ACTION_FAIL_PHRASES`: 'Seasoning 실패'/'AutoQual 취소 실패' — 없는 트레이스)·월 귀속(첫 recv)은 **CUBE DB**, 액션 구분은 `ACTION_TYP`(`SEA`/`AUTOQUAL_CANCEL`)을 기록하는 **GAIA DB**(`/api/action-types` 와 동일)에서 조회해 TRACE_ID 로 JS 조인. 연간 FTE `= Σ(액션별 성공 수 × 액션별 환산 분) ÷ 연간 분`, 월별은 환산 분 합 기준 ×12 연환산. **계산식은 프로필 필드로 커스터마이즈**: `fteActionMinutes`(ACTION_TYP→분 목록, 기본 SEA=5·AUTOQUAL_CANCEL=5), `fteDefaultMinutes`(목록에 없는 액션·ACTION_TYP 미상, 기본 5), `fteAnnualMinutes`(기본 65,984) — `/admin` "성과 지표 (FTE)" 섹션에서 편집, `normalizeProfile` 이 잘못된 값을 보정하고 구버전 `fteMinutesPerCase` 는 `fteDefaultMinutes` 로 마이그레이션한다 (수동 폴백 `fte`/`fteNote` 필드는 **제거됨** — CUBE 미연결이면 카드는 `—` + 안내 문구). FTE 1 = 1인·1년. GAIA 미연결이면 전 트레이스가 기본 분으로 계산된다(무해). 차트(`FteChart`)는 최근 12개월만 노출. **위 TEMPORARY WORKAROUND 의 `ACTION_FAIL_PHRASES` 에 의존**(원복 시 5번 항목 참고).
+- **FTE 성과 지표**: `src/lib/fte.ts` `computeFteStats(profile)` 가 **실데이터로 계산**한다. `db.ts.monthlyActionSuccess()` 가 2026-01-01~현재 '액션 성공' 수를 **월별·액션별**로 집계: 성공 판정(에러 없고 CUBE RESP 에 실패 문구 — `ACTION_FAIL_PHRASES`: 'Seasoning 실패'/'AutoQual 취소 실패'/'AutoQual 실행 실패' — 없는 트레이스)·월 귀속(첫 recv)은 **CUBE DB**, 액션 구분은 `ACTION_TYP`(`SEA`/`AUTOQUAL_CANCEL`/`AUTOQUAL_BM`)을 기록하는 **GAIA DB**(`/api/action-types` 와 동일)에서 조회해 TRACE_ID 로 JS 조인. 연간 FTE `= Σ(액션별 성공 수 × 액션별 환산 분) ÷ 연간 분`, 월별은 환산 분 합 기준 ×12 연환산. **계산식은 프로필 필드로 커스터마이즈**: `fteActionMinutes`(ACTION_TYP→분 목록, 기본 SEA=5·AUTOQUAL_CANCEL=5·AUTOQUAL_BM=5), `fteDefaultMinutes`(목록에 없는 액션·ACTION_TYP 미상, 기본 5), `fteAnnualMinutes`(기본 65,984) — `/admin` "성과 지표 (FTE)" 섹션에서 편집, `normalizeProfile` 이 잘못된 값을 보정하고 구버전 `fteMinutesPerCase` 는 `fteDefaultMinutes` 로 마이그레이션한다 (수동 폴백 `fte`/`fteNote` 필드는 **제거됨** — CUBE 미연결이면 카드는 `—` + 안내 문구). FTE 1 = 1인·1년. GAIA 미연결이면 전 트레이스가 기본 분으로 계산된다(무해). 차트(`FteChart`)는 최근 12개월만 노출. **위 TEMPORARY WORKAROUND 의 `ACTION_FAIL_PHRASES` 에 의존**(원복 시 5번 항목 참고).
 
 ### 실적 리포트 — `/report`
 
@@ -131,12 +131,12 @@ Action 에 한정되지 않고 GAIA 의 모든 노드 LLM 호출을 포괄한다
 에러 코드가 없는 트레이스가 전부 `pending`(대시보드의 PARTIAL)으로 분류되어 대시보드/목록 값이 무의미해지는 문제가 있었다.
 
 **임시 규칙**: 에러 코드(`errCd`)가 없는 미완료(pending) 트레이스를 CUBE 레이어의 RESP 메시지(`respMsgCtn`)로 재판정한다.
-- CUBE RESP 에 액션 실패 문구 포함 → `fail` — 문구는 `ACTION_FAIL_RULES` 로 정의 (시즈닝 = `"Seasoning 실패"`, AutoQual 취소 = `"AutoQual 취소 실패"`; 새 액션이 생기면 여기에 한 줄 추가)
+- CUBE RESP 에 액션 실패 문구 포함 → `fail` — 문구는 `ACTION_FAIL_RULES` 로 정의 (시즈닝 = `"Seasoning 실패"`, AutoQual 취소 = `"AutoQual 취소 실패"`, AutoQual 실행 = `"AutoQual 실행 실패"`; 새 액션이 생기면 여기에 한 줄 추가)
 - 그 외 → `ok`(성공으로 간주)
 
 **구현 위치**:
 - `src/lib/tempStatus.ts` — 아래 export 들이 모두 임시 코드 (파일 전체 삭제 대상):
-  - `ACTION_FAIL_RULES` — 액션별 `{ action, phrase, code }` 규칙. `phrase` 는 CUBE RESP 검색 문구, `code` 는 Top Errors 에 노출할 가상 에러 코드 (DB 에는 존재하지 않음): `FAIL_SEASONING` / `FAIL_AQ_CANCEL`
+  - `ACTION_FAIL_RULES` — 액션별 `{ action, phrase, code }` 규칙. `phrase` 는 CUBE RESP 검색 문구, `code` 는 Top Errors 에 노출할 가상 에러 코드 (DB 에는 존재하지 않음): `FAIL_SEASONING` / `FAIL_AQ_CANCEL` / `FAIL_AQ_RUN`
   - `ACTION_FAIL_PHRASES` — 실패 문구 목록 (db.ts FTE 집계에서 성공 제외용)
   - `matchedActionFailCodes(rows)` — CUBE RESP 에 매칭된 규칙들의 가상 코드 목록
   - `hasActionFailure(rows)` — 실패 문구가 하나라도 있는지

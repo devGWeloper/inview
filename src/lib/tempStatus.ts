@@ -6,7 +6,8 @@
 //
 // 임시 규칙: 에러 코드가 없는 미완료(pending) 트레이스는 CUBE 레이어의 RESP 메시지로 판정한다.
 //   - CUBE RESP 메시지에 ACTION_FAIL_RULES 의 실패 문구 포함 → fail
-//     (시즈닝 = "Seasoning 실패", AutoQual 취소 = "AutoQual 취소 실패")
+//     (시즈닝 = "Seasoning 실패", AutoQual 취소 = "AutoQual 취소 실패",
+//      AutoQual 실행 = "AutoQual 실행 실패")
 //   - 그 외                                                  → ok (성공으로 간주)
 //
 // 추가 보정: 위 실패 트레이스는 실제 errCd 가 없어 stats 의 topErrors 리스트에
@@ -21,6 +22,7 @@ import { TraceRow, TraceStatus } from "./types";
 export const ACTION_FAIL_RULES = [
   { action: "시즈닝",        phrase: "Seasoning 실패",     code: "FAIL_SEASONING" },
   { action: "AutoQual 취소", phrase: "AutoQual 취소 실패", code: "FAIL_AQ_CANCEL" },
+  { action: "AutoQual 실행", phrase: "AutoQual 실행 실패", code: "FAIL_AQ_RUN" },
 ] as const;
 
 /** FTE 집계(monthlyActionSuccess)에서 성공 제외용으로 쓰는 실패 문구 목록 */
@@ -37,7 +39,7 @@ export function matchedActionFailCodes(rows: TraceRow[]): string[] {
   return ACTION_FAIL_RULES.filter((rule) => cubeRespIncludes(rows, rule.phrase)).map((r) => r.code);
 }
 
-/** CUBE RESP 에 액션 실패 문구(시즈닝/AutoQual 취소)가 하나라도 있는지 */
+/** CUBE RESP 에 액션 실패 문구(시즈닝/AutoQual 취소·실행)가 하나라도 있는지 */
 export function hasActionFailure(rows: TraceRow[]): boolean {
   return ACTION_FAIL_RULES.some((rule) => cubeRespIncludes(rows, rule.phrase));
 }

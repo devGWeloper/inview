@@ -178,7 +178,7 @@ export interface WorkTask {
 
 /** FTE 계산식의 액션별 환산 분. action 은 DB 의 ACTION_TYP 값(GAIA 기록)과 일치해야 한다. */
 export interface FteActionMinute {
-  /** ACTION_TYP 값 (예: "SEA", "AUTOQUAL_CANCEL") */
+  /** ACTION_TYP 값 (예: "SEA", "AUTOQUAL_CANCEL", "AUTOQUAL_BM") */
   action: string;
   /** 해당 액션 성공 1건당 환산 분(分) */
   minutes: number;
@@ -218,10 +218,11 @@ export const DEFAULT_PROFILE: AgentProfile = {
   nickname: "억수야",
   rank: "CL2 1년차",
   workingHours: "24시간 365일",
-  skills: ["시즈닝", "AutoQual 취소"],
+  skills: ["시즈닝", "AutoQual 취소", "AutoQual 실행"],
   fteActionMinutes: [
     { action: "SEA", minutes: 5 },
     { action: "AUTOQUAL_CANCEL", minutes: 5 },
+    { action: "AUTOQUAL_BM", minutes: 5 },
   ],
   fteDefaultMinutes: 5,
   fteAnnualMinutes: 65984,
@@ -232,6 +233,7 @@ export const DEFAULT_PROFILE: AgentProfile = {
   tasks: [
     { icon: "🧂", title: "시즈닝 자동 처리", desc: "수신 트랜잭션을 규칙 기반으로 시즈닝해 다운스트림으로 전달", metric: "상시 처리" },
     { icon: "🚫", title: "AutoQual 취소 처리", desc: "요청 받은 AutoQual 을 검증 후 자동으로 취소 처리", metric: "상시 처리" },
+    { icon: "▶️", title: "AutoQual 실행 처리", desc: "요청 받은 AutoQual 을 검증 후 자동으로 실행 처리", metric: "상시 처리" },
     { icon: "🔀", title: "채널 라우팅", desc: "CUBE → GAIA → MCP → ONEOIS 경로로 메시지를 정확히 중계" },
     { icon: "🧾", title: "트랜잭션 추적·검증", desc: "TRACE_ID 기준 end-to-end 정합성 확인 및 완료 판정" },
     { icon: "📊", title: "정기 리포트 생성", desc: "사용 추이·성공률·에러 통계를 주기적으로 집계" },
@@ -248,9 +250,9 @@ export const DEFAULT_PROFILE: AgentProfile = {
 //   월별 FTE  = (해당 월 환산 분 합) ÷ 연간 분 × 12   (월 → 연 환산)
 //   계산식 상수(액션별 분/기본 분/연간 분)는 프로필(fteActionMinutes/fteDefaultMinutes/
 //   fteAnnualMinutes, ADMIN 편집)에서 가져온다. FTE 1 = 1년간 1인분(1 person-year).
-//   '액션 성공' = 시즈닝·AutoQual 취소 성공 트레이스 (대시보드 ok 기준: 에러 없고
-//   CUBE 응답에 실패 문구(ACTION_FAIL_PHRASES)가 없는 트레이스). 액션 구분은
-//   GAIA 의 ACTION_TYP (예: SEA/AUTOQUAL_CANCEL) — db.ts monthlyActionSuccess 참고.
+//   '액션 성공' = 시즈닝·AutoQual 취소·AutoQual 실행 성공 트레이스 (대시보드 ok 기준:
+//   에러 없고 CUBE 응답에 실패 문구(ACTION_FAIL_PHRASES)가 없는 트레이스). 액션 구분은
+//   GAIA 의 ACTION_TYP (예: SEA/AUTOQUAL_CANCEL/AUTOQUAL_BM) — db.ts monthlyActionSuccess 참고.
 // ─────────────────────────────────────────────────────────────────────────────
 export interface FteMonth {
   /** "YYYY-MM" */

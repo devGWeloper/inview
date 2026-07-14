@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
     // ── 트레이스 단위 필터 (userId/actionTyp)
     //   ACTION_TYP/USER_ID 는 일부 레이어 행에만 채워지므로, "트레이스 내 어느 한 행이라도 일치"하면
     //   그 트레이스의 전체 레이어 행을 유지한다. (행 단위로 거르면 다른 레이어 행이 사라져 FAC/AREA·
-    //   레이어바·액션 실패(시즈닝/AutoQual 취소) 판정이 모두 깨진다.)
+    //   레이어바·액션 실패(시즈닝/AutoQual 취소·실행) 판정이 모두 깨진다.)
     if (userId || actionTyp) {
       for (const [traceId, list] of byTrace) {
         const matchUser = !userId || list.some((r) => r.userId === userId);
@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 제외 trace 집합: 제외 코드 셋과 매칭되는 errCd 를 가진 trace + (가상)액션 실패(시즈닝/AutoQual 취소) trace
+    // 제외 trace 집합: 제외 코드 셋과 매칭되는 errCd 를 가진 trace + (가상)액션 실패(시즈닝/AutoQual 취소·실행) trace
     const excludedTraces = new Set<string>();
     if (excludeSet.size > 0) {
       for (const [traceId, list] of byTrace) {
@@ -183,7 +183,7 @@ export async function GET(req: NextRequest) {
         if (!r.errCd) continue;
         errCount.set(r.errCd, (errCount.get(r.errCd) ?? 0) + 1);
       }
-      // TEMP(ONEOIS 미연결): 액션 실패(시즈닝/AutoQual 취소)는 실제 errCd 가 없으므로 가상 코드로 topErrors 에 반영
+      // TEMP(ONEOIS 미연결): 액션 실패(시즈닝/AutoQual 취소·실행)는 실제 errCd 가 없으므로 가상 코드로 topErrors 에 반영
       for (const code of matchedActionFailCodes(list)) {
         errCount.set(code, (errCount.get(code) ?? 0) + 1);
       }

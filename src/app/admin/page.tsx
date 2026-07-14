@@ -178,7 +178,7 @@ function AdminEditor() {
             <Field label="직급"><input value={profile.rank} onChange={(e) => set("rank", e.target.value)} /></Field>
             <Field label="근무시간"><input value={profile.workingHours} onChange={(e) => set("workingHours", e.target.value)} /></Field>
             <Field label="아바타 (이모지 · 사진 없을 때 폴백)"><input value={profile.avatar} onChange={(e) => set("avatar", e.target.value)} /></Field>
-            <Field label="보유 스킬 (쉼표로 구분)"><input value={skillsText} onChange={(e) => setSkillsText(e.target.value)} placeholder="시즈닝, AutoQual 취소, ..." /></Field>
+            <Field label="보유 스킬 (쉼표로 구분)"><input value={skillsText} onChange={(e) => setSkillsText(e.target.value)} placeholder="시즈닝, AutoQual 취소, AutoQual 실행, ..." /></Field>
             <Field label="프로필 사진 경로 (public/ 기준)" wide>
               <input value={profile.avatarImage} onChange={(e) => set("avatarImage", e.target.value)} placeholder="예: /agent.jpg  (public 폴더에 올린 파일명)" />
             </Field>
@@ -190,7 +190,7 @@ function AdminEditor() {
           <legend>성과 지표 (FTE) — 계산식</legend>
           <p className="admin-hint admin-hint-top">
             FTE = <b>Σ(액션별 성공 수 × 환산 분) ÷ 연간 분</b> (월별은 ×12 연환산) · 2026-01-01부터 자동 집계.
-            액션은 DB 의 <b>ACTION_TYP</b> 값(예: SEA, AUTOQUAL_CANCEL)과 일치해야 하며,
+            액션은 DB 의 <b>ACTION_TYP</b> 값(예: SEA, AUTOQUAL_CANCEL, AUTOQUAL_BM)과 일치해야 하며,
             목록에 없는 액션은 기본 환산 분으로 계산됩니다. 저장 즉시 카드/대시보드 FTE 에 반영됩니다.
           </p>
           <div className="admin-fte-actions">

@@ -1,7 +1,7 @@
 import { LAYER_ORDER, LayerKey, TraceFilter, TraceRow } from "./types";
 import { logger } from "./logger";
 import { AppEnv, LayerDbConfig, loadConfig } from "./config";
-import { ACTION_FAIL_PHRASES } from "./tempStatus"; // TEMP(ONEOIS 미연결): 액션(시즈닝/AutoQual 취소) 성공 판정에 사용
+import { ACTION_FAIL_PHRASES } from "./tempStatus"; // TEMP(ONEOIS 미연결): 액션(시즈닝/AutoQual 취소·실행) 성공 판정에 사용
 
 export type { AppEnv } from "./config";
 
@@ -213,7 +213,7 @@ export async function fetchTraceIdsBy(
 
 // FTE 산정용: 월별·액션별 '액션 성공' 트레이스 수.
 //   성공 = 트레이스의 어떤 행에도 ERR_CD 가 없고, CUBE 응답에 액션 실패 문구
-//   (ACTION_FAIL_PHRASES: 'Seasoning 실패'/'AutoQual 취소 실패')가 없는 트레이스
+//   (ACTION_FAIL_PHRASES: 'Seasoning 실패'/'AutoQual 취소 실패'/'AutoQual 실행 실패')가 없는 트레이스
 //   (대시보드 ok 정의와 일치).
 //   성공 판정·월 귀속(첫 recv)은 CUBE DB 에서, 액션 구분은 ACTION_TYP 을 기록하는
 //   GAIA DB(/api/action-types 와 동일 레이어)에서 조회해 TRACE_ID 로 JS 조인한다.
@@ -226,7 +226,7 @@ const ACTION_TYP_LAYER: LayerKey = "GAIA";
 export interface MonthlyActionSuccess {
   /** "YYYY-MM" */
   ym: string;
-  /** GAIA 의 ACTION_TYP 값 (예: "SEA"/"AUTOQUAL_CANCEL"). 미기록/GAIA 미연결이면 null */
+  /** GAIA 의 ACTION_TYP 값 (예: "SEA"/"AUTOQUAL_CANCEL"/"AUTOQUAL_BM"). 미기록/GAIA 미연결이면 null */
   action: string | null;
   count: number;
 }

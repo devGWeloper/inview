@@ -408,6 +408,8 @@ export interface StatsResponse {
   layers: LayerStats[];
   /** 상위 사용자 (트레이스 수 기준) */
   topUsers: TopItem[];
+  /** 기간 내 고유 사용자 수 (USER_ID distinct, 트레이스 단위) — 실적 리포트의 "몇 명이 사용했나" */
+  uniqueUsers?: number;
   /** 상위 에러/실패 코드 */
   topErrors: TopItem[];
   /** 액션 유형별 트레이스 분포 (count desc) */

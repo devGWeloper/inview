@@ -92,6 +92,16 @@ The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTI
 - **화면**: `/agent`(서버 컴포넌트, `ProfileCard` + `WorkShowcase`), 대시보드 상단 `ProfileStrip`(클라이언트), `/admin`(비밀번호 게이트 후 편집 폼, 업무 순서 드래그앤드롭). 사진은 `public/` 에 올리고 `avatarImage` 에 `/파일명` 지정(없거나 로드 실패 시 `avatar` 이모지로 폴백, `AgentAvatar`).
 - **FTE 성과 지표**: `src/lib/fte.ts` `computeFteStats(profile)` 가 **실데이터로 계산**한다. `db.ts.monthlyActionSuccess()` 가 2026-01-01~현재 '액션 성공' 수를 **월별·액션별**로 집계: 성공 판정(에러 없고 CUBE RESP 에 실패 문구 — `ACTION_FAIL_PHRASES`: 'Seasoning 실패'/'AutoQual 취소 실패' — 없는 트레이스)·월 귀속(첫 recv)은 **CUBE DB**, 액션 구분은 `ACTION_TYP`(`SEA`/`AUTOQUAL_CANCEL`)을 기록하는 **GAIA DB**(`/api/action-types` 와 동일)에서 조회해 TRACE_ID 로 JS 조인. 연간 FTE `= Σ(액션별 성공 수 × 액션별 환산 분) ÷ 연간 분`, 월별은 환산 분 합 기준 ×12 연환산. **계산식은 프로필 필드로 커스터마이즈**: `fteActionMinutes`(ACTION_TYP→분 목록, 기본 SEA=5·AUTOQUAL_CANCEL=5), `fteDefaultMinutes`(목록에 없는 액션·ACTION_TYP 미상, 기본 5), `fteAnnualMinutes`(기본 65,984) — `/admin` "성과 지표 (FTE)" 섹션에서 편집, `normalizeProfile` 이 잘못된 값을 보정하고 구버전 `fteMinutesPerCase` 는 `fteDefaultMinutes` 로 마이그레이션한다 (수동 폴백 `fte`/`fteNote` 필드는 **제거됨** — CUBE 미연결이면 카드는 `—` + 안내 문구). FTE 1 = 1인·1년. GAIA 미연결이면 전 트레이스가 기본 분으로 계산된다(무해). 차트(`FteChart`)는 최근 12개월만 노출. **위 TEMPORARY WORKAROUND 의 `ACTION_FAIL_PHRASES` 에 의존**(원복 시 5번 항목 참고).
 
+### 실적 리포트 — `/report`
+
+관리자가 매주 수기로 옮겨 적던 실적을 원클릭 복사로 대체하는 종합 리포트 화면. `/agent` 페이지 헤드의 "📋 실적 리포트" 버튼으로 진입.
+
+- **기간**: 기본 주 단위 — **월요일 00:00 ~ 다음주 월요일 00:00** (`weekRange()`, 이번 주/지난주 프리셋 + ◀▶ 주 이동, 미래 주는 비활성). "직접 설정" 모드에서 `datetime-local` 로 시각까지 자유 지정.
+- **데이터**: 적용 기간으로 `GET /api/stats` + `GET /api/tokens` 를 병렬 호출 (필터 없음 = FullScope). 보조로 `/api/profile`(리포트 제목의 에이전트 이름)과 `/api/error-codes`(에러 의미)도 로드하며 실패해도 무해.
+- **화면 구성**: ① Action Agent 실적 — KPI 5칸(총 실행/성공률/실패/평균 응답시간/**사용자 수**), 사용 추이(`TimeSeriesChart`), 평균 응답 지연(`CubeLatencyChart`), 상태 분포+주요 에러, 액션 타입별+주간 사용자(`TopList`), FAC별/AREA별 ② LLM 토큰 — `TokenStatsCards`/`TokenChart`/`TokenLatencyChart` + **노드별 구분**(`TokenBreakdown`, action 외 judge/setup_guide 노드 실적 분리 — 리포트에선 필터 없이 조회 전용) ③ 리포트 텍스트 미리보기(`<pre>`) — 복사될 내용 그대로 노출. 기존 대시보드/Tokens 탭 컴포넌트를 그대로 재사용한다.
+- **전체 복사**: `buildReportText()` 가 두 응답을 보고용 플레인 텍스트로 조립(액션별 성공/실패, 주요 에러+의미, Top 사용자, FAC/AREA top5, 노드별/모델별 토큰) → `navigator.clipboard.writeText` (실패 시 textarea+`execCommand` 폴백) → 버튼이 2초간 "✓ 복사됨" 으로 바뀜.
+- **사용자 수**: `/api/stats` 가 `uniqueUsers`(USER_ID distinct, 트레이스 단위, optional 필드) 를 함께 내린다 — "주간 몇 명이 사용했나" 용도.
+
 ## 두 가지 지연 지표 (둘 다 정규 — 재는 대상이 다름)
 
 지연은 **성격이 다른 두 지표**로 나뉜다. 하나로 합치지 말 것.

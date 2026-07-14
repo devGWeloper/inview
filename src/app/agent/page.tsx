@@ -17,7 +17,10 @@ export default async function AgentPage() {
             <div className="agent-page-title">Agent Profile</div>
             <div className="agent-page-sub">우리 팀의 AI 에이전트, {profile.name}</div>
           </div>
-          <Link href="/admin" className="btn ghost" prefetch={false}>관리자 편집</Link>
+          <div className="agent-page-actions">
+            <Link href="/report" className="btn primary" prefetch={false}>📋 실적 리포트</Link>
+            <Link href="/admin" className="btn ghost" prefetch={false}>관리자 편집</Link>
+          </div>
         </div>
 
         <div className="agent-layout">

@@ -279,6 +279,7 @@ export async function GET(req: NextRequest) {
       buckets: bucketArr,
       layers,
       topUsers: topN(userCount, 8),
+      uniqueUsers: userCount.size,
       topErrors: topN(errCount, 8),
       byAction: Array.from(actionAcc.values()).sort((a, b) => b.total - a.total),
       byFac: Array.from(facAcc.values()).sort((a, b) => b.total - a.total),

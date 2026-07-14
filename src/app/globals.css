@@ -2769,3 +2769,73 @@ button.tbd-row:not(:disabled):hover {
 .admin-lock-error { font-size: 12.5px; color: var(--err); font-weight: 600; }
 .admin-lock-actions { display: flex; gap: 8px; margin-top: 8px; width: 100%; }
 .admin-lock-actions .btn { flex: 1; justify-content: center; }
+
+/* ---- /report 실적 리포트 ---- */
+.agent-page-actions { display: flex; align-items: center; gap: 8px; }
+
+.report-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.report-week-badge {
+  display: inline-block; margin-left: 8px; padding: 2px 8px;
+  border-radius: 999px; font-size: 11.5px; font-weight: 700;
+  background: var(--accent-soft); color: var(--accent);
+  vertical-align: 1px;
+}
+
+.week-nav {
+  display: inline-flex; align-items: center; gap: 2px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 2px;
+}
+.week-nav button {
+  border: none; background: transparent; cursor: pointer;
+  padding: 5px 10px; border-radius: 6px;
+  font-size: 12px; color: var(--text-2);
+}
+.week-nav button:hover:not(:disabled) { background: var(--surface-3); color: var(--text); }
+.week-nav button:disabled { opacity: 0.35; cursor: default; }
+.week-nav-label {
+  min-width: 56px; text-align: center;
+  font-size: 12.5px; font-weight: 700; color: var(--text);
+}
+
+.custom-range .btn { padding: 6px 14px; }
+
+.copy-btn { white-space: nowrap; }
+.copy-btn.copied {
+  background: var(--ok); border-color: var(--ok);
+  color: #fff;
+}
+
+/* 섹션 구분 헤더 (1. Action Agent / 2. LLM 토큰) */
+.report-h {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-top: 10px; padding: 4px 2px 0;
+  border-top: 2px solid var(--border-strong);
+}
+.report-h:first-of-type { border-top: none; margin-top: 0; }
+.report-h-num {
+  display: inline-grid; place-items: center; align-self: center;
+  width: 24px; height: 24px; border-radius: 7px;
+  background: var(--accent); color: #fff;
+  font-size: 13px; font-weight: 800; font-family: var(--mono);
+}
+.report-h-title { font-size: 18px; font-weight: 800; letter-spacing: -0.2px; }
+.report-h-sub { font-size: 12.5px; color: var(--text-3); }
+
+/* 복사 텍스트 미리보기 */
+.report-preview .dash-card-head { align-items: center; }
+.report-preview-text {
+  margin: 0; padding: 14px 16px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+  color: var(--text-2);
+  white-space: pre-wrap; word-break: break-all;
+  max-height: 420px; overflow-y: auto;
+}
+
+.report-footer {
+  display: flex; gap: 8px; justify-content: flex-start;
+  padding: 4px 2px 16px;
+}

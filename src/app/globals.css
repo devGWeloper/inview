@@ -1907,10 +1907,10 @@ button.tbd-row:not(:disabled):hover {
   gap: 10px;
   margin-bottom: 10px;
 }
-.qtable-meta { font-size: 12px; color: var(--text-muted); font-family: var(--mono); white-space: nowrap; }
+.qtable-meta { font-size: 13px; color: var(--text-muted); font-family: var(--mono); white-space: nowrap; }
 .qfilter-clear {
-  padding: 4px 10px;
-  font-size: 11.5px;
+  padding: 5px 11px;
+  font-size: 12.5px;
   font-weight: 600;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -1946,8 +1946,8 @@ button.tbd-row:not(:disabled):hover {
   width: 100%;
   min-width: 72px;
   box-sizing: border-box;
-  padding: 4px 7px;
-  font-size: 12px;
+  padding: 5px 8px;
+  font-size: 13px;
   font-weight: 400;
   text-transform: none;
   letter-spacing: normal;
@@ -1984,8 +1984,9 @@ button.tbd-row:not(:disabled):hover {
 .qpage-range { color: var(--text-muted); font-weight: 400; }
 
 /* 질문 표는 기본 표보다 글자를 키워 눈에 들어오게 */
-.qtable { font-size: 13px; }
-.qtable th, .qtable td { padding: 9px 10px; }
+.qtable { font-size: 14px; }
+.qtable th, .qtable td { padding: 10px; }
+.qtable thead tr:first-child th { font-size: 12px; }
 .qtable .qcell-exp { width: 22px; text-align: center; color: var(--text-muted); }
 .qrow.expandable { cursor: pointer; }
 .qrow.expandable:hover { background: var(--surface-2); }
@@ -1993,21 +1994,21 @@ button.tbd-row:not(:disabled):hover {
 .qrow .muted { color: var(--text-muted); }
 
 /* 질문 셀 — 원본 질의(주인공) 위, TRACE_ID(참조 정보) 아래 */
-.qcell-q { max-width: 420px; }
+.qcell-q { max-width: 460px; }
 .qq-text {
   display: block;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text);
 }
 .qq-trace {
   display: block;
   margin-top: 2px;
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--text-muted);
 }
 
@@ -2016,9 +2017,9 @@ button.tbd-row:not(:disabled):hover {
 .qnode,
 .qmodel {
   display: inline-block;
-  padding: 2px 9px;
+  padding: 2px 10px;
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
   font-family: var(--mono);
 }
@@ -2058,8 +2059,8 @@ button.tbd-row:not(:disabled):hover {
   align-items: center;
   flex-wrap: wrap;
   gap: 6px 12px;
-  padding: 8px 11px;
-  font-size: 13px;
+  padding: 9px 12px;
+  font-size: 14px;
   color: var(--text-2);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -2067,8 +2068,8 @@ button.tbd-row:not(:disabled):hover {
 }
 .qcalls-count { font-weight: 700; color: var(--text); }
 .qcalls-flow { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
-.qcalls-aux { font-size: 12px; color: var(--text-muted); }
-.qcall-arrow { color: var(--text-muted); font-size: 11px; }
+.qcalls-aux { font-size: 13px; color: var(--text-muted); }
+.qcall-arrow { color: var(--text-muted); font-size: 12px; }
 
 .qcall-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .qcall { display: flex; gap: 10px; padding-bottom: 10px; }
@@ -2076,13 +2077,13 @@ button.tbd-row:not(:disabled):hover {
 .qcall-rail { flex: none; width: 24px; display: flex; flex-direction: column; align-items: center; }
 .qcall-dot {
   flex: none;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   font-family: var(--mono);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
@@ -2111,14 +2112,14 @@ button.tbd-row:not(:disabled):hover {
 }
 .qcall-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .qcall-lat {
-  padding: 1px 7px;
+  padding: 2px 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   background: color-mix(in srgb, #dc2626 9%, transparent);
   color: #dc2626;
 }
-.qcall-time { margin-left: auto; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.qcall-time { margin-left: auto; font-size: 13px; color: var(--text-muted); white-space: nowrap; }
 .qcall-gap { color: var(--text-3); }
 
 .qcall-tok { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -2136,13 +2137,13 @@ button.tbd-row:not(:disabled):hover {
   border-radius: 3px;
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 60%, transparent), var(--accent));
 }
-.qcall-toknum { font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
+.qcall-toknum { font-size: 13.5px; color: var(--text-2); white-space: nowrap; }
 .qcall-toknum b { font-weight: 700; color: var(--text); }
 
 /* ── 질의 본문 (원본 질의 블록 / 호출 카드의 다른 쿼리 공용) ──
    사용자 질문은 자연어 → 산세리프로 크게, 기본 전체 노출. 아주 길면 3줄 접힘 + 더 보기 */
 .qtext {
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.6;
   font-weight: 500;
   color: var(--text);
@@ -2158,11 +2159,11 @@ button.tbd-row:not(:disabled):hover {
 .qtext-more {
   align-self: flex-start;
   margin-top: 2px;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface);
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--text-2);
   cursor: pointer;
@@ -2182,7 +2183,7 @@ button.tbd-row:not(:disabled):hover {
 }
 .qorigin.none { border-left-color: var(--border-strong); background: var(--surface); }
 .qorigin-label {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -2200,9 +2201,9 @@ button.tbd-row:not(:disabled):hover {
   border: 1px dashed var(--border-strong);
   border-radius: 8px;
 }
-.qcall-qdiff .qtext { font-size: 13px; }
+.qcall-qdiff .qtext { font-size: 14px; }
 .qcall-qdiff-label {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 800;
   letter-spacing: 0.05em;
   color: var(--text-muted);

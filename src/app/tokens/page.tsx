@@ -275,9 +275,6 @@ export default function TokensPage() {
             <div className="dash-card-head">
               <div className="dash-card-title-group">
                 <span className="dash-card-title">질문별 토큰</span>
-                <span className="dash-card-sub">
-                  TRACE_ID(질문) 단위 · 총 토큰 상위 {stats.questions.length.toLocaleString()}건 · 노드/모델은 거쳐간 전부 표시 · 행 펼침 = 원본 질의 + 호출 타임라인
-                </span>
               </div>
             </div>
             <div className="dash-card-body">

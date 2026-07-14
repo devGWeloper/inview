@@ -36,7 +36,7 @@ async function getOracle(): Promise<typeof import("oracledb") | null> {
   }
 }
 
-const QUESTION_LIMIT = 200; // "질문별 토큰" 표에 노출할 질문 수 (총 토큰 desc 상위)
+const QUESTION_LIMIT = 500; // "질문별 토큰" 표에 로드할 질문 수 (마지막 호출 시각 desc — 최신 질문 우선)
 const CALL_LIMIT = 200;     // 단일 질문(traceId) 펼침 시 호출 행 수
 const TOP_USER_LIMIT = 8;
 
@@ -143,6 +143,16 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     conn = await oracle.getConnection(cfg);
     const opts = { outFormat: oracle.OBJECT } as const;
     const rowsOf = (r: { rows?: unknown }) => (r.rows ?? []) as Array<Record<string, unknown>>;
+    // 쿼리별 격리 실행 — 한 집계가 SQL 에러(문법/버전 차 등)로 죽어도 응답 전체를 비우지 않고,
+    // 어느 섹션이 무슨 에러로 실패했는지 로그에 남긴다. 실패 섹션만 빈 결과.
+    const run = async (name: string, sql: string): Promise<Array<Record<string, unknown>>> => {
+      try {
+        return rowsOf(await conn!.execute(sql, binds, opts));
+      } catch (e) {
+        logger.error(`fetchTokenStats [${name}] query failed`, { err: String(e), sql });
+        return [];
+      }
+    };
 
     // 1) 시계열 버킷 (+ totals 는 버킷 합으로 도출)
     //   LATENCY_MS 는 NULL 가능 → SUM/COUNT(LATENCY_MS) 로 NULL 제외 평균을 도출하고,
@@ -152,11 +162,10 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T, COUNT(*) AS N,` +
       ` SUM(LATENCY_MS) AS LSUM, COUNT(LATENCY_MS) AS LCNT` +
       ` FROM TRX_TOKEN_DET${where} GROUP BY ${bucketExpr(g)} ORDER BY 1`;
-    const bucketRes = await conn.execute(bucketSql, binds, opts);
     const bucketMap = new Map<number, TokenBucket>();
     let latSum = 0;
     let latCnt = 0;
-    for (const r of rowsOf(bucketRes)) {
+    for (const r of await run("buckets", bucketSql)) {
       const ms = parseTs(str(r.BKT ?? r.bkt));
       if (ms === null) continue;
       const key = floorToBucket(ms, g);
@@ -215,8 +224,8 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
           sub: [],
         };
       });
-    const byNode = dimFrom(rowsOf(await conn.execute(dimSql("NODE_NM"), binds, opts)));
-    const byModel = dimFrom(rowsOf(await conn.execute(dimSql("MODEL_NM"), binds, opts)));
+    const byNode = dimFrom(await run("byNode", dimSql("NODE_NM")));
+    const byModel = dimFrom(await run("byModel", dimSql("MODEL_NM")));
 
     // 2.5) 노드×모델 교차 — 각 노드가 어떤 모델을 얼마나 썼는지(그 역방향도).
     //   한 노드가 모델 하나만 쓴다고 오해하지 않도록 리더보드 행에 구성으로 노출한다.
@@ -227,7 +236,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       ` GROUP BY NVL(NODE_NM, '(none)'), NVL(MODEL_NM, '(none)') ORDER BY T DESC`;
     const nodeIdx = new Map(byNode.map((d) => [d.key, d]));
     const modelIdx = new Map(byModel.map((d) => [d.key, d]));
-    for (const r of rowsOf(await conn.execute(crossSql, binds, opts))) {
+    for (const r of await run("nodeModelCross", crossSql)) {
       const nk = String(r.NK ?? r.nk ?? "(none)");
       const mk = String(r.MK ?? r.mk ?? "(none)");
       const calls = num(r.N ?? r.n);
@@ -241,12 +250,14 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       `SELECT USER_ID AS K, SUM(TOTAL_TOKENS) AS T FROM TRX_TOKEN_DET${where}` +
       `${where ? " AND" : " WHERE"} USER_ID IS NOT NULL` +
       ` GROUP BY USER_ID ORDER BY T DESC FETCH FIRST ${TOP_USER_LIMIT} ROWS ONLY`;
-    const topUsers: TopItem[] = rowsOf(await conn.execute(userSql, binds, opts)).map((r) => ({
+    const topUsers: TopItem[] = (await run("topUsers", userSql)).map((r) => ({
       key: String(r.K ?? r.k ?? ""),
       count: num(r.T ?? r.t),
     }));
 
-    // 5) questions — 질문(TRACE_ID) 단위 묶음 (총 토큰 desc 상위).
+    // 5) questions — 질문(TRACE_ID) 단위 묶음 (LAST_TM desc — 최신 질문부터 N건).
+    //    표의 기본 정렬이 최신순이므로 로드 기준도 최신순이어야 "최근 질문이 안 보이는" 착시가 없다.
+    //    (토큰 큰 순 로드였을 때 최근 질문이 통째로 잘려 노드별 데이터가 누락돼 보이는 문제가 있었음)
     //    TRACE_ID 있는 호출은 그룹핑, 없는(액션 무관) 호출은 1건=1질문으로 개별 노출.
     //    노드/모델은 MAX 대표값이 아니라 거쳐간 전부를 LISTAGG 로 내린다(중복 제거는 JS).
     //    한 질문의 호출 수는 작아 4000자 한도는 사실상 안 넘지만 ON OVERFLOW TRUNCATE 로 방어.
@@ -271,8 +282,8 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
         ` INPUT_TOKENS AS P, OUTPUT_TOKENS AS C, TOTAL_TOKENS AS T,` +
         ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS') AS LAST_TM` +
         ` FROM TRX_TOKEN_DET${grpWhere("TRACE_ID IS NULL")}` +
-      `) ORDER BY T DESC FETCH FIRST ${QUESTION_LIMIT} ROWS ONLY`;
-    const questions: TokenQuestion[] = rowsOf(await conn.execute(questionsSql, binds, opts)).map((r) => ({
+      `) ORDER BY LAST_TM DESC FETCH FIRST ${QUESTION_LIMIT} ROWS ONLY`;
+    const questions: TokenQuestion[] = (await run("questions", questionsSql)).map((r) => ({
       qKey: String(r.QKEY ?? r.qkey ?? ""),
       traceId: str(r.TRACE_ID ?? r.trace_id),
       nodes: dedupeCsv(str(r.NODES ?? r.nodes)),
@@ -294,7 +305,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
         ` INPUT_TOKENS, OUTPUT_TOKENS, TOTAL_TOKENS, LATENCY_MS, QUERY_CTN,` +
         ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS CALL_TM` +
         ` FROM TRX_TOKEN_DET${where} ORDER BY CALL_TM DESC FETCH FIRST ${CALL_LIMIT} ROWS ONLY`;
-      calls = rowsOf(await conn.execute(callsSql, binds, opts)).map((r) => {
+      calls = (await run("calls", callsSql)).map((r) => {
         const lat = r.LATENCY_MS ?? r.latency_ms;
         return {
           tokenId: String(r.TOKEN_ID ?? r.token_id ?? ""),

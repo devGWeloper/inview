@@ -12,18 +12,12 @@ export function FteChart({ stats }: { stats: FteStats }) {
   const capped = stats.months.length > WINDOW;
   const maxFte = Math.max(0.0001, ...months.map((m) => m.fte));
   const lastIdx = months.length - 1;
-  // 당월은 아직 실적이 쌓이는 중 — 점선 막대로 구분
-  const now = new Date();
-  const curYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const hasLive = months.some((m) => m.ym === curYm);
 
   return (
     <div className="fte-chart">
       <div className="fte-chart-head">
         <span className="fte-chart-title">월별 FTE 추세{capped ? " · 최근 12개월" : ""}</span>
-        <span className="fte-chart-sub">
-          월 환산 · 누적 {stats.totalCount.toLocaleString()}건{hasLive ? " · 당월 집계 중" : ""}
-        </span>
+        <span className="fte-chart-sub">월 환산 · 누적 {stats.totalCount.toLocaleString()}건</span>
       </div>
       <div className="fte-bars">
         {months.map((m, i) => {
@@ -32,12 +26,11 @@ export function FteChart({ stats }: { stats: FteStats }) {
           // 연도가 바뀌는 지점(1월)·첫 막대는 'YY.M' 로 표기해 연 경계를 구분
           const label = i === 0 || mon === 1 ? `${yy.slice(2)}.${mon}` : `${mon}`;
           const h = Math.max(6, Math.round((m.fte / maxFte) * 100));
-          const live = m.ym === curYm;
           return (
             <div
-              className={"fte-bar-col" + (i === lastIdx ? " is-last" : "") + (live ? " is-live" : "")}
+              className={"fte-bar-col" + (i === lastIdx ? " is-last" : "")}
               key={m.ym}
-              title={`${m.ym} · FTE ${m.fte.toFixed(2)} (성공 ${m.count.toLocaleString()}건)${live ? " · 집계 중" : ""}`}
+              title={`${m.ym} · FTE ${m.fte.toFixed(2)} (성공 ${m.count.toLocaleString()}건)`}
             >
               <div className="fte-bar-track">
                 <span className="fte-bar-val">{m.fte.toFixed(2)}</span>

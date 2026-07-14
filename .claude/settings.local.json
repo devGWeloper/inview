@@ -35,7 +35,11 @@
       "PowerShell($from=\\(Get-Date\\).AddDays\\(-30\\).ToString\\(\"yyyy-MM-ddTHH:mm:00\"\\); $to=\\(Get-Date\\).ToString\\(\"yyyy-MM-ddTHH:mm:00\"\\); $r=Invoke-WebRequest -UseBasicParsing -Uri \"http://localhost:5174/api/tokens?dateFrom=$from&dateTo=$to\" -TimeoutSec 60; $j=$r.Content | ConvertFrom-Json; \"totals: \" + \\($j.totals | ConvertTo-Json -Compress\\); \"avgLatencyMs: $\\($j.avgLatencyMs\\)\"; \"granularity: $\\($j.granularity\\)\"; \"buckets with data:\"; $j.buckets | Where-Object { $_.calls -gt 0 -or $_.avgLatencyMs -ne $null } | ConvertTo-Json -Compress)",
       "PowerShell(Remove-Item *)",
       "PowerShell(git restore *)",
-      "Skill(dataviz)"
+      "Skill(dataviz)",
+      "PowerShell(git apply *)",
+      "Bash(git show *)",
+      "Bash(git apply *)",
+      "PowerShell(npx tsc --noEmit; if \\($?\\) { \"typecheck OK\" })"
     ]
   }
 }

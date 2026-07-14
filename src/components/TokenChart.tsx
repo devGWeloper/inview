@@ -13,7 +13,6 @@ import {
   YAxis,
 } from "recharts";
 import { TokenBucket, TokenStatsResponse } from "@/lib/types";
-import { isBucketInProgress } from "@/lib/timeBuckets";
 
 const SERIES = ["inputTokens", "outputTokens"] as const;
 type SeriesKey = typeof SERIES[number];
@@ -46,10 +45,7 @@ function fmtCompact(n: number): string {
   return String(Math.round(n));
 }
 
-// k: 실제 값(툴팁/통계용) · kDone: 완결 구간 실선 · kLive: 집계 중 꼬리(점선, 앵커+마지막 점만)
-type Row = { ts: string; tick: string; total: number; calls: number; live?: boolean } &
-  Record<SeriesKey, number> &
-  Record<`${SeriesKey}Done` | `${SeriesKey}Live`, number | null>;
+type Row = { ts: string; tick: string; total: number; calls: number } & Record<SeriesKey, number>;
 
 function CustomTooltip({
   active, payload, granularity,
@@ -62,10 +58,7 @@ function CustomTooltip({
   const row = payload[0].payload;
   return (
     <div className="ts-tooltip">
-      <div className="ts-tooltip-head">
-        {fmtFullTs(row.ts, granularity)}
-        {row.live && <span className="ts-tooltip-live">집계 중</span>}
-      </div>
+      <div className="ts-tooltip-head">{fmtFullTs(row.ts, granularity)}</div>
       <div className="ts-tooltip-body">
         {SERIES.map((k) => {
           const v = row[k] ?? 0;
@@ -98,38 +91,23 @@ export function TokenChart({ stats }: { stats: TokenStatsResponse }) {
     outputTokens: false,
   });
 
-  // 마지막 버킷이 아직 집계 중이면 그 인덱스 (아니면 -1)
-  const liveIdx = useMemo(() => {
-    const last = stats.buckets[stats.buckets.length - 1];
-    if (!last) return -1;
-    return isBucketInProgress(last.ts, granularity) ? stats.buckets.length - 1 : -1;
-  }, [stats.buckets, granularity]);
-
   const data: Row[] = useMemo(
     () =>
-      stats.buckets.map((b: TokenBucket, i) => {
-        const row = {
-          ts: b.ts,
-          tick: fmtTick(b.ts, granularity),
-          inputTokens: b.inputTokens,
-          outputTokens: b.outputTokens,
-          total: b.totalTokens,
-          calls: b.calls,
-          live: i === liveIdx,
-        } as Row;
-        for (const k of SERIES) {
-          row[`${k}Done`] = i === liveIdx ? null : row[k];
-          row[`${k}Live`] = liveIdx >= 0 && i >= liveIdx - 1 ? row[k] : null;
-        }
-        return row;
-      }),
-    [stats.buckets, granularity, liveIdx]
+      stats.buckets.map((b: TokenBucket) => ({
+        ts: b.ts,
+        tick: fmtTick(b.ts, granularity),
+        inputTokens: b.inputTokens,
+        outputTokens: b.outputTokens,
+        total: b.totalTokens,
+        calls: b.calls,
+      })),
+    [stats.buckets, granularity]
   );
 
   const { peakIdx, peakVal, peakTs } = useMemo(() => {
     let pIdx = -1, pVal = 0;
     data.forEach((d, i) => {
-      if (!d.live && d.total > pVal) { pVal = d.total; pIdx = i; }
+      if (d.total > pVal) { pVal = d.total; pIdx = i; }
     });
     return { peakIdx: pIdx, peakVal: pVal, peakTs: pIdx >= 0 ? data[pIdx].ts : null };
   }, [data]);
@@ -152,7 +130,6 @@ export function TokenChart({ stats }: { stats: TokenStatsResponse }) {
           </button>
         ))}
         <span className="ts-legend-spacer" />
-        {liveIdx >= 0 && <span className="ts-live-badge">마지막 구간 집계 중</span>}
         <span className="ts-meta">{data.length} buckets · {granText(granularity)}</span>
       </div>
 
@@ -207,31 +184,12 @@ export function TokenChart({ stats }: { stats: TokenStatsResponse }) {
               <Area
                 key={k}
                 type="monotone"
-                dataKey={`${k}Done`}
+                dataKey={k}
                 name={SERIES_LABEL[k]}
                 stackId="tok"
                 stroke={SERIES_COLOR[k]}
                 strokeWidth={1.4}
                 fill={`url(#tok-grad-${k})`}
-                hide={hidden[k]}
-                isAnimationActive
-                animationDuration={500}
-                activeDot={{ r: 3, stroke: "var(--surface)", strokeWidth: 1.5 }}
-              />
-            ))}
-            {/* 집계 중 꼬리 — 마지막 완결점→진행 버킷 구간만 점선 + 옅은 채움으로 */}
-            {liveIdx >= 0 && SERIES.map((k) => (
-              <Area
-                key={`${k}-live`}
-                type="monotone"
-                dataKey={`${k}Live`}
-                name={SERIES_LABEL[k]}
-                stackId="tokLive"
-                stroke={SERIES_COLOR[k]}
-                strokeWidth={1.4}
-                strokeDasharray="5 4"
-                fill={`url(#tok-grad-${k})`}
-                fillOpacity={0.45}
                 hide={hidden[k]}
                 isAnimationActive
                 animationDuration={500}

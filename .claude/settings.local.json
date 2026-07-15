@@ -40,7 +40,8 @@
       "Bash(git show *)",
       "Bash(git apply *)",
       "PowerShell(npx tsc --noEmit; if \\($?\\) { \"typecheck OK\" })",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(echo \"tsc exit: $?\")"
     ]
   }
 }

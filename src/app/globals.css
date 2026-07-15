@@ -2851,6 +2851,48 @@ button.tbd-row:not(:disabled):hover {
 .report-h-title { font-size: 18px; font-weight: 800; letter-spacing: -0.2px; }
 .report-h-sub { font-size: 12.5px; color: var(--text-3); }
 
+/* 일별 현황 표 — 주간/기간 조회에서 하루 단위 실적을 바로 보여준다 */
+.daily-table-wrap { overflow-x: auto; }
+.daily-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 12.5px; white-space: nowrap;
+}
+.daily-table th, .daily-table td { padding: 7px 12px; }
+.daily-table th {
+  text-align: left; font-size: 11px; font-weight: 700;
+  color: var(--text-3); text-transform: uppercase; letter-spacing: 0.4px;
+  border-bottom: 1px solid var(--border-strong);
+}
+.daily-table th.num, .daily-table td.num { text-align: right; font-family: var(--mono); }
+.daily-table tbody tr { border-bottom: 1px solid var(--border); }
+.daily-table tbody tr:hover { background: var(--surface-2); }
+.daily-table tbody tr.empty td { color: var(--text-muted); }
+.daily-table td.ok { color: var(--ok); font-weight: 600; }
+.daily-table td.err { color: var(--err); font-weight: 700; }
+.daily-table .daily-date { font-weight: 700; color: var(--text-2); }
+.daily-table .daily-date.dow-0 { color: var(--err); }  /* 일요일 */
+.daily-table .daily-date.dow-6 { color: var(--accent); } /* 토요일 */
+.daily-peak {
+  display: inline-block; margin-left: 7px; padding: 1px 6px;
+  border-radius: 999px; font-size: 10px; font-weight: 800;
+  font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.4px;
+  background: var(--accent-soft); color: var(--accent);
+  vertical-align: 1px;
+}
+/* 실행 셀 — 값 뒤에 최대 일 대비 상대 바를 깔아 하루 규모가 한눈에 보이게 */
+.daily-table td.daily-run { position: relative; min-width: 110px; }
+.daily-bar {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  height: 16px; max-width: calc(100% - 24px);
+  border-radius: 4px; background: var(--accent-soft);
+  pointer-events: none;
+}
+.daily-run-val { position: relative; font-weight: 700; }
+.daily-table tfoot td {
+  padding-top: 9px; border-top: 2px solid var(--border-strong);
+  font-weight: 800; color: var(--text);
+}
+
 /* 복사 텍스트 미리보기 */
 .report-preview .dash-card-head { align-items: center; }
 .report-preview-text {

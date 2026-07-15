@@ -159,6 +159,24 @@ export interface TopItem {
   count: number;
 }
 
+/**
+ * 일별 브레이크다운 (실적 리포트용) — 주간/기간 조회에서도 하루 단위 실적이 바로 보이도록
+ * 트레이스 시작일(첫 recv, 로컬 자정 floor) 기준으로 상태/사용자/응답지연을 하루 단위로 집계한다.
+ * granularity 와 무관하게 항상 "일" 단위 (buckets 와 별개 — buckets 는 차트용 자동 granularity).
+ */
+export interface DailyStat {
+  /** "YYYY-MM-DD" (로컬) */
+  date: string;
+  total: number;
+  ok: number;
+  fail: number;
+  pending: number;
+  /** 해당 일의 고유 사용자 수 (트레이스 대표 사용자 distinct — uniqueUsers 와 같은 기준) */
+  users: number;
+  /** 해당 일 Action 평균 응답 지연(ms) — CUBE send→resp. 측정 가능한 트레이스가 없으면 null */
+  avgCubeLatencyMs: number | null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Agent profile (이억수 TL 프로필 카드)
 //
@@ -412,6 +430,8 @@ export interface StatsResponse {
   topUsers: TopItem[];
   /** 기간 내 고유 사용자 수 (USER_ID distinct, 트레이스 단위) — 실적 리포트의 "몇 명이 사용했나" */
   uniqueUsers?: number;
+  /** 일별 브레이크다운 (from~to 를 덮는 날짜 오름차순, 빈 날은 0) — 실적 리포트 "일별 현황" 용 */
+  daily?: DailyStat[];
   /** 상위 에러/실패 코드 */
   topErrors: TopItem[];
   /** 액션 유형별 트레이스 분포 (count desc) */

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchAllRows } from "@/lib/db";
 import {
+  DailyStat,
   DimensionStats,
   LAYER_ORDER,
   LayerKey,
@@ -154,6 +155,13 @@ export async function GET(req: NextRequest) {
     let cubeLatSum = 0;
     let cubeLatN = 0;
 
+    // 일별 브레이크다운 (리포트 "일별 현황"): buckets 와 별개로 항상 "일" 단위로 집계.
+    // 사용자 수는 하루 안에서 distinct 라 Set 이 필요해 buckets 에 얹지 않고 따로 둔다.
+    const dailyAcc = new Map<
+      number,
+      { total: number; ok: number; fail: number; pending: number; users: Set<string>; latSum: number; latN: number }
+    >();
+
     for (const [traceId, list] of byTrace) {
       if (excludedTraces.has(traceId)) continue;
 
@@ -206,6 +214,17 @@ export async function GET(req: NextRequest) {
         }
         b[status] += 1;
 
+        // 일별 브레이크다운 — 버킷과 동일한 귀속 기준(트레이스 시작 시각), 단위만 항상 "일"
+        const dayKey = floorToBucket(start, "1d");
+        let day = dailyAcc.get(dayKey);
+        if (!day) {
+          day = { total: 0, ok: 0, fail: 0, pending: 0, users: new Set(), latSum: 0, latN: 0 };
+          dailyAcc.set(dayKey, day);
+        }
+        day.total += 1;
+        day[status] += 1;
+        if (u) day.users.add(u);
+
         // 트레이스 latency: 첫 recv → 마지막 resp/send
         if (respTimes.length > 0) {
           const end = Math.max(...respTimes);
@@ -237,6 +256,8 @@ export async function GET(req: NextRequest) {
             cl.n += 1;
             cubeLatSum += d;
             cubeLatN += 1;
+            day.latSum += d;
+            day.latN += 1;
           }
         }
       }
@@ -253,6 +274,25 @@ export async function GET(req: NextRequest) {
         return b;
       }
     );
+
+    // 일별 브레이크다운 배열 (빈 날은 0으로 채움).
+    // to 는 상한 경계(다음날/다음주 자정)라 -1ms 로 마지막 빈 날이 붙는 것을 막는다.
+    const daily: DailyStat[] = enumerateBucketStarts(
+      effectiveFromMs,
+      Math.max(effectiveFromMs, effectiveToMs - 1),
+      "1d"
+    ).map((k) => {
+      const d = dailyAcc.get(k);
+      return {
+        date: isoNoTz(k).slice(0, 10),
+        total: d?.total ?? 0,
+        ok: d?.ok ?? 0,
+        fail: d?.fail ?? 0,
+        pending: d?.pending ?? 0,
+        users: d?.users.size ?? 0,
+        avgCubeLatencyMs: d && d.latN > 0 ? d.latSum / d.latN : null,
+      };
+    });
 
     // ── 레이어별 행 단위 집계 (ERROR/FAIL 구분 없이 fail 로 통합) — 제외 trace 의 행은 빠짐
     const layerAcc = new Map<LayerKey, { total: number; fail: number; ok: number; rt: number[] }>();
@@ -297,6 +337,7 @@ export async function GET(req: NextRequest) {
       layers,
       topUsers: topN(userCount, 8),
       uniqueUsers: userCount.size,
+      daily,
       topErrors: topN(errCount, 8),
       byAction: Array.from(actionAcc.values()).sort((a, b) => b.total - a.total),
       byFac: Array.from(facAcc.values()).sort((a, b) => b.total - a.total),

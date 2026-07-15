@@ -86,6 +86,47 @@ function pct(n: number, total: number): string {
   return ((n / total) * 100).toFixed(1) + "%";
 }
 
+// ── 일별 브레이크다운 ─────────────────────────────────────────────────────────
+// 주간(또는 며칠짜리 직접 설정) 조회에서도 하루 단위 실적이 바로 보이도록,
+// stats.daily(서버 집계)에 토큰(tok.buckets 를 날짜로 합산)을 붙여 하나의 행으로 만든다.
+// 화면의 "일별 현황" 표와 복사 텍스트의 [일별 현황] 이 같은 데이터를 쓴다.
+interface DailyRow {
+  date: string; // "YYYY-MM-DD"
+  total: number;
+  ok: number;
+  fail: number;
+  pending: number;
+  users: number;
+  avgCubeLatencyMs: number | null;
+  tokens: number;
+  llmCalls: number;
+}
+
+function mergeDailyRows(stats: StatsResponse | null, tok: TokenStatsResponse | null): DailyRow[] {
+  const daily = stats?.daily ?? [];
+  if (daily.length === 0) return [];
+  const tokByDate = new Map<string, { tokens: number; calls: number }>();
+  for (const b of tok?.buckets ?? []) {
+    const key = b.ts.slice(0, 10);
+    const t = tokByDate.get(key) ?? { tokens: 0, calls: 0 };
+    t.tokens += b.totalTokens;
+    t.calls += b.calls;
+    tokByDate.set(key, t);
+  }
+  return daily.map((d) => ({
+    ...d,
+    tokens: tokByDate.get(d.date)?.tokens ?? 0,
+    llmCalls: tokByDate.get(d.date)?.calls ?? 0,
+  }));
+}
+
+/** "YYYY-MM-DD" → { label: "07/07 (월)", dow: 0~6 } — Date.parse 의 UTC 해석을 피해 직접 파싱 */
+function dayLabel(date: string): { label: string; dow: number } {
+  const [y, m, d] = date.split("-").map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  return { label: `${pad(m)}/${pad(d)} (${DAY_KO[dow]})`, dow };
+}
+
 // ── 복사용 텍스트 생성 ────────────────────────────────────────────────────────
 function buildReportText(opts: {
   agentName: string;
@@ -94,9 +135,10 @@ function buildReportText(opts: {
   rangeLabel: string;
   stats: StatsResponse | null;
   tok: TokenStatsResponse | null;
+  dailyRows: DailyRow[];
   errDescs: Record<string, string>;
 }): string {
-  const { agentName, rangeLabel, stats, tok, errDescs } = opts;
+  const { agentName, rangeLabel, stats, tok, dailyRows, errDescs } = opts;
   const L: string[] = [];
   const line = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
 
@@ -117,6 +159,26 @@ function buildReportText(opts: {
     if (t.pending > 0) L.push(`  · 진행중        ${t.pending.toLocaleString()}건`);
     L.push(`  · 평균 응답시간  ${fmtDuration(stats.cubeAvgLatencyMs ?? null)} (수신→응답, LLM 포함 전 구간)`);
     L.push(`  · 사용자        ${stats.uniqueUsers != null ? `${stats.uniqueUsers.toLocaleString()}명` : "—"}`);
+
+    // 하루짜리 조회(오늘/어제)에선 KPI 와 동어반복이라 2일 이상일 때만 싣는다
+    if (dailyRows.length >= 2) {
+      L.push("");
+      L.push("[일별 현황]");
+      for (const d of dailyRows) {
+        const { label } = dayLabel(d.date);
+        if (d.total === 0 && d.tokens === 0) {
+          L.push(`  · ${label}: -`);
+          continue;
+        }
+        const parts = [`실행 ${d.total.toLocaleString()}`];
+        parts.push(`성공 ${d.ok.toLocaleString()}`);
+        if (d.fail > 0) parts.push(`실패 ${d.fail.toLocaleString()}`);
+        if (d.pending > 0) parts.push(`진행중 ${d.pending.toLocaleString()}`);
+        parts.push(`사용자 ${d.users.toLocaleString()}명`);
+        if (d.tokens > 0) parts.push(`토큰 ${d.tokens.toLocaleString()}`);
+        L.push(`  · ${label}: ${parts.join(" · ")}`);
+      }
+    }
 
     if (stats.byAction.length > 0) {
       L.push("");
@@ -237,6 +299,71 @@ function ReportKpis({ stats }: { stats: StatsResponse }) {
   );
 }
 
+// ── 일별 현황 표 (주간/기간 조회 시 하루 단위 실적이 바로 보이도록) ─────────────
+function DailyTable({ rows }: { rows: DailyRow[] }) {
+  const maxTotal = Math.max(1, ...rows.map((r) => r.total));
+  const peakDate =
+    rows.reduce<DailyRow | null>((p, r) => (r.total > 0 && r.total > (p?.total ?? 0) ? r : p), null)?.date ?? null;
+  const sum = rows.reduce(
+    (a, r) => ({ total: a.total + r.total, ok: a.ok + r.ok, fail: a.fail + r.fail, tokens: a.tokens + r.tokens }),
+    { total: 0, ok: 0, fail: 0, tokens: 0 }
+  );
+  return (
+    <div className="daily-table-wrap">
+      <table className="daily-table">
+        <thead>
+          <tr>
+            <th>날짜</th>
+            <th className="num">실행</th>
+            <th className="num">성공</th>
+            <th className="num">실패</th>
+            <th className="num">성공률</th>
+            <th className="num">사용자</th>
+            <th className="num">평균 응답</th>
+            <th className="num">LLM 토큰</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const { label, dow } = dayLabel(r.date);
+            const empty = r.total === 0 && r.tokens === 0;
+            return (
+              <tr key={r.date} className={empty ? "empty" : undefined}>
+                <td className={`daily-date dow-${dow}`}>
+                  {label}
+                  {r.date === peakDate && <span className="daily-peak">peak</span>}
+                </td>
+                <td className="num daily-run">
+                  <span className="daily-bar" style={{ width: `${(r.total / maxTotal) * 100}%` }} aria-hidden />
+                  <span className="daily-run-val">{r.total > 0 ? r.total.toLocaleString() : "-"}</span>
+                </td>
+                <td className="num ok">{r.ok > 0 ? r.ok.toLocaleString() : "-"}</td>
+                <td className={"num" + (r.fail > 0 ? " err" : "")}>{r.fail > 0 ? r.fail.toLocaleString() : "-"}</td>
+                <td className="num">{r.total > 0 ? pct(r.ok, r.total) : "-"}</td>
+                <td className="num">{r.users > 0 ? `${r.users.toLocaleString()}명` : "-"}</td>
+                <td className="num">{r.avgCubeLatencyMs != null ? fmtDuration(r.avgCubeLatencyMs) : "-"}</td>
+                <td className="num">{r.tokens > 0 ? r.tokens.toLocaleString() : "-"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>합계</td>
+            <td className="num">{sum.total.toLocaleString()}</td>
+            <td className="num ok">{sum.ok.toLocaleString()}</td>
+            <td className={"num" + (sum.fail > 0 ? " err" : "")}>{sum.fail.toLocaleString()}</td>
+            <td className="num">{sum.total > 0 ? pct(sum.ok, sum.total) : "-"}</td>
+            <td className="num">—</td>
+            <td className="num">—</td>
+            <td className="num">{sum.tokens > 0 ? sum.tokens.toLocaleString() : "-"}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
 export default function ReportPage() {
   return (
     <AdminGate
@@ -349,6 +476,9 @@ function ReportContent() {
 
   const agentName = profile?.name ?? "AI Agent";
 
+  // 일별 브레이크다운 — 표와 복사 텍스트가 같은 행을 공유한다 (2일 이상 조회 시에만 노출)
+  const dailyRows = useMemo(() => mergeDailyRows(stats, tok), [stats, tok]);
+
   const reportText = useMemo(
     () =>
       buildReportText({
@@ -358,9 +488,10 @@ function ReportContent() {
         rangeLabel,
         stats,
         tok,
+        dailyRows,
         errDescs: errorCodeMap,
       }),
-    [agentName, applied, rangeLabel, stats, tok, errorCodeMap]
+    [agentName, applied, rangeLabel, stats, tok, dailyRows, errorCodeMap]
   );
 
   const doCopy = async () => {
@@ -498,6 +629,23 @@ function ReportContent() {
           </div>
 
           <ReportKpis stats={stats} />
+
+          {/* 일별 현황 — 주간/기간 조회에서도 하루 단위 실적이 바로 튀어나오게 */}
+          {dailyRows.length >= 2 && (
+            <section className="dash-card">
+              <div className="dash-card-head">
+                <div className="dash-card-title-group">
+                  <span className="dash-card-title">일별 현황</span>
+                  <span className="dash-card-sub">
+                    기간 내 하루 단위 실적 · {dailyRows.length}일 · 복사 텍스트에 포함
+                  </span>
+                </div>
+              </div>
+              <div className="dash-card-body">
+                <DailyTable rows={dailyRows} />
+              </div>
+            </section>
+          )}
 
           <section className="dash-card dash-card-hero">
             <div className="dash-card-head">

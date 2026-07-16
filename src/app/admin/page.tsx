@@ -161,6 +161,7 @@ function AdminEditor() {
             <div className="admin-sub">{profile.name} · 입력 후 저장하면 /agent 와 대시보드에 즉시 반영됩니다.</div>
           </div>
           <div className="admin-actions">
+            <Link href="/event-fabs" className="btn ghost" prefetch={false}>이벤트-FAB 매핑</Link>
             <Link href="/agent" className="btn ghost" prefetch={false}>프로필 보기</Link>
             <button type="submit" className="btn primary" disabled={saving}>
               {saving ? "저장 중…" : "저장"}

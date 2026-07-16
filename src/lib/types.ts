@@ -412,6 +412,26 @@ export interface TokenStatsResponse {
   calls: TokenRow[];
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 이벤트-FAB 매핑 (하이닉스 FAB 별 기능 선별 적용)
+//
+// 기능(이벤트)을 FAB 별로 켜고 끄는 매핑. MCP DB 의 TRX_EVENT_MAP 에 저장하며
+// (config.ts EVENT_FAB_DB_LAYER — 앱 자체 DB(GAIA)가 아님), MCP 로직이 요청 FAB 이
+// 허용 목록에 없으면 팅겨내는 데 쓴다. /event-fabs 화면에서 편집 (관리자 게이트).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 하이닉스 FAB 목록 — /event-fabs 매트릭스의 고정 컬럼. FAB 이 늘면 여기에 추가 */
+export const FAB_IDS = ["C2", "M10", "M11", "M14", "M15", "M16", "Y17"] as const;
+export type FabId = typeof FAB_IDS[number];
+
+/** 이벤트(액션) 1건의 허용 FAB 매핑. eventId 는 ACTION_TYP 값과 일치해야 한다 */
+export interface EventFabMapping {
+  /** 이벤트 식별자 (예: "SEA", "AUTOQUAL_CANCEL", "AUTOQUAL_BM") */
+  eventId: string;
+  /** 허용 FAB 목록 (FAB_IDS 값. DB 에 수동 삽입된 미지 값도 왕복 보존을 위해 string) */
+  fabs: string[];
+}
+
 export interface StatsResponse {
   /** 적용된 기간 */
   range: { from: string | null; to: string | null };

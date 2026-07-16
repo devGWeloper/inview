@@ -41,7 +41,10 @@
       "Bash(git apply *)",
       "PowerShell(npx tsc --noEmit; if \\($?\\) { \"typecheck OK\" })",
       "Bash(netstat -ano)",
-      "Bash(echo \"tsc exit: $?\")"
+      "Bash(echo \"tsc exit: $?\")",
+      "Bash(git mv *)",
+      "Bash(mv sql/create_trx_event_fab_map.sql sql/create_trx_event_map.sql)",
+      "Bash(sed -i 's/TRX_EVENT_FAB_MAP/TRX_EVENT_MAP/g; s/create_trx_event_fab_map\\\\.sql/create_trx_event_map.sql/g' sql/create_trx_event_map.sql CLAUDE.md src/lib/types.ts src/lib/eventFabs.ts src/lib/config.ts src/app/event-fabs/page.tsx)"
     ]
   }
 }

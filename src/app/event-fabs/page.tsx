@@ -120,7 +120,7 @@ function EventFabEditor() {
       if (res.status === 401) throw new Error("비밀번호가 올바르지 않습니다.");
       if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
       setRows(data.mappings);
-      setMsg({ kind: "ok", text: "저장되었습니다. MCP 반영은 캐시 TTL(기본 5분) 이후일 수 있습니다." });
+      setMsg({ kind: "ok", text: "저장되었습니다." });
     } catch (e) {
       setMsg({ kind: "err", text: "저장 실패: " + (e instanceof Error ? e.message : String(e)) });
     } finally {

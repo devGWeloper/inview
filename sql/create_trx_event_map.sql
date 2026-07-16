@@ -6,6 +6,11 @@
 --     MCP 로직이 요청 FAB 허용 여부를 판정할 때 직접 읽어야 해서 MCP DB 에 둔다.
 --     (코드: src/lib/config.ts 의 EVENT_FAB_DB_LAYER, getEventFabDbConfig())
 --
+--   ※ 실행 계정: 이 DDL 전체를 ADM 계정(IDMSADM2)으로 실행한다.
+--     테이블 소유는 IDMSADM2, 앱/MCP 가 접속하는 IDMSAPP2 계정은 아래
+--     [권한 / PUBLIC SYNONYM] 섹션의 GRANT + PUBLIC SYNONYM 으로
+--     스키마 접두어 없이 TRX_EVENT_MAP 으로 참조한다.
+--
 --   용도 : 하이닉스는 기능(이벤트)을 FAB 별로 선별 적용한다.
 --          예) AutoQual 실행(AUTOQUAL_BM)은 M14/M15 두 팹에서만 사용.
 --          TraceX "/event-fabs" 화면에서 이벤트별 허용 FAB 을 체크박스로 편집하면
@@ -43,12 +48,27 @@ COMMENT ON COLUMN TRX_EVENT_MAP.UPD_DT   IS '수정 일시';
 COMMIT;
 
 -- ============================================================================
+-- [권한 / PUBLIC SYNONYM] — IDMSADM2 로 실행
+--   - TraceX 앱(IDMSAPP2 접속)의 저장은 전량 교체 방식이라 SELECT 외에
+--     INSERT/DELETE 가 필요 (UPDATE 는 현재 미사용이나 운영 편의상 함께 부여)
+--   - MCP 판정 조회는 SELECT 만 사용
+--   - IDMSADM2 에 CREATE PUBLIC SYNONYM 권한이 없으면 그 문장만 DBA 에게 요청
+-- ============================================================================
+GRANT SELECT, INSERT, UPDATE, DELETE ON IDMSADM2.TRX_EVENT_MAP TO IDMSAPP2;
+
+CREATE PUBLIC SYNONYM TRX_EVENT_MAP FOR IDMSADM2.TRX_EVENT_MAP;
+
+-- ============================================================================
 -- [확인 쿼리]
 -- ============================================================================
 -- SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH, NULLABLE
 --   FROM USER_TAB_COLUMNS
 --  WHERE TABLE_NAME = 'TRX_EVENT_MAP'
 --  ORDER BY COLUMN_ID;
+
+-- 권한/시노님 확인 (IDMSAPP2 로 접속해서):
+-- SELECT COUNT(*) FROM TRX_EVENT_MAP;   -- 시노님 경유 조회가 되면 OK
+-- SELECT PRIVILEGE FROM USER_TAB_PRIVS WHERE TABLE_NAME = 'TRX_EVENT_MAP';
 
 -- 이벤트별 허용 FAB 한눈에 보기:
 -- SELECT EVENT_ID, LISTAGG(FAB_ID, ',') WITHIN GROUP (ORDER BY FAB_ID) AS FABS
@@ -58,75 +78,42 @@ COMMIT;
 --  ORDER BY EVENT_ID;
 
 -- ============================================================================
--- [ROLLBACK]
+-- [ROLLBACK] — IDMSADM2 로 실행 (시노님 → 테이블 순)
 -- ============================================================================
--- DROP TABLE TRX_EVENT_MAP PURGE;
+-- DROP PUBLIC SYNONYM TRX_EVENT_MAP;
+-- DROP TABLE IDMSADM2.TRX_EVENT_MAP PURGE;
 -- COMMIT;
 
 /* ============================================================================
    [MCP 연동 예시 — Python]
 
-   MCP 서버(Python)에서 요청을 처리하기 전에 아래 메서드로 FAB 허용 여부를
-   체크한다. 호출부에서 event_id(액션 타입)와 fab_id 를 파라미터로 넘기면 된다.
+   커넥션/커서 관리는 MCP 서버에 이미 있으므로, 여기는 "쿼리 날려서 체크" 하는
+   비즈니스 로직만 담았다. MCP 쪽에서 쓰던 cursor 와 event_id(액션 타입),
+   fab_id 를 파라미터로 넘겨 호출하면 된다.
 
-   - 매핑은 자주 안 바뀌는 마스터 데이터라 TTL 캐시(기본 5분)를 둔다.
-     TraceX 화면에서 저장한 변경은 최대 TTL 만큼 지나야 MCP 에 반영된다.
    - allow_when_unregistered:
        True  (기본) = 매핑이 아직 등록되지 않은 이벤트는 전 FAB 허용
        False        = 등록되지 않은 이벤트는 전부 차단
-   - DB 조회 실패 시엔 기능이 통째로 죽지 않도록 '허용' 으로 폴백한다
-     (fail-open). 차단이 더 중요하면 except 블록에서 False 를 리턴할 것.
 
 # ----------------------------------------------------------------------------
-import time
-from typing import Dict, Optional, Set
-
-import oracledb   # pip install oracledb (thin 모드면 Instant Client 불필요)
-
-_CACHE_TTL_SEC = 300  # 매핑 캐시 TTL(초)
-_cache = {"at": 0.0, "map": None}  # type: dict
-
-
-def _load_event_fab_map(conn) -> Dict[str, Set[str]]:
-    """TRX_EVENT_MAP 전체를 {EVENT_ID: {FAB_ID, ...}} 로 로드."""
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            """SELECT EVENT_ID, FAB_ID
-                 FROM TRX_EVENT_MAP
-                WHERE USE_YN = 'Y'"""
-        )
-        result: Dict[str, Set[str]] = {}
-        for event_id, fab_id in cur:
-            result.setdefault(event_id.strip(), set()).add(fab_id.strip().upper())
-        return result
-    finally:
-        cur.close()
-
-
-def get_allowed_fabs(conn, event_id: str) -> Optional[Set[str]]:
-    """이벤트의 허용 FAB 집합. 매핑 미등록 이벤트면 None."""
-    now = time.time()
-    if _cache["map"] is None or now - _cache["at"] > _CACHE_TTL_SEC:
-        _cache["map"] = _load_event_fab_map(conn)
-        _cache["at"] = now
-    return _cache["map"].get(event_id.strip())
-
-
-def is_fab_allowed(conn, event_id: str, fab_id: str,
+def is_fab_allowed(cursor, event_id: str, fab_id: str,
                    allow_when_unregistered: bool = True) -> bool:
-    """이 이벤트를 이 FAB 에서 실행해도 되는가.
+    """이 이벤트(event_id)를 이 FAB(fab_id)에서 실행해도 되는가.
 
-    사용 예:
-        if not is_fab_allowed(conn, action_typ, fab_id):
+    사용 예 (요청 처리 진입부):
+        if not is_fab_allowed(cursor, action_typ, fab_id):
             raise PermissionError(
                 f"'{action_typ}' 는 {fab_id} FAB 에 적용되지 않은 기능입니다.")
     """
-    try:
-        allowed = get_allowed_fabs(conn, event_id)
-    except Exception:
-        return True  # fail-open: 매핑 조회 실패로 기능 전체가 죽지 않게 허용 폴백
-    if allowed is None:
+    cursor.execute(
+        """SELECT FAB_ID
+             FROM TRX_EVENT_MAP
+            WHERE EVENT_ID = :event_id
+              AND USE_YN = 'Y'""",
+        {"event_id": event_id.strip()},
+    )
+    allowed = {row[0].strip().upper() for row in cursor.fetchall()}
+    if not allowed:
         return allow_when_unregistered  # 매핑 미등록 이벤트 정책
     return fab_id.strip().upper() in allowed
 # ----------------------------------------------------------------------------

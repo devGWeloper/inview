@@ -109,11 +109,11 @@ The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTI
 하이닉스는 기능(이벤트)을 FAB 별로 선별 적용한다 (예: AutoQual 실행은 M14/M15 만). 이벤트별 허용 FAB 을 이 앱에서 편집하면 **MCP DB** 의 `TRX_EVENT_MAP` 에 저장되고, MCP 로직이 요청 FAB 이 허용 목록에 없으면 팅겨낸다.
 
 - **DB 위치**: 앱 자체 DB(GAIA)가 **아니라 MCP DB** — MCP 가 판정 시 직접 읽어야 해서다. 매핑은 `config.ts` 의 `EVENT_FAB_DB_LAYER`(`= "MCP"`) / `getEventFabDbConfig()` 한 곳에 있다 (APP_DB_LAYER 와 같은 패턴).
-- **테이블**: `TRX_EVENT_MAP` (`sql/create_trx_event_map.sql`, MCP DB 에서만 1회 실행). TRX_TOKEN_DET 룰: `MAP_ID` IDENTITY PK, `EVENT_ID`(= `ACTION_TYP` 값)/`FAB_ID` + `UNIQUE(EVENT_ID, FAB_ID)`, `USE_YN`, 감사 일시. 이벤트 1 × 허용 FAB 1 = 1행. **DDL 파일 하단에 MCP 팀용 Python 체크 메서드 예시**(`is_fab_allowed(conn, event_id, fab_id)`, TTL 캐시 + fail-open)가 블록 주석으로 들어 있다.
+- **테이블**: `TRX_EVENT_MAP` (`sql/create_trx_event_map.sql`, MCP DB 에서만 1회 실행). TRX_TOKEN_DET 룰: `MAP_ID` IDENTITY PK, `EVENT_ID`(= `ACTION_TYP` 값)/`FAB_ID` + `UNIQUE(EVENT_ID, FAB_ID)`, `USE_YN`, 감사 일시. 이벤트 1 × 허용 FAB 1 = 1행. **DDL 은 ADM 계정(IDMSADM2) 소유로 실행**하고 앱/MCP 계정(IDMSAPP2)은 GRANT + PUBLIC SYNONYM 으로 참조 (DDL 파일의 [권한 / PUBLIC SYNONYM] 섹션). **DDL 파일 하단에 MCP 팀용 Python 체크 메서드 예시**(`is_fab_allowed(cursor, event_id, fab_id)` — 커넥션 관리는 MCP 서버에 이미 있어 쿼리 체크 비즈니스 로직만)가 블록 주석으로 들어 있다.
 - **FAB 목록**: `types.ts` `FAB_IDS` = C2/M10/M11/M14/M15/M16/Y17 (매트릭스 고정 컬럼 — FAB 이 늘면 여기 추가). DB 에 수동 삽입된 미지 FAB 은 컬럼으로 동적 추가돼 저장 시 유실되지 않는다.
 - **읽기/쓰기**: `src/lib/eventFabs.ts` → `GET/PUT /api/event-fabs`. 읽기는 lazy-`oracledb`-swallow 패턴으로 미구성/미생성 시 `available=false + reason` 을 내려 화면이 안내하고 저장을 막는다. **저장은 전량 교체**(DELETE 후 INSERT, 한 트랜잭션, 실패 시 rollback + throw) — 앱이 이 테이블의 마스터. FAB 0개 행은 "미등록" 과 구분이 안 돼 저장 거부(행 삭제를 강제). PUT 은 `/api/profile` 과 동일한 `x-admin-password` 게이트.
 - **화면**: `/event-fabs` (클라이언트, `AdminGate` 뒤 — /admin·/report 와 sessionStorage 잠금 공유). 이벤트 1개 = 카드 1장(`/api/action-types` datalist 자동완성, 순번 배지 + N/전체 카운트 배지), FAB 은 **토글 칩(pill)** — 켜면 액센트 그라디언트 + 체크 팝 애니메이션(`fabmap-*` 스타일). 행별 전체 토글/삭제, FAB 0개 행은 인라인 경고. 진입은 `/admin` 헤더의 "이벤트-FAB 매핑" 버튼.
-- **판정 규칙**: `USE_YN='Y'` 행의 FAB 집합 = 허용. **매핑 미등록 이벤트는 MCP 정책**(Python 예시의 `allow_when_unregistered`, 기본 전 FAB 허용). MCP 쪽 캐시 TTL(예시 기본 5분) 동안은 저장이 늦게 반영될 수 있다.
+- **판정 규칙**: `USE_YN='Y'` 행의 FAB 집합 = 허용. **매핑 미등록 이벤트는 MCP 정책**(Python 예시의 `allow_when_unregistered`, 기본 전 FAB 허용).
 
 ## 두 가지 지연 지표 (둘 다 정규 — 재는 대상이 다름)
 

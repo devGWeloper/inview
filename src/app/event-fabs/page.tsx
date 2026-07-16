@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { EventFabMapping, FAB_IDS } from "@/lib/types";
 import { ADMIN_PASSWORD, ADMIN_PASSWORD_HEADER } from "@/lib/adminAuth";
 import { AdminGate } from "@/components/AdminGate";
@@ -90,8 +89,6 @@ function EventFabEditor() {
       .filter(({ r }) => !needle || r.eventId.toLowerCase().includes(needle));
   }, [rows, q]);
 
-  const onCells = useMemo(() => rows.reduce((n, r) => n + r.fabs.length, 0), [rows]);
-
   function setEventId(idx: number, value: string) {
     setRows((list) => list.map((r, i) => (i === idx ? { ...r, eventId: value } : r)));
   }
@@ -170,8 +167,20 @@ function EventFabEditor() {
       <form className="fm-shell" onSubmit={onSave}>
         <div className="fm-toolbar">
           <div className="fm-title">
-            <span className="fm-title-main">FAB 적용 매핑</span>
-            <span className="fm-title-sub">이벤트별 허용 팹 · MCP</span>
+            <span className="fm-title-ico" aria-hidden>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                <path d="M4 20 V10 L9 6.5 V10 L14 6.5 V10 L20 6 V20 Z"
+                      stroke="#fff" strokeWidth="1.8" strokeLinejoin="round" />
+                <path d="M8.5 15.5 h2 M13.5 15.5 h2" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </span>
+            <div className="fm-title-text">
+              <span className="fm-title-main">
+                FAB 적용 매핑
+                <span className="fm-title-chip">MCP</span>
+              </span>
+              <span className="fm-title-sub">이벤트별 허용 팹</span>
+            </div>
           </div>
           <label className="fm-search">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -278,16 +287,6 @@ function EventFabEditor() {
               ))}
             </tbody>
           </table>
-        </div>
-
-        <div className="fm-foot">
-          <span>
-            이벤트 {rows.length} · 허용 {onCells}칸{dirty && <em className="fm-foot-dirty"> · 변경 있음</em>}
-          </span>
-          <span>
-            체크된 팹에서만 실행 허용 · 미등록 이벤트는 전 팹 허용 ·{" "}
-            <Link href="/admin" className="fm-foot-link" prefetch={false}>관리자 설정 →</Link>
-          </span>
         </div>
 
         <datalist id="event-fab-suggestions">

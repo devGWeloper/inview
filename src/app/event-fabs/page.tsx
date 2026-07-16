@@ -217,7 +217,7 @@ function EventFabEditor() {
           <table className="fm-matrix" onMouseLeave={() => setHoverCol(null)}>
             <thead>
               <tr>
-                <th className="fm-th-event">EVENT</th>
+                <th className="fm-th-event">이벤트</th>
                 {fabColumns.map((fab) => (
                   <th
                     key={fab}

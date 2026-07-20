@@ -71,10 +71,10 @@ export function getAppDbConfig(): LayerDbConfig | null {
 
 /**
  * 이벤트-FAB 매핑(TRX_EVENT_MAP)이 저장되는 레이어.
- * 앱 자체 DB(GAIA)가 아니라 MCP 다 — MCP 로직이 요청 FAB 허용 여부를 이 테이블로
- * 직접 판정하기 때문. 테이블 위치가 바뀌면 이 매핑만 따라가면 된다.
+ * 앱 자체 DB(= GAIA)에 둔다 — TRX_TOKEN_DET 등과 같은 곳.
+ * 테이블 위치가 바뀌면 이 매핑만 따라가면 된다.
  */
-export const EVENT_FAB_DB_LAYER: LayerKey = "MCP";
+export const EVENT_FAB_DB_LAYER: LayerKey = APP_DB_LAYER;
 
 /** 이벤트-FAB 매핑 DB(= EVENT_FAB_DB_LAYER) 의 커넥션 설정. 미구성 시 null. */
 export function getEventFabDbConfig(): LayerDbConfig | null {

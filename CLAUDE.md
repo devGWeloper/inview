@@ -104,16 +104,16 @@ The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTI
 - **전체 복사**: `buildReportText()` 가 두 응답을 보고용 플레인 텍스트로 조립(일별 현황, 액션별 성공/실패, 주요 에러+의미, Top 사용자, FAC/AREA top5, 노드별/모델별 토큰) → `navigator.clipboard.writeText` (실패 시 textarea+`execCommand` 폴백) → 버튼이 2초간 "✓ 복사됨" 으로 바뀜.
 - **사용자 수**: `/api/stats` 가 `uniqueUsers`(optional 필드) 를 함께 내린다 — "기간 내 몇 명이 사용했나". 정의: 트레이스별 **대표 사용자의 distinct 수** (한 사용자가 100번 요청해도 1명). 대표 사용자는 `traceUserId()` 가 **진입 레이어(CUBE) 우선**으로 첫 non-null `USER_ID` 를 고르고 공백을 trim 한다 — USER_ID 는 전 레이어가 INSERT 시 기록하므로 행 순서대로 집으면 하위 레이어의 시스템 계정 값이 섞여 부풀 수 있어서다. `topUsers` 도 같은 대표 사용자 기준.
 
-### 이벤트-FAB 매핑 — `/event-fabs` (⚠️ MCP DB — 앱 자체 DB 아님)
+### 이벤트-FAB 매핑 — `/event-fabs`
 
-하이닉스는 기능(이벤트)을 FAB 별로 선별 적용한다 (예: AutoQual 실행은 M14/M15 만). 이벤트별 허용 FAB 을 이 앱에서 편집하면 **MCP DB** 의 `TRX_EVENT_MAP` 에 저장되고, MCP 로직이 요청 FAB 이 허용 목록에 없으면 팅겨낸다.
+하이닉스는 기능(이벤트)을 FAB 별로 선별 적용한다 (예: AutoQual 실행은 M14/M15 만). 이벤트별 허용 FAB 을 이 앱에서 편집하면 **앱 자체 DB(GAIA)** 의 `TRX_EVENT_MAP` 에 저장되고, 판정 로직이 요청 FAB 이 허용 목록에 없으면 팅겨낸다.
 
-- **DB 위치**: 앱 자체 DB(GAIA)가 **아니라 MCP DB** — MCP 가 판정 시 직접 읽어야 해서다. 매핑은 `config.ts` 의 `EVENT_FAB_DB_LAYER`(`= "MCP"`) / `getEventFabDbConfig()` 한 곳에 있다 (APP_DB_LAYER 와 같은 패턴).
-- **테이블**: `TRX_EVENT_MAP` (`sql/create_trx_event_map.sql`, MCP DB 에서만 1회 실행). TRX_TOKEN_DET 룰: `MAP_ID` IDENTITY PK, `EVENT_ID`(= `ACTION_TYP` 값)/`FAB_ID` + `UNIQUE(EVENT_ID, FAB_ID)`, `USE_YN`, 감사 일시. 이벤트 1 × 허용 FAB 1 = 1행. **DDL 은 ADM 계정(IDMSADM2) 소유로 실행**하고 앱/MCP 계정(IDMSAPP2)은 GRANT + PUBLIC SYNONYM 으로 참조 (DDL 파일의 [권한 / PUBLIC SYNONYM] 섹션). **DDL 파일 하단에 MCP 팀용 Python 체크 메서드 예시**(`is_fab_allowed(cursor, event_id, fab_id)` — 커넥션 관리는 MCP 서버에 이미 있어 쿼리 체크 비즈니스 로직만)가 블록 주석으로 들어 있다.
+- **DB 위치**: 앱 자체 DB(= GAIA — 처음엔 MCP DB 였다가 GAIA 로 이관). 매핑은 `config.ts` 의 `EVENT_FAB_DB_LAYER`(`= APP_DB_LAYER`) / `getEventFabDbConfig()` 한 곳에 있다.
+- **테이블**: `TRX_EVENT_MAP` (`sql/create_trx_event_map.sql`, GAIA DB 에서만 1회 실행 — TRX_TOKEN_DET 처럼 앱 접속 계정으로 그냥 생성, GRANT/SYNONYM 불필요). TRX_TOKEN_DET 룰: `MAP_ID` IDENTITY PK, `EVENT_ID`(= `ACTION_TYP` 값)/`FAB_ID` + `UNIQUE(EVENT_ID, FAB_ID)`, `USE_YN`, 감사 일시. 이벤트 1 × 허용 FAB 1 = 1행. DDL 상단에 **구버전(MCP DB, IDMSADM2 소유 + PUBLIC SYNONYM) 정리용 DROP 쿼리** 주석이 있다. **DDL 파일 하단에 판정측용 Python 체크 메서드 예시**(`is_fab_allowed(cursor, event_id, fab_id)` — 커넥션 관리는 판정 서버에 이미 있어 쿼리 체크 비즈니스 로직만)가 블록 주석으로 들어 있다.
 - **FAB 목록**: `types.ts` `FAB_IDS` = C2/M10/M11/M14/M15/M16/Y17 (매트릭스 고정 컬럼 — FAB 이 늘면 여기 추가). DB 에 수동 삽입된 미지 FAB 은 컬럼으로 동적 추가돼 저장 시 유실되지 않는다.
 - **읽기/쓰기**: `src/lib/eventFabs.ts` → `GET/PUT /api/event-fabs`. 읽기는 lazy-`oracledb`-swallow 패턴으로 미구성/미생성 시 `available=false + reason` 을 내려 화면이 안내하고 저장을 막는다. **저장은 전량 교체**(DELETE 후 INSERT, 한 트랜잭션, 실패 시 rollback + throw) — 앱이 이 테이블의 마스터. FAB 0개 행은 "미등록" 과 구분이 안 돼 저장 거부(행 삭제를 강제). PUT 은 `/api/profile` 과 동일한 `x-admin-password` 게이트.
 - **화면**: `/event-fabs` (클라이언트, `AdminGate` 뒤 — /admin·/report 와 sessionStorage 잠금 공유). **권한 매트릭스 콘솔** 스타일(`fm-*`): 컴팩트 툴바(작은 타이틀 + 이벤트 검색 + "+ 이벤트"/저장) 아래 이벤트(행)×FAB(열) 매트릭스 — 스티키 헤더 + 패널 내부 스크롤이라 이벤트 100개 스케일을 전제. 셀 = 토글 도트(켜면 액센트 채움+체크 팝), **열 헤더 클릭 = 보이는 행 대상 열 일괄 토글**, 행 액션(행 전체 토글/삭제)은 hover 시에만 노출, 이벤트명은 borderless 인라인 입력(`/api/action-types` datalist). 저장 버튼은 **dirty(스냅샷 비교) 일 때만 활성** + 흰 점 표시, FAB 0개 행은 "팹 없음" 배지. 안내문은 하단 풋노트 한 줄로 축약. 진입은 `/admin` 헤더의 "이벤트-FAB 매핑" 버튼.
-- **판정 규칙**: `USE_YN='Y'` 행의 FAB 집합 = 허용. **매핑 미등록 이벤트는 MCP 정책**(Python 예시의 `allow_when_unregistered`, 기본 전 FAB 허용).
+- **판정 규칙**: `USE_YN='Y'` 행의 FAB 집합 = 허용. **매핑 미등록 이벤트는 판정측 정책**(Python 예시의 `allow_when_unregistered`, 기본 전 FAB 허용).
 
 ## 두 가지 지연 지표 (둘 다 정규 — 재는 대상이 다름)
 

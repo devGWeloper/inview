@@ -415,8 +415,8 @@ export interface TokenStatsResponse {
 // ─────────────────────────────────────────────────────────────────────────────
 // 이벤트-FAB 매핑 (하이닉스 FAB 별 기능 선별 적용)
 //
-// 기능(이벤트)을 FAB 별로 켜고 끄는 매핑. 앱 자체 DB(GAIA) 의 TRX_EVENT_MAP 에
-// 저장하며 (config.ts EVENT_FAB_DB_LAYER = APP_DB_LAYER), 판정 로직이 요청 FAB 이
+// 기능(이벤트)을 FAB 별로 켜고 끄는 매핑. MCP DB 의 TRX_EVENT_MAP 에 저장하며
+// (config.ts EVENT_FAB_DB_LAYER — 앱 자체 DB(GAIA)가 아님), MCP 로직이 요청 FAB 이
 // 허용 목록에 없으면 팅겨내는 데 쓴다. /event-fabs 화면에서 편집 (관리자 게이트).
 // ─────────────────────────────────────────────────────────────────────────────
 

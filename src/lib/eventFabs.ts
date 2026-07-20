@@ -2,8 +2,8 @@ import { getEventFabDbConfig, EVENT_FAB_DB_LAYER } from "./config";
 import { EventFabMapping } from "./types";
 import { logger } from "./logger";
 
-// 이벤트(액션)별 허용 FAB 매핑 — 앱 자체 DB(GAIA, config.ts EVENT_FAB_DB_LAYER)의 TRX_EVENT_MAP.
-// "요청한 FAB 이 이 이벤트에 허용된 FAB 인가" 를 판정하는 기준 데이터를
+// 이벤트(액션)별 허용 FAB 매핑 — MCP DB(config.ts EVENT_FAB_DB_LAYER)의 TRX_EVENT_MAP.
+// MCP 가 "요청한 FAB 이 이 이벤트에 허용된 FAB 인가" 를 판정하는 기준 데이터를
 // 이 앱(/event-fabs 화면 → GET/PUT /api/event-fabs)에서 편집한다.
 // 앱이 이 테이블의 마스터라서 저장은 전량 교체(DELETE 후 INSERT, 한 트랜잭션)다.
 
@@ -22,7 +22,7 @@ async function getOracle(): Promise<typeof import("oracledb") | null> {
 }
 
 export interface EventFabReadResult {
-  /** 매핑 DB(GAIA) 사용 가능 여부. false 면 편집 화면이 저장을 막고 reason 을 안내한다 */
+  /** MCP DB 사용 가능 여부. false 면 편집 화면이 저장을 막고 reason 을 안내한다 */
   available: boolean;
   mappings: EventFabMapping[];
   /** available=false 사유 (미구성/드라이버 없음/쿼리 실패 — ORA-00942 = 테이블 미생성) */

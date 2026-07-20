@@ -5,8 +5,8 @@ import { EventFabMapping, FAB_IDS } from "@/lib/types";
 import { ADMIN_PASSWORD, ADMIN_PASSWORD_HEADER } from "@/lib/adminAuth";
 import { AdminGate } from "@/components/AdminGate";
 
-// 이벤트(액션) × FAB 허용 매트릭스 편집기. 저장하면 앱 자체 DB(GAIA) 의
-// TRX_EVENT_MAP 에 전량 교체로 반영되고, 요청 FAB 허용 여부 판정에 사용한다.
+// 이벤트(액션) × FAB 허용 매트릭스 편집기. 저장하면 MCP DB 의 TRX_EVENT_MAP 에
+// 전량 교체로 반영되고, MCP 로직이 요청 FAB 허용 여부 판정에 사용한다.
 // 이벤트가 100개로 늘어도 견디도록: 스티키 헤더 + 내부 스크롤 + 검색 필터 +
 // 열/행 단위 일괄 토글. (스키마·MCP 연동 예시: sql/create_trx_event_map.sql)
 
@@ -177,7 +177,7 @@ function EventFabEditor() {
             <div className="fm-title-text">
               <span className="fm-title-main">
                 FAB 적용 매핑
-                <span className="fm-title-chip">GAIA</span>
+                <span className="fm-title-chip">MCP</span>
               </span>
               <span className="fm-title-sub">이벤트별 허용 팹</span>
             </div>
@@ -208,7 +208,7 @@ function EventFabEditor() {
 
         {!available && (
           <div className="dash-banner err">
-            GAIA DB 미연결 — 조회/저장 불가{reason ? ` (${reason})` : ""}
+            MCP DB 미연결 — 조회/저장 불가{reason ? ` (${reason})` : ""}
           </div>
         )}
         {msg && <div className={`dash-banner ${msg.kind === "ok" ? "loading" : "err"}`}>{msg.text}</div>}

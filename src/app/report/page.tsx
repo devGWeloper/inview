@@ -308,37 +308,6 @@ function ReportKpis({ stats }: { stats: StatsResponse }) {
   );
 }
 
-// ── 기능(액션)별 상세 — 한 날짜 행을 펼치면 나오는 내용 ───────────────────────
-function DailyActionDetail({ row }: { row: DailyRow }) {
-  const acts = row.byAction; // 이미 total desc 정렬, total>0 만
-  const maxTotal = Math.max(1, ...acts.map((a) => a.total));
-  return (
-    <div className="daily-detail">
-      <div className="daily-detail-title">기능(액션)별 상세</div>
-      <ul className="daily-act-list">
-        {acts.map((a) => {
-          const okPct = a.total > 0 ? (a.ok / a.total) * 100 : 0;
-          const failPct = a.total > 0 ? (a.fail / a.total) * 100 : 0;
-          return (
-            <li key={a.key} className="daily-act">
-              <span className="daily-act-key" title={a.key}>{a.key === "(none)" ? "(미상)" : a.key}</span>
-              <span className="daily-act-bar" style={{ width: `${(a.total / maxTotal) * 100}%` }} aria-hidden>
-                {okPct > 0 && <i className="ok" style={{ width: `${okPct}%` }} />}
-                {failPct > 0 && <i className="fail" style={{ width: `${failPct}%` }} />}
-              </span>
-              <span className="daily-act-nums">
-                <b>{a.total.toLocaleString()}</b>건
-                <span className="ok">성공 {a.ok.toLocaleString()}</span>
-                {a.fail > 0 && <span className="err">실패 {a.fail.toLocaleString()}</span>}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
 // ── 일별 현황 표 (주간/기간 조회 시 하루 단위 실적이 바로 보이도록) ─────────────
 // 날짜 행을 클릭하면 그날의 기능(액션)별 상세가 아래로 펼쳐진다. "전체 펼치기/접기"로 한 번에 열고 닫아
 // 대시보드 등에 통째로 복사·붙여넣기 하기 좋게 했다.
@@ -419,13 +388,25 @@ function DailyTable({ rows }: { rows: DailyRow[] }) {
                   <td className="num">{r.avgCubeLatencyMs != null ? fmtDuration(r.avgCubeLatencyMs) : "-"}</td>
                   <td className="num">{r.tokens > 0 ? r.tokens.toLocaleString() : "-"}</td>
                 </tr>
-                {canExpand && isOpen && (
-                  <tr className="daily-detail-row">
-                    <td colSpan={8}>
-                      <DailyActionDetail row={r} />
-                    </td>
-                  </tr>
-                )}
+                {canExpand && isOpen &&
+                  r.byAction.map((a, i) => {
+                    const last = i === r.byAction.length - 1;
+                    return (
+                      <tr key={`${r.date}::${a.key}`} className={"daily-sub" + (last ? " last" : "")}>
+                        <td className="daily-sub-key">
+                          <span className="daily-sub-tree" aria-hidden>{last ? "└" : "├"}</span>
+                          {a.key === "(none)" ? "(미상)" : a.key}
+                        </td>
+                        <td className="num">{a.total.toLocaleString()}</td>
+                        <td className="num ok">{a.ok > 0 ? a.ok.toLocaleString() : "-"}</td>
+                        <td className={"num" + (a.fail > 0 ? " err" : "")}>{a.fail > 0 ? a.fail.toLocaleString() : "-"}</td>
+                        <td className="num">{a.total > 0 ? pct(a.ok, a.total) : "-"}</td>
+                        <td className="num daily-sub-na">·</td>
+                        <td className="num daily-sub-na">·</td>
+                        <td className="num daily-sub-na">·</td>
+                      </tr>
+                    );
+                  })}
               </Fragment>
             );
           })}

@@ -5,8 +5,8 @@
 //   FTE 1 = 1년간 1인분(1 person-year).
 //
 //   '액션 성공' 은 db.ts monthlyActionSuccess() 가 월별·액션(ACTION_TYP)별로 집계한다.
-//   계산식은 프로필에서 커스터마이즈: fteActionMinutes(ACTION_TYP→분, 예: SEA=5,
-//   AUTOQUAL_CANCEL=10), fteDefaultMinutes(목록에 없는 액션·ACTION_TYP 미상, 기본 5),
+//   계산식은 프로필에서 커스터마이즈: fteActionMinutes(ACTION_TYP→분, 예: NEST_Seasoning=5,
+//   AutoQual_Abort=10), fteDefaultMinutes(목록에 없는 액션·ACTION_TYP 미상, 기본 5),
 //   fteAnnualMinutes(기본 65,984) — 모두 /admin 에서 편집.
 //
 // ※ server-only (db.ts 를 통해 Oracle 조회). 클라이언트에서 import 금지.

@@ -226,7 +226,7 @@ const ACTION_TYP_LAYER: LayerKey = "GAIA";
 export interface MonthlyActionSuccess {
   /** "YYYY-MM" */
   ym: string;
-  /** GAIA 의 ACTION_TYP 값 (예: "SEA"/"AUTOQUAL_CANCEL"/"AUTOQUAL_BM"). 미기록/GAIA 미연결이면 null */
+  /** GAIA 의 ACTION_TYP 값 (예: "NEST_Seasoning"/"AutoQual_Abort"/"AutoQual_JobCreate"). 미기록/GAIA 미연결이면 null */
   action: string | null;
   count: number;
 }

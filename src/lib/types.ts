@@ -196,7 +196,7 @@ export interface WorkTask {
 
 /** FTE 계산식의 액션별 환산 분. action 은 DB 의 ACTION_TYP 값(GAIA 기록)과 일치해야 한다. */
 export interface FteActionMinute {
-  /** ACTION_TYP 값 (예: "SEA", "AUTOQUAL_CANCEL", "AUTOQUAL_BM") */
+  /** ACTION_TYP 값 (예: "NEST_Seasoning", "AutoQual_Abort", "AutoQual_JobCreate") */
   action: string;
   /** 해당 액션 성공 1건당 환산 분(分) */
   minutes: number;
@@ -238,9 +238,9 @@ export const DEFAULT_PROFILE: AgentProfile = {
   workingHours: "24시간 365일",
   skills: ["시즈닝", "AutoQual 취소", "AutoQual 실행"],
   fteActionMinutes: [
-    { action: "SEA", minutes: 5 },
-    { action: "AUTOQUAL_CANCEL", minutes: 5 },
-    { action: "AUTOQUAL_BM", minutes: 5 },
+    { action: "NEST_Seasoning", minutes: 5 },
+    { action: "AutoQual_Abort", minutes: 5 },
+    { action: "AutoQual_JobCreate", minutes: 5 },
   ],
   fteDefaultMinutes: 5,
   fteAnnualMinutes: 65984,
@@ -270,7 +270,7 @@ export const DEFAULT_PROFILE: AgentProfile = {
 //   fteAnnualMinutes, ADMIN 편집)에서 가져온다. FTE 1 = 1년간 1인분(1 person-year).
 //   '액션 성공' = 시즈닝·AutoQual 취소·AutoQual 실행 성공 트레이스 (대시보드 ok 기준:
 //   에러 없고 CUBE 응답에 실패 문구(ACTION_FAIL_PHRASES)가 없는 트레이스). 액션 구분은
-//   GAIA 의 ACTION_TYP (예: SEA/AUTOQUAL_CANCEL/AUTOQUAL_BM) — db.ts monthlyActionSuccess 참고.
+//   GAIA 의 ACTION_TYP (예: NEST_Seasoning/AutoQual_Abort/AutoQual_JobCreate) — db.ts monthlyActionSuccess 참고.
 // ─────────────────────────────────────────────────────────────────────────────
 export interface FteMonth {
   /** "YYYY-MM" */
@@ -426,7 +426,7 @@ export type FabId = typeof FAB_IDS[number];
 
 /** 이벤트(액션) 1건의 허용 FAB 매핑. eventId 는 ACTION_TYP 값과 일치해야 한다 */
 export interface EventFabMapping {
-  /** 이벤트 식별자 (예: "SEA", "AUTOQUAL_CANCEL", "AUTOQUAL_BM") */
+  /** 이벤트 식별자 (예: "NEST_Seasoning", "AutoQual_Abort", "AutoQual_JobCreate") */
   eventId: string;
   /** 허용 FAB 목록 (FAB_IDS 값. DB 에 수동 삽입된 미지 값도 왕복 보존을 위해 string) */
   fabs: string[];

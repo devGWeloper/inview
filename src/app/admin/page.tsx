@@ -191,7 +191,7 @@ function AdminEditor() {
           <legend>성과 지표 (FTE) — 계산식</legend>
           <p className="admin-hint admin-hint-top">
             FTE = <b>Σ(액션별 성공 수 × 환산 분) ÷ 연간 분</b> (월별은 ×12 연환산) · 2026-01-01부터 자동 집계.
-            액션은 DB 의 <b>ACTION_TYP</b> 값(예: SEA, AUTOQUAL_CANCEL, AUTOQUAL_BM)과 일치해야 하며,
+            액션은 DB 의 <b>ACTION_TYP</b> 값(예: NEST_Seasoning, AutoQual_Abort, AutoQual_JobCreate)과 일치해야 하며,
             목록에 없는 액션은 기본 환산 분으로 계산됩니다. 저장 즉시 카드/대시보드 FTE 에 반영됩니다.
           </p>
           <div className="admin-fte-actions">
@@ -200,7 +200,7 @@ function AdminEditor() {
                 <input
                   value={row.action}
                   onChange={(e) => setFteAct(i, "action", e.target.value)}
-                  placeholder="ACTION_TYP (예: SEA)"
+                  placeholder="ACTION_TYP (예: NEST_Seasoning)"
                   aria-label="액션 타입"
                 />
                 <input

@@ -159,7 +159,17 @@ export async function GET(req: NextRequest) {
     // 사용자 수는 하루 안에서 distinct 라 Set 이 필요해 buckets 에 얹지 않고 따로 둔다.
     const dailyAcc = new Map<
       number,
-      { total: number; ok: number; fail: number; pending: number; users: Set<string>; latSum: number; latN: number }
+      {
+        total: number;
+        ok: number;
+        fail: number;
+        pending: number;
+        users: Set<string>;
+        latSum: number;
+        latN: number;
+        // 하루 안의 기능(ACTION_TYP)별 세부 — 어떤 기능이 얼마나 돌았는지
+        actions: Map<string, { total: number; ok: number; fail: number }>;
+      }
     >();
 
     for (const [traceId, list] of byTrace) {
@@ -218,12 +228,22 @@ export async function GET(req: NextRequest) {
         const dayKey = floorToBucket(start, "1d");
         let day = dailyAcc.get(dayKey);
         if (!day) {
-          day = { total: 0, ok: 0, fail: 0, pending: 0, users: new Set(), latSum: 0, latN: 0 };
+          day = { total: 0, ok: 0, fail: 0, pending: 0, users: new Set(), latSum: 0, latN: 0, actions: new Map() };
           dailyAcc.set(dayKey, day);
         }
         day.total += 1;
         day[status] += 1;
         if (u) day.users.add(u);
+
+        // 하루 안의 기능별 세부 — at/status 는 위에서 트레이스 단위로 이미 판정됨(byAction 과 동일 기준)
+        let da = day.actions.get(at);
+        if (!da) {
+          da = { total: 0, ok: 0, fail: 0 };
+          day.actions.set(at, da);
+        }
+        da.total += 1;
+        if (status === "ok") da.ok += 1;
+        else if (status === "fail") da.fail += 1;
 
         // 트레이스 latency: 첫 recv → 마지막 resp/send
         if (respTimes.length > 0) {
@@ -291,6 +311,11 @@ export async function GET(req: NextRequest) {
         pending: d?.pending ?? 0,
         users: d?.users.size ?? 0,
         avgCubeLatencyMs: d && d.latN > 0 ? d.latSum / d.latN : null,
+        byAction: d
+          ? Array.from(d.actions.entries())
+              .map(([key, v]) => ({ key, ...v }))
+              .sort((a, b) => b.total - a.total)
+          : [],
       };
     });
 

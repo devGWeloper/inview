@@ -175,6 +175,17 @@ export interface DailyStat {
   users: number;
   /** 해당 일 Action 평균 응답 지연(ms) — CUBE send→resp. 측정 가능한 트레이스가 없으면 null */
   avgCubeLatencyMs: number | null;
+  /** 해당 일 기능(ACTION_TYP)별 실행 세부 — total desc 정렬, 없으면 빈 배열. '(none)' 포함 가능 */
+  byAction: DailyActionStat[];
+}
+
+/** 하루 안에서 한 기능(ACTION_TYP)의 실행/성공/실패 수 (DailyStat.byAction 요소) */
+export interface DailyActionStat {
+  /** ACTION_TYP 값 (예: "NEST_Seasoning"). null/empty 는 "(none)" */
+  key: string;
+  total: number;
+  ok: number;
+  fail: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

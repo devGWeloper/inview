@@ -11,7 +11,7 @@
 //   - LLM 토큰 실적: /api/tokens (TRX_TOKEN_DET — action 외 judge/setup_guide 노드 구분 포함)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CubeLatencyChart } from "@/components/CubeLatencyChart";
 import { DimensionBreakdown } from "@/components/DimensionBreakdown";
@@ -126,96 +126,6 @@ function dayLabel(date: string): { label: string; dow: number } {
   const [y, m, d] = date.split("-").map(Number);
   const dow = new Date(y, m - 1, d).getDay();
   return { label: `${pad(m)}/${pad(d)} (${DAY_KO[dow]})`, dow };
-}
-
-// ── 일별 기능(액션) 구성 ──────────────────────────────────────────────────────
-// "그날 어떤 기능이 얼마나 돌았나" 를 한눈에 — 날짜별 스택 바(기능별 색) + 범례.
-// 색은 기간 전체 실행수 desc 로 안정 배정한다(날짜가 바뀌어도 같은 기능=같은 색).
-const ACTION_PALETTE = [
-  "#2563eb", "#7c3aed", "#0891b2", "#c2410c",
-  "#0d9488", "#db2777", "#65a30d", "#4f46e5",
-];
-const ACTION_NONE_COLOR = "#94a3b8";
-
-interface ActionMeta {
-  key: string;
-  total: number;
-  color: string;
-}
-
-/** 기간 전체 기능별 합계(desc) + 색 배정. '(none)' 는 항상 회색으로 뒤에. */
-function buildActionMeta(rows: DailyRow[]): { list: ActionMeta[]; colorOf: (k: string) => string } {
-  const totals = new Map<string, number>();
-  for (const r of rows) {
-    for (const a of r.byAction) totals.set(a.key, (totals.get(a.key) ?? 0) + a.total);
-  }
-  const ordered = Array.from(totals.entries())
-    .filter(([k]) => k !== "(none)")
-    .sort((a, b) => b[1] - a[1]);
-  const list: ActionMeta[] = ordered.map(([key, total], i) => ({
-    key,
-    total,
-    color: ACTION_PALETTE[i % ACTION_PALETTE.length],
-  }));
-  if (totals.has("(none)")) {
-    list.push({ key: "(none)", total: totals.get("(none)")!, color: ACTION_NONE_COLOR });
-  }
-  const map = new Map(list.map((m) => [m.key, m.color]));
-  return { list, colorOf: (k) => map.get(k) ?? ACTION_NONE_COLOR };
-}
-
-function DailyActionBreakdown({ rows }: { rows: DailyRow[] }) {
-  const { list, colorOf } = useMemo(() => buildActionMeta(rows), [rows]);
-  const activeRows = rows.filter((r) => r.total > 0);
-  const maxTotal = Math.max(1, ...activeRows.map((r) => r.total));
-
-  if (list.length === 0 || activeRows.length === 0) {
-    return <div className="top-empty">기능 데이터 없음</div>;
-  }
-
-  return (
-    <div className="dab">
-      <div className="dab-legend">
-        {list.map((m) => (
-          <span key={m.key} className="dab-legend-item" title={`${m.key} · 기간 합계 ${m.total.toLocaleString()}건`}>
-            <span className="dab-dot" style={{ background: m.color }} aria-hidden />
-            <span className="dab-legend-key">{m.key}</span>
-            <span className="dab-legend-val">{m.total.toLocaleString()}</span>
-          </span>
-        ))}
-      </div>
-      <ul className="dab-rows">
-        {activeRows.map((r) => {
-          const { label, dow } = dayLabel(r.date);
-          return (
-            <li key={r.date} className="dab-row">
-              <span className={`dab-date dow-${dow}`}>{label}</span>
-              <span className="dab-track" style={{ width: `${(r.total / maxTotal) * 100}%` }}>
-                {r.byAction.map((a) => (
-                  <span
-                    key={a.key}
-                    className="dab-seg"
-                    style={{ width: `${(a.total / r.total) * 100}%`, background: colorOf(a.key) }}
-                    title={`${a.key}: ${a.total.toLocaleString()}건 (성공 ${a.ok} · 실패 ${a.fail})`}
-                  />
-                ))}
-              </span>
-              <span className="dab-total">{r.total.toLocaleString()}</span>
-              <span className="dab-chips">
-                {r.byAction.map((a) => (
-                  <span key={a.key} className="dab-chip" title={`${a.key} 성공 ${a.ok} · 실패 ${a.fail}`}>
-                    <span className="dab-dot sm" style={{ background: colorOf(a.key) }} aria-hidden />
-                    {a.key}
-                    <b>{a.total.toLocaleString()}</b>
-                  </span>
-                ))}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
 }
 
 // ── 복사용 텍스트 생성 ────────────────────────────────────────────────────────
@@ -398,8 +308,43 @@ function ReportKpis({ stats }: { stats: StatsResponse }) {
   );
 }
 
+// ── 기능(액션)별 상세 — 한 날짜 행을 펼치면 나오는 내용 ───────────────────────
+function DailyActionDetail({ row }: { row: DailyRow }) {
+  const acts = row.byAction; // 이미 total desc 정렬, total>0 만
+  const maxTotal = Math.max(1, ...acts.map((a) => a.total));
+  return (
+    <div className="daily-detail">
+      <div className="daily-detail-title">기능(액션)별 상세</div>
+      <ul className="daily-act-list">
+        {acts.map((a) => {
+          const okPct = a.total > 0 ? (a.ok / a.total) * 100 : 0;
+          const failPct = a.total > 0 ? (a.fail / a.total) * 100 : 0;
+          return (
+            <li key={a.key} className="daily-act">
+              <span className="daily-act-key" title={a.key}>{a.key === "(none)" ? "(미상)" : a.key}</span>
+              <span className="daily-act-bar" style={{ width: `${(a.total / maxTotal) * 100}%` }} aria-hidden>
+                {okPct > 0 && <i className="ok" style={{ width: `${okPct}%` }} />}
+                {failPct > 0 && <i className="fail" style={{ width: `${failPct}%` }} />}
+              </span>
+              <span className="daily-act-nums">
+                <b>{a.total.toLocaleString()}</b>건
+                <span className="ok">성공 {a.ok.toLocaleString()}</span>
+                {a.fail > 0 && <span className="err">실패 {a.fail.toLocaleString()}</span>}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 // ── 일별 현황 표 (주간/기간 조회 시 하루 단위 실적이 바로 보이도록) ─────────────
+// 날짜 행을 클릭하면 그날의 기능(액션)별 상세가 아래로 펼쳐진다. "전체 펼치기/접기"로 한 번에 열고 닫아
+// 대시보드 등에 통째로 복사·붙여넣기 하기 좋게 했다.
 function DailyTable({ rows }: { rows: DailyRow[] }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
   const maxTotal = Math.max(1, ...rows.map((r) => r.total));
   const peakDate =
     rows.reduce<DailyRow | null>((p, r) => (r.total > 0 && r.total > (p?.total ?? 0) ? r : p), null)?.date ?? null;
@@ -407,8 +352,32 @@ function DailyTable({ rows }: { rows: DailyRow[] }) {
     (a, r) => ({ total: a.total + r.total, ok: a.ok + r.ok, fail: a.fail + r.fail, tokens: a.tokens + r.tokens }),
     { total: 0, ok: 0, fail: 0, tokens: 0 }
   );
+
+  const expandableDates = rows.filter((r) => r.byAction.length > 0).map((r) => r.date);
+  const allExpanded = expandableDates.length > 0 && expandableDates.every((d) => expanded.has(d));
+
+  const toggle = (date: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+  };
+  const toggleAll = () => {
+    setExpanded(allExpanded ? new Set() : new Set(expandableDates));
+  };
+
   return (
     <div className="daily-table-wrap">
+      {expandableDates.length > 0 && (
+        <div className="daily-toolbar">
+          <span className="daily-toolbar-hint">날짜를 누르면 기능별 상세가 열립니다</span>
+          <button type="button" className="btn ghost sm" onClick={toggleAll}>
+            {allExpanded ? "▲ 전체 접기" : "▼ 전체 펼치기"}
+          </button>
+        </div>
+      )}
       <table className="daily-table">
         <thead>
           <tr>
@@ -426,23 +395,38 @@ function DailyTable({ rows }: { rows: DailyRow[] }) {
           {rows.map((r) => {
             const { label, dow } = dayLabel(r.date);
             const empty = r.total === 0 && r.tokens === 0;
+            const canExpand = r.byAction.length > 0;
+            const isOpen = expanded.has(r.date);
             return (
-              <tr key={r.date} className={empty ? "empty" : undefined}>
-                <td className={`daily-date dow-${dow}`}>
-                  {label}
-                  {r.date === peakDate && <span className="daily-peak">peak</span>}
-                </td>
-                <td className="num daily-run">
-                  <span className="daily-bar" style={{ width: `${(r.total / maxTotal) * 100}%` }} aria-hidden />
-                  <span className="daily-run-val">{r.total > 0 ? r.total.toLocaleString() : "-"}</span>
-                </td>
-                <td className="num ok">{r.ok > 0 ? r.ok.toLocaleString() : "-"}</td>
-                <td className={"num" + (r.fail > 0 ? " err" : "")}>{r.fail > 0 ? r.fail.toLocaleString() : "-"}</td>
-                <td className="num">{r.total > 0 ? pct(r.ok, r.total) : "-"}</td>
-                <td className="num">{r.users > 0 ? `${r.users.toLocaleString()}명` : "-"}</td>
-                <td className="num">{r.avgCubeLatencyMs != null ? fmtDuration(r.avgCubeLatencyMs) : "-"}</td>
-                <td className="num">{r.tokens > 0 ? r.tokens.toLocaleString() : "-"}</td>
-              </tr>
+              <Fragment key={r.date}>
+                <tr
+                  className={(empty ? "empty" : "") + (canExpand ? " expandable" : "") + (isOpen ? " open" : "")}
+                  onClick={canExpand ? () => toggle(r.date) : undefined}
+                >
+                  <td className={`daily-date dow-${dow}`}>
+                    <span className="daily-caret" aria-hidden>{canExpand ? (isOpen ? "▾" : "▸") : ""}</span>
+                    {label}
+                    {r.date === peakDate && <span className="daily-peak">peak</span>}
+                  </td>
+                  <td className="num daily-run">
+                    <span className="daily-bar" style={{ width: `${(r.total / maxTotal) * 100}%` }} aria-hidden />
+                    <span className="daily-run-val">{r.total > 0 ? r.total.toLocaleString() : "-"}</span>
+                  </td>
+                  <td className="num ok">{r.ok > 0 ? r.ok.toLocaleString() : "-"}</td>
+                  <td className={"num" + (r.fail > 0 ? " err" : "")}>{r.fail > 0 ? r.fail.toLocaleString() : "-"}</td>
+                  <td className="num">{r.total > 0 ? pct(r.ok, r.total) : "-"}</td>
+                  <td className="num">{r.users > 0 ? `${r.users.toLocaleString()}명` : "-"}</td>
+                  <td className="num">{r.avgCubeLatencyMs != null ? fmtDuration(r.avgCubeLatencyMs) : "-"}</td>
+                  <td className="num">{r.tokens > 0 ? r.tokens.toLocaleString() : "-"}</td>
+                </tr>
+                {canExpand && isOpen && (
+                  <tr className="daily-detail-row">
+                    <td colSpan={8}>
+                      <DailyActionDetail row={r} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             );
           })}
         </tbody>
@@ -742,23 +726,6 @@ function ReportContent() {
               </div>
               <div className="dash-card-body">
                 <DailyTable rows={dailyRows} />
-              </div>
-            </section>
-          )}
-
-          {/* 일별 기능 구성 — 그날 어떤 기능(액션)이 얼마나 돌았는지 스택 바로 */}
-          {dailyRows.length >= 2 && stats.byAction.some((a) => a.key !== "(none)") && (
-            <section className="dash-card">
-              <div className="dash-card-head">
-                <div className="dash-card-title-group">
-                  <span className="dash-card-title">일별 기능 구성</span>
-                  <span className="dash-card-sub">
-                    하루별 액션(ACTION_TYP) 실행 분포 · 막대 길이 = 실행 규모 · 색 = 기능
-                  </span>
-                </div>
-              </div>
-              <div className="dash-card-body">
-                <DailyActionBreakdown rows={dailyRows} />
               </div>
             </section>
           )}

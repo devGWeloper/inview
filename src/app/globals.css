@@ -3034,48 +3034,52 @@ button.tbd-row:not(:disabled):hover {
   font-weight: 800; color: var(--text);
 }
 
-/* 일별 기능 구성 — 날짜별 스택 바 + 범례 */
-.dab { display: flex; flex-direction: column; gap: 12px; }
-.dab-legend {
-  display: flex; flex-wrap: wrap; gap: 6px 14px;
-  padding-bottom: 10px; border-bottom: 1px solid var(--border);
+/* 일별 현황 — 펼치기 툴바 / 날짜 클릭 펼침 */
+.daily-toolbar {
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  margin-bottom: 8px;
 }
-.dab-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
-.dab-legend-key { color: var(--text-2); font-weight: 600; }
-.dab-legend-val { font-family: var(--mono); font-size: 11px; color: var(--text-3); font-weight: 700; }
-.dab-dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
-.dab-dot.sm { width: 8px; height: 8px; border-radius: 2px; }
+.daily-toolbar-hint { margin-right: auto; font-size: 11.5px; color: var(--text-3); }
+.btn.ghost.sm { padding: 4px 10px; font-size: 12px; }
+.daily-table tbody tr.expandable { cursor: pointer; }
+.daily-table tbody tr.expandable:hover { background: var(--surface-2); }
+.daily-table tbody tr.open { background: var(--accent-soft); }
+.daily-caret {
+  display: inline-block; width: 12px; margin-right: 2px;
+  color: var(--text-3); font-size: 10px;
+}
+.daily-table tbody tr.open .daily-caret { color: var(--accent); }
 
-.dab-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.dab-row {
-  display: grid;
-  grid-template-columns: 92px minmax(80px, 1fr) 46px;
-  grid-template-areas: "date track total" "date chips chips";
-  align-items: center; column-gap: 10px; row-gap: 4px;
+/* 펼친 상세 행 — 기능(액션)별 내역 */
+.daily-detail-row td { padding: 0 !important; background: var(--surface-2); }
+.daily-detail { padding: 10px 14px 12px 30px; }
+.daily-detail-title {
+  font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--text-3); margin-bottom: 8px;
 }
-.dab-date {
-  grid-area: date; font-size: 12px; font-weight: 700; color: var(--text-2);
-  font-family: var(--mono); white-space: nowrap;
+.daily-act-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.daily-act {
+  display: grid; grid-template-columns: minmax(120px, 1.4fr) minmax(90px, 2fr) auto;
+  align-items: center; gap: 12px;
 }
-.dab-date.dow-0 { color: var(--err); }
-.dab-date.dow-6 { color: var(--accent); }
-.dab-track {
-  grid-area: track; display: flex; height: 18px;
-  border-radius: 5px; overflow: hidden; background: var(--surface-2);
-  min-width: 0;
+.daily-act-key {
+  font-size: 12.5px; font-weight: 700; color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.dab-seg { height: 100%; min-width: 2px; transition: opacity 0.12s; }
-.dab-seg:hover { opacity: 0.82; }
-.dab-total {
-  grid-area: total; text-align: right; font-family: var(--mono);
-  font-size: 12.5px; font-weight: 800; color: var(--text);
+.daily-act-bar {
+  display: flex; height: 14px; border-radius: 4px; overflow: hidden;
+  background: var(--border); min-width: 0;
 }
-.dab-chips { grid-area: chips; display: flex; flex-wrap: wrap; gap: 4px 10px; }
-.dab-chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 11px; color: var(--text-3); white-space: nowrap;
+.daily-act-bar i { height: 100%; display: block; }
+.daily-act-bar i.ok { background: var(--ok); }
+.daily-act-bar i.fail { background: var(--err); }
+.daily-act-nums {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  font-size: 12px; color: var(--text-3); font-family: var(--mono); white-space: nowrap;
 }
-.dab-chip b { font-family: var(--mono); font-weight: 700; color: var(--text-2); }
+.daily-act-nums b { font-size: 13px; color: var(--text); font-weight: 800; }
+.daily-act-nums .ok { color: var(--ok); font-weight: 700; }
+.daily-act-nums .err { color: var(--err); font-weight: 700; }
 
 /* 복사 텍스트 미리보기 */
 .report-preview .dash-card-head { align-items: center; }

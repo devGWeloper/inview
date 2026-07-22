@@ -125,6 +125,16 @@ export interface DimensionStats {
   pending: number;
 }
 
+/**
+ * "액션 타입별" 집계에서 ACTION_TYP 이 없는 트레이스의 표기 라벨.
+ * 모든 BIZ 트레이스는 액션 요청이며(setup/judge 는 BIZ 에 안 쌓임), ACTION_TYP 이 없다는 건
+ * ACTION ROUTER 에서 실제 ACTION 노드로 못 가고 튕긴 = 라우팅 단계에서 실패한 액션이라는 뜻이다.
+ * 이런 트레이스는 반드시 errCd 를 동반하므로 status 는 이미 fail 로 집계되고 topErrors 에도 실제 코드로 잡힌다.
+ * 여기서는 표기만 '(none)' → '라우팅 실패' 로 명확히 한다. (FAC/AREA 의 '(none)'=MCP 미도달 과는 무관)
+ * 실제 ACTION_TYP 값이 아니라 표기 전용이라, DimensionBreakdown 에서 필터 클릭 대상에서 제외한다.
+ */
+export const ROUTING_FAIL_LABEL = "라우팅 실패";
+
 // 대시보드 집계는 ERROR_/FAIL_ 구분 없이 모두 fail 로 통합한다.
 // (라우트 단의 TraceStatus 는 ERROR/FAIL 을 구분하지만 dashboard 카드/차트는 OK·FAIL·PENDING 3분류만 사용)
 export interface StatusCounts {

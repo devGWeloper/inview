@@ -5,6 +5,7 @@ import {
   DimensionStats,
   LAYER_ORDER,
   LayerKey,
+  ROUTING_FAIL_LABEL,
   StatsResponse,
   TimeBucket,
   TopItem,
@@ -186,8 +187,9 @@ export async function GET(req: NextRequest) {
       const u = traceUserId(list);
       if (u) userCount.set(u, (userCount.get(u) ?? 0) + 1);
 
-      // action: 트레이스 내 첫 번째 비어있지 않은 값을 채택 (상위 레이어가 INSERT 시 기록)
-      const at = list.find((r) => r.actionTyp)?.actionTyp ?? NONE;
+      // action: 트레이스 내 첫 번째 비어있지 않은 값을 채택 (상위 레이어가 INSERT 시 기록).
+      // ACTION_TYP 이 없으면 = 라우터에서 튕긴 라우팅 실패(반드시 errCd 동반 → 이미 fail 집계). (none) 대신 명시 라벨.
+      const at = list.find((r) => r.actionTyp)?.actionTyp ?? ROUTING_FAIL_LABEL;
       dimBump(actionAcc, at, status);
 
       // FAC / AREA: MCP send update 에서만 기록되므로 트레이스 내 첫 non-null 값 채택. MCP 미도달 트레이스는 (none)

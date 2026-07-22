@@ -1,4 +1,4 @@
-import { DimensionStats } from "@/lib/types";
+import { DimensionStats, ROUTING_FAIL_LABEL } from "@/lib/types";
 
 export function DimensionBreakdown({
   items,
@@ -26,15 +26,17 @@ export function DimensionBreakdown({
         const share   = grandTotal > 0 ? (it.total / grandTotal) * 100 : 0;
         const wBar    = (it.total / maxTotal) * 100;
         const active  = selected === it.key;
-        const isNone  = it.key === "(none)";
+        const isNone  = it.key === "(none)";           // 노이즈 값 → 흐리게 + 클릭 불가
+        // '라우팅 실패'(표기 전용 라벨, 실제 ACTION_TYP 값 아님)는 클릭만 막고 흐리게는 하지 않는다(의미 있는 실패 항목).
+        const noFilter = isNone || it.key === ROUTING_FAIL_LABEL;
         return (
           <li
             key={it.key}
             className={"dim-row" + (active ? " active" : "") + (isNone ? " dim-none" : "")}
-            onClick={onSelect && !isNone ? () => onSelect(it.key) : undefined}
-            role={onSelect && !isNone ? "button" : undefined}
-            tabIndex={onSelect && !isNone ? 0 : undefined}
-            title={onSelect && !isNone ? (active ? `클릭하여 ${it.key} 필터 해제` : `클릭하여 ${it.key} 로 필터링`) : it.key}
+            onClick={onSelect && !noFilter ? () => onSelect(it.key) : undefined}
+            role={onSelect && !noFilter ? "button" : undefined}
+            tabIndex={onSelect && !noFilter ? 0 : undefined}
+            title={onSelect && !noFilter ? (active ? `클릭하여 ${it.key} 필터 해제` : `클릭하여 ${it.key} 로 필터링`) : it.key}
           >
             <div className="dim-row-head">
               <span className="dim-key">{it.key}</span>

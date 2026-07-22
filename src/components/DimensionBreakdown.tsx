@@ -27,12 +27,13 @@ export function DimensionBreakdown({
         const wBar    = (it.total / maxTotal) * 100;
         const active  = selected === it.key;
         const isNone  = it.key === "(none)";           // 노이즈 값 → 흐리게 + 클릭 불가
+        const isRoutingFail = it.key === ROUTING_FAIL_LABEL; // 실제 액션과 구분되는 '라우팅 실패' 항목(맨 아래, 구분선)
         // '라우팅 실패'(표기 전용 라벨, 실제 ACTION_TYP 값 아님)는 클릭만 막고 흐리게는 하지 않는다(의미 있는 실패 항목).
-        const noFilter = isNone || it.key === ROUTING_FAIL_LABEL;
+        const noFilter = isNone || isRoutingFail;
         return (
           <li
             key={it.key}
-            className={"dim-row" + (active ? " active" : "") + (isNone ? " dim-none" : "")}
+            className={"dim-row" + (active ? " active" : "") + (isNone ? " dim-none" : "") + (isRoutingFail ? " dim-routing-fail" : "")}
             onClick={onSelect && !noFilter ? () => onSelect(it.key) : undefined}
             role={onSelect && !noFilter ? "button" : undefined}
             tabIndex={onSelect && !noFilter ? 0 : undefined}

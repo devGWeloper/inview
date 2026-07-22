@@ -62,6 +62,16 @@ function topN(map: Map<string, number>, n: number): TopItem[] {
     .slice(0, n);
 }
 
+/** 액션 타입별 정렬: 실행수 desc. 단 '라우팅 실패'(표기 라벨, 실제 액션 아님)는 항상 맨 아래로 내려 실제 액션들과 구분. */
+function sortActions<T extends { key: string; total: number }>(arr: T[]): T[] {
+  return arr.sort((a, b) => {
+    const ar = a.key === ROUTING_FAIL_LABEL ? 1 : 0;
+    const br = b.key === ROUTING_FAIL_LABEL ? 1 : 0;
+    if (ar !== br) return ar - br;
+    return b.total - a.total;
+  });
+}
+
 export async function GET(req: NextRequest) {
   const t0 = Date.now();
   const ctx = reqContext(req);
@@ -314,9 +324,7 @@ export async function GET(req: NextRequest) {
         users: d?.users.size ?? 0,
         avgCubeLatencyMs: d && d.latN > 0 ? d.latSum / d.latN : null,
         byAction: d
-          ? Array.from(d.actions.entries())
-              .map(([key, v]) => ({ key, ...v }))
-              .sort((a, b) => b.total - a.total)
+          ? sortActions(Array.from(d.actions.entries()).map(([key, v]) => ({ key, ...v })))
           : [],
       };
     });
@@ -366,7 +374,7 @@ export async function GET(req: NextRequest) {
       uniqueUsers: userCount.size,
       daily,
       topErrors: topN(errCount, 8),
-      byAction: Array.from(actionAcc.values()).sort((a, b) => b.total - a.total),
+      byAction: sortActions(Array.from(actionAcc.values())),
       byFac: Array.from(facAcc.values()).sort((a, b) => b.total - a.total),
       byArea: Array.from(areaAcc.values()).sort((a, b) => b.total - a.total),
       rowCount: includedRowCount,

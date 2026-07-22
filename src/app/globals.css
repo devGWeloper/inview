@@ -1567,6 +1567,21 @@ a:hover { text-decoration: underline; }
   font-style: italic;
   color: var(--text-muted);
 }
+/* '라우팅 실패' — 실제 액션과 구분되게 맨 아래에서 구분선 + 실패 틴트로 떼어놓는다 */
+.dim-row.dim-routing-fail {
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-strong);
+  cursor: default;
+}
+.dim-row.dim-routing-fail .dim-key {
+  color: var(--err);
+  font-weight: 700;
+}
+.dim-row.dim-routing-fail .dim-key::before {
+  content: "⚠ ";
+  font-weight: 400;
+}
 .dim-row-head {
   display: flex;
   align-items: center;

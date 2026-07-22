@@ -116,6 +116,17 @@ The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTI
 - **화면**: `/event-fabs` (클라이언트, `AdminGate` 뒤 — /admin·/report 와 sessionStorage 잠금 공유). **권한 매트릭스 콘솔** 스타일(`fm-*`): 컴팩트 툴바(작은 타이틀 + 이벤트 검색 + "+ 이벤트"/저장) 아래 이벤트(행)×FAB(열) 매트릭스 — 스티키 헤더 + 패널 내부 스크롤이라 이벤트 100개 스케일을 전제. 셀 = 토글 도트(켜면 액센트 채움+체크 팝), **열 헤더 클릭 = 보이는 행 대상 열 일괄 토글**, 행 액션(행 전체 토글/삭제)은 hover 시에만 노출, 이벤트명은 borderless 인라인 입력(`/api/action-types` datalist). 저장 버튼은 **dirty(스냅샷 비교) 일 때만 활성** + 흰 점 표시, FAB 0개 행은 "팹 없음" 배지. 안내문은 하단 풋노트 한 줄로 축약. 진입은 `/admin` 헤더의 "이벤트-FAB 매핑" 버튼.
 - **판정 규칙**: `USE_YN='Y'` 행의 FAB 집합 = 허용. **매핑 미등록 이벤트는 MCP 정책**(Python 예시의 `allow_when_unregistered`, 기본 전 FAB 허용).
 
+### Improvement Center — `/improvement` (⚠️ 앱 자체 DB = GAIA)
+
+**TraceX > Improvement Center > Request Failure Tracker**. Improvement Center 는 AI 에이전트 개선 허브(**확장 가능한 플랫폼 셸**)이고, Request Failure Tracker 는 그 **첫 모듈**이다. 앞으로 개선 모듈이 이 센터에 더 붙는 구조 — `src/app/improvement/page.tsx` 의 `MODULES` 배열에 `{ key, name, tagline, icon, Component }` 한 줄 추가하면 좌측 레일에 붙는다(`PLANNED` 는 로드맵 표시용, 클릭 불가). 진입은 `/admin` 헤더의 "🚀 Improvement Center" 버튼, `AdminGate` 뒤(/admin·/report·/event-fabs 와 sessionStorage 잠금 공유).
+
+- **실패 요청 정의**: 사용자 정의 그대로 — `ACTION_TYP IS NULL AND RECV_MSG_CTN IS NOT NULL ORDER BY TIMEKEY DESC`. 메시지는 받았는데 ACTION_TYP 을 못 붙인 요청 = **라우팅 실패이거나 LLM 오류로 튕긴 요청**. `ACTION_TYP` 권위 레이어가 **GAIA**(= `/api/action-types`·`monthlyActionSuccess` 와 동일)라서 이 판정은 GAIA DB 에서 한다. GAIA 는 **앱 자체 DB**(`APP_DB_LAYER`)이기도 해서 실패 요청 조회와 조치정보 저장이 **같은 DB·같은 커넥션**(`getAppDbConfig`)이다.
+- **조치정보 테이블 `TRX_REQ_FAILURE_INF`** (`sql/create_trx_req_failure_inf.sql`, **앱 자체 DB=GAIA 에서만 1회 실행**, ADM 소유 + GRANT + PUBLIC SYNONYM 패턴 — TRX_EVENT_MAP 과 동일). `TRACE_ID`(PK) / `STATUS`(open/investigating/resolved/ignored = `FAILURE_STATUSES`) / `NOTE_CTN` / `HANDLER_ID` / 감사일시. 실패 요청 원본은 BIZ 에 있고 이 테이블은 **조치 오버레이**(TRACE_ID 로 LEFT JOIN, JS 병합) — 행 없는 요청 = `open`(미조치).
+- **읽기/쓰기**: `src/lib/requestFailures.ts` → `GET/PUT /api/request-failures`(+ `GET /api/request-failures/[traceId]/context`). 실패행 조회와 조치행 조회는 **격리 실행** — `TRX_REQ_FAILURE_INF` 미생성(ORA-00942)이어도 리스트는 정상 노출되고 `triageAvailable=false` 로 저장만 막는다(lazy-`oracledb`-swallow, `available=false + reason` 안내). 저장은 `TRACE_ID` 기준 **MERGE upsert**(autoCommit), PUT 은 `x-admin-password` 게이트.
+- **사용자 요청 흐름**(`fetchRequestFailureContext`): 선택한 실패 요청의 `USER_ID`·수신시각을 찾고, 같은 사용자가 **±12h** 낸 요청을 TRACE_ID 단위(GROUP BY)로 묶어 시간순으로 내린다. `ACTION_TYP` 없는 요청은 `isFailure` 로 표시 — "무엇을 시도하다 어디서 튕겼나" 흐름을 관리자가 읽게 한다. 흐름의 각 노드는 기존 `TraceTimeline`(`/api/traces/[traceId]`)으로 full 상세 인라인 전개.
+- **화면**(`src/components/improvement/RequestFailureTracker.tsx`, `rft-*` / 셸은 `ic-*`): 상단 KPI(미조치/조치중/조치완료/영향 사용자/기간 내 실패 수) + 기간 프리셋(24h/7d/30d/전체, 서버 `dateFrom`) + 좌(상태칩 필터·검색 리스트)/우(원본 요청·응답·조치 세그먼트+메모+담당자·사용자 흐름) 스플릿. 상태칩/검색은 클라이언트 필터, 조치 저장 시 로컬 카운트 재계산. 에러코드 의미는 `/api/error-codes` 재사용.
+- ⚠️ **담당자(HANDLER_ID)는 현재 화면 수동 입력** — 실제 로그인/인증이 없어서다. 로그인 도입 시 로그인 계정으로 자동 기록하고 조치/confirm 이력을 감사하도록 교체 예정(관리자 권한 분리 포함). memory: `auth-login-future-need`.
+
 ## 두 가지 지연 지표 (둘 다 정규 — 재는 대상이 다름)
 
 지연은 **성격이 다른 두 지표**로 나뉜다. 하나로 합치지 말 것.

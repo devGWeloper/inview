@@ -453,6 +453,103 @@ export interface EventFabMapping {
   fabs: string[];
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Improvement Center > Request Failure Tracker (/improvement — 관리자 콘솔)
+//
+// Improvement Center = AI 에이전트 개선 허브(확장 가능한 플랫폼). 그 첫 모듈이
+// Request Failure Tracker — 에이전트가 처리하지 못하고 튕긴 "실패 요청"을 추적·정정한다.
+//
+// "실패 요청" = GAIA(ACTION_TYP 권위 레이어 = 앱 자체 DB)에서 메시지는 받았는데
+// ACTION_TYP 을 못 붙인 요청: ACTION_TYP IS NULL AND RECV_MSG_CTN IS NOT NULL.
+// 보통 액션 라우팅 실패이거나 LLM 오류로 튕긴 요청이다. 관리자가 이런 요청을 훑어보고
+// 조치 상태를 남긴다. 조치 상태는 앱 자체 DB(GAIA)의 TRX_REQ_FAILURE_INF 에 영속하고
+// (src/lib/requestFailures.ts, sql/create_trx_req_failure_inf.sql), 실패 요청 원본(BIZ)에
+// TRACE_ID 로 LEFT JOIN 해서 얹는다. 테이블에 행이 없는 요청 = '미조치(open)'.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 실패 요청 조치 상태 코드값 (DB STATUS 컬럼에 그대로 저장) */
+export type FailureStatus = "open" | "investigating" | "resolved" | "ignored";
+
+/** 조치 상태 목록 (표시 순서 = 워크플로우 순서). key=DB 저장값, label=화면 표기 */
+export const FAILURE_STATUSES: { key: FailureStatus; label: string; hint: string }[] = [
+  { key: "open",          label: "미조치",   hint: "아직 확인/조치하지 않음" },
+  { key: "investigating", label: "조치중",   hint: "원인 확인·조치 진행 중" },
+  { key: "resolved",      label: "조치완료", hint: "원인 파악 및 정정·조치 완료" },
+  { key: "ignored",       label: "무시",     hint: "조치 불필요 (오탐·일회성 등)" },
+];
+
+/** 실패 요청 1건 (BIZ 원본 + TRX_REQ_FAILURE_INF 조치 오버레이 병합) */
+export interface RequestFailure {
+  traceId: string;
+  timekey: string;
+  userId: string | null;
+  /** 요청 수신 시각 (ISO, TZ 없음) */
+  recvTm: string | null;
+  /** 사용자의 원본 요청 메시지 (실패 판정의 핵심 근거 — 무엇을 요청했나) */
+  recvMsgCtn: string | null;
+  /** 응답/에러 본문 (튕긴 경우 사유가 담기기도) */
+  respMsgCtn: string | null;
+  errCd: string | null;
+  errDescCtn: string | null;
+  httpStsCd: string | null;
+  channelId: string | null;
+  sysId: string | null;
+  // ── 조치 오버레이 (TRX_REQ_FAILURE_INF, 없으면 기본값) ──
+  status: FailureStatus;
+  note: string | null;
+  handler: string | null;
+  /** 최근 조치(수정) 시각 (ISO, TZ 없음). 미조치(행 없음)면 null */
+  triagedAt: string | null;
+}
+
+export interface FailureStatusCounts {
+  open: number;
+  investigating: number;
+  resolved: number;
+  ignored: number;
+}
+
+export interface RequestFailureListResponse {
+  items: RequestFailure[];
+  total: number;
+  /** 조회된 창(window) 내 상태별 카운트 */
+  counts: FailureStatusCounts;
+  /** 조회된 창 내 실패 요청을 낸 고유 사용자 수 */
+  affectedUsers: number;
+  /** GAIA(ACTION_TYP 권위 = 앱 자체 DB) 조회 가능 여부. false 면 화면이 안내 */
+  available: boolean;
+  /** available=false 사유 */
+  reason?: string;
+  /** 조치정보 테이블(TRX_REQ_FAILURE_INF) 사용 가능 여부. false 면 상태는 전부 미조치로 표시되고 저장 불가 */
+  triageAvailable: boolean;
+  appEnv: "dev" | "prd";
+}
+
+/** 특정 실패 요청 주변의 "사용자 요청 흐름" 한 노드 (같은 USER_ID 의 앞뒤 요청) */
+export interface RequestFailureContextItem {
+  traceId: string;
+  /** 요청 수신 시각 (ISO, TZ 없음) */
+  recvTm: string | null;
+  /** 라우팅된 액션 (null = 이 요청도 라우팅 실패 = 실패 요청) */
+  actionTyp: string | null;
+  errCd: string | null;
+  httpStsCd: string | null;
+  recvMsgCtn: string | null;
+  respMsgCtn: string | null;
+  /** ACTION_TYP 이 없어 이 요청도 실패(라우팅 실패)인가 */
+  isFailure: boolean;
+  /** 지금 선택한(중심) 실패 요청인가 */
+  isCenter: boolean;
+}
+
+export interface RequestFailureContextResponse {
+  traceId: string;
+  userId: string | null;
+  /** 시간 오름차순. 중심 요청 앞뒤로 같은 사용자의 요청 흐름 */
+  items: RequestFailureContextItem[];
+  available: boolean;
+}
+
 export interface StatsResponse {
   /** 적용된 기간 */
   range: { from: string | null; to: string | null };

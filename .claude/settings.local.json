@@ -48,7 +48,10 @@
       "Bash(taskkill //F //IM node.exe //FI \"WINDOWTITLE eq *\")",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:d.get\\(k\\) for k in ['fteActionMinutes','fteDefaultMinutes','fteAnnualMinutes']}, ensure_ascii=False, indent=2\\)\\)\")",
       "Bash(git reflog *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(echo \"started pid $!\")",
+      "Read(//tmp/**)",
+      "Bash(break)"
     ]
   }
 }

@@ -79,6 +79,7 @@ export default function Page() {
     try {
       const q = new URLSearchParams();
       if (f.traceId) q.set("traceId", f.traceId);
+      if (f.userId?.trim()) q.set("userId", f.userId.trim());
       if (f.actionTyp) q.set("actionTyp", f.actionTyp);
       if (f.errCd) q.set("errCd", f.errCd);
       if (f.facId) q.set("facId", f.facId);
@@ -178,6 +179,36 @@ export default function Page() {
 
           <div className="filter">
             <form onSubmit={onSubmit}>
+              <div className="filter-search">
+                <svg className="filter-search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" strokeWidth="2" />
+                  <line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <input
+                  type="text"
+                  className="filter-search-input"
+                  placeholder="USER_ID 로 검색 (부분 일치)"
+                  aria-label="USER_ID 로 검색"
+                  value={filter.userId ?? ""}
+                  onChange={(e) => setFilter({ ...filter, userId: e.target.value || undefined })}
+                />
+                {filter.userId && (
+                  <button
+                    type="button"
+                    className="filter-search-clear"
+                    aria-label="USER_ID 검색 지우기"
+                    onClick={() => {
+                      const next = { ...filter, userId: undefined };
+                      setFilter(next);
+                      setSelected(null);
+                      setDetailRows([]);
+                      loadList(next);
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
               <div className="filter-grid">
                 <label>
                   TRACE_ID

@@ -80,9 +80,12 @@ export async function GET(req: NextRequest) {
     //    FAC_ID=MCP(/api/facs), ACTION_TYP=GAIA(/api/action-types))
     // 2) 그 ID 들의 전 레이어 행을 traceIds IN 으로 조회 (두 필터 동시 사용 시 교집합)
     let rows: TraceRow[];
-    const idFilters: Array<[LayerKey, "FAC_ID" | "ACTION_TYP", string]> = [];
+    const idFilters: Array<[LayerKey, "FAC_ID" | "ACTION_TYP" | "USER_ID", string]> = [];
     if (filter.facId) idFilters.push(["MCP", "FAC_ID", filter.facId]);
     if (filter.actionTyp) idFilters.push(["GAIA", "ACTION_TYP", filter.actionTyp]);
+    // USER_ID 는 레이어마다 값이 다를 수 있어(하위 레이어는 시스템 계정) 행 단위 WHERE 로 걸면
+    // 트레이스가 깨진다. 진입 레이어(CUBE) USER_ID 로 TRACE_ID 를 먼저 확정하는 2단계로 처리한다.
+    if (filter.userId) idFilters.push([LAYER_ORDER[0], "USER_ID", filter.userId]);
 
     if (idFilters.length > 0) {
       const idSets = await Promise.all(
@@ -93,7 +96,7 @@ export async function GET(req: NextRequest) {
         return acc.filter((id) => s.has(id));
       });
       rows = traceIds.length > 0
-        ? await fetchAllRows({ ...filter, facId: undefined, actionTyp: undefined, traceIds, limit: undefined })
+        ? await fetchAllRows({ ...filter, facId: undefined, actionTyp: undefined, userId: undefined, traceIds, limit: undefined })
         : [];
     } else {
       rows = await fetchAllRows(filter);

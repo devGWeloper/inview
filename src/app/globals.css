@@ -217,6 +217,53 @@ a:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
 }
+.filter-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.filter-search-icon {
+  position: absolute;
+  left: 11px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+.filter-search-input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 8px 34px 8px 34px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+  transition: border-color .12s, box-shadow .12s;
+}
+.filter-search-input::placeholder { color: var(--text-3); }
+.filter-search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+.filter-search:focus-within .filter-search-icon { color: var(--accent); }
+.filter-search-clear {
+  position: absolute;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background .1s, color .1s;
+}
+.filter-search-clear:hover { background: var(--border-strong); color: var(--text); }
 .filter-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -159,7 +159,7 @@ export async function fetchAllRows(filter: TraceFilter): Promise<TraceRow[]> {
  */
 export async function fetchTraceIdsBy(
   layer: LayerKey,
-  column: "FAC_ID" | "ACTION_TYP",
+  column: "FAC_ID" | "ACTION_TYP" | "USER_ID",
   value: string,
   filter: Pick<TraceFilter, "dateFrom" | "dateTo" | "limit">
 ): Promise<string[]> {
@@ -168,7 +168,14 @@ export async function fetchTraceIdsBy(
   const oracle = await getOracle();
   if (!oracle) return [];
 
-  const where: string[] = [`${column} = :val`];
+  // USER_ID 는 사용자가 검색창에 입력하는 값이라 부분 일치(대소문자 무시)로 찾는다.
+  // 진입 레이어(CUBE)의 USER_ID 로만 확정하므로 하위 레이어의 시스템 계정 값에 영향받지 않고,
+  // traceUserId()가 뽑는 "대표 사용자"와 같은 기준이 된다. FAC_ID/ACTION_TYP 는 옵션에서 고른
+  // 정확한 값이라 기존대로 완전 일치.
+  const where: string[] =
+    column === "USER_ID"
+      ? ["UPPER(TRIM(USER_ID)) LIKE '%' || UPPER(:val) || '%'"]
+      : [`${column} = :val`];
   const binds: Record<string, unknown> = { val: value };
   if (filter.dateFrom) {
     where.push("RECV_TM >= TO_TIMESTAMP(:dateFrom, 'YYYY-MM-DD\"T\"HH24:MI:SS')");

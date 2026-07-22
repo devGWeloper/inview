@@ -3054,21 +3054,28 @@ button.tbd-row:not(:disabled):hover {
 .daily-table tbody tr.daily-sub td {
   background: var(--surface-2);
   border-right: 1px solid var(--border);
-  border-bottom: 1px dashed var(--border);
+  border-bottom: 1px solid var(--border);
+  padding-top: 6px; padding-bottom: 6px;
   font-size: 12px; font-weight: 500;
   color: var(--text-2);
 }
 .daily-table tbody tr.daily-sub td:last-child { border-right: none; }
-.daily-table tbody tr.daily-sub.last td { border-bottom: 1px solid var(--border-strong); }
+/* 마지막 액션 행은 진한 선으로 그룹을 닫아 "날짜 묶음" 이 끝났음을 표시 */
+.daily-table tbody tr.daily-sub.last td { border-bottom: 2px solid var(--border-strong); }
 .daily-table tbody tr.daily-sub:hover td { background: var(--surface-2); }
-/* 첫 칸: 날짜 아래로 들여쓰고 트리 커넥터로 하위임을 표시. 왼쪽 액센트로 그룹임을 강조 */
+/* 첫 칸: 날짜 아래로 들여쓰고, 왼쪽 액센트 바로 "이 날짜의 하위" 임을 표현 (트리 문자 없이) */
 .daily-sub-key {
-  padding-left: 26px !important;
-  box-shadow: inset 3px 0 0 var(--accent-soft);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px;
+  padding-left: 30px !important;
+  position: relative;
+  color: var(--text-2); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px;
 }
-.daily-sub-tree { color: var(--text-muted); margin-right: 6px; font-family: var(--mono); }
-.daily-table tbody tr.daily-sub td.daily-sub-na { color: var(--text-muted); }
+.daily-sub-key::before {
+  content: ""; position: absolute; left: 14px; top: 0; bottom: 0;
+  width: 2px; background: var(--accent-soft);
+}
+/* 첫 액션 행의 액센트는 위에서 시작, 마지막 행은 아래를 살짝 남겨 묶음 느낌 */
+.daily-sub.last .daily-sub-key::before { bottom: 6px; border-radius: 0 0 2px 2px; }
 
 /* 복사 텍스트 미리보기 */
 .report-preview .dash-card-head { align-items: center; }

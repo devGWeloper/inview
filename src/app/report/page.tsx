@@ -393,17 +393,14 @@ function DailyTable({ rows }: { rows: DailyRow[] }) {
                     const last = i === r.byAction.length - 1;
                     return (
                       <tr key={`${r.date}::${a.key}`} className={"daily-sub" + (last ? " last" : "")}>
-                        <td className="daily-sub-key">
-                          <span className="daily-sub-tree" aria-hidden>{last ? "└" : "├"}</span>
-                          {a.key === "(none)" ? "(미상)" : a.key}
-                        </td>
+                        <td className="daily-sub-key" title={a.key}>{a.key}</td>
                         <td className="num">{a.total.toLocaleString()}</td>
                         <td className="num ok">{a.ok > 0 ? a.ok.toLocaleString() : "-"}</td>
                         <td className={"num" + (a.fail > 0 ? " err" : "")}>{a.fail > 0 ? a.fail.toLocaleString() : "-"}</td>
                         <td className="num">{a.total > 0 ? pct(a.ok, a.total) : "-"}</td>
-                        <td className="num daily-sub-na">·</td>
-                        <td className="num daily-sub-na">·</td>
-                        <td className="num daily-sub-na">·</td>
+                        <td className="num daily-sub-na" />
+                        <td className="num daily-sub-na" />
+                        <td className="num daily-sub-na" />
                       </tr>
                     );
                   })}

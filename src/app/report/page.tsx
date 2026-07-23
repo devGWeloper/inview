@@ -1,7 +1,7 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// /report — 종합 실적 리포트 (주간 기본 · 일간 지원). AdminGate 뒤에 있다.
+// /report — 종합 실적 리포트 (주간 기본 · 일간 지원). 미들웨어 인가(BR 이상) 뒤에 있다.
 //
 // 관리자가 매주 수기로 옮겨 적던 실적을 한 화면에 모아 보여주고(FullScope 차트),
 // "전체 복사" 한 번으로 보고용 텍스트를 클립보드에 담는다.
@@ -22,7 +22,6 @@ import { TokenChart } from "@/components/TokenChart";
 import { TokenLatencyChart, fmtDuration } from "@/components/TokenLatencyChart";
 import { TokenStatsCards } from "@/components/TokenStatsCards";
 import { TopList } from "@/components/TopList";
-import { AdminGate } from "@/components/AdminGate";
 import { AgentProfile, DailyActionStat, StatsResponse, TokenStatsResponse } from "@/lib/types";
 
 type PeriodUnit = "day" | "week";
@@ -425,16 +424,9 @@ function DailyTable({ rows }: { rows: DailyRow[] }) {
   );
 }
 
+// 접근 제어는 미들웨어(BR 이상)가 담당한다.
 export default function ReportPage() {
-  return (
-    <AdminGate
-      title="실적 리포트"
-      sub="관리자 전용 화면입니다. 비밀번호를 입력하면 실적을 볼 수 있습니다."
-      icon="📋"
-    >
-      <ReportContent />
-    </AdminGate>
-  );
+  return <ReportContent />;
 }
 
 function ReportContent() {

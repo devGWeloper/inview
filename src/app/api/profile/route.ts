@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readProfile, writeProfile } from "@/lib/profile";
 import { computeFteStats } from "@/lib/fte";
-import { ADMIN_PASSWORD, ADMIN_PASSWORD_HEADER } from "@/lib/adminAuth";
+import { requireRole } from "@/lib/auth/current";
 import { logger, reqContext } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -22,10 +22,10 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   const ctx = reqContext(req);
-  // 하드코딩 비밀번호 게이트 (단순 보호용 — adminAuth.ts 참고)
-  if (req.headers.get(ADMIN_PASSWORD_HEADER) !== ADMIN_PASSWORD) {
-    logger.warn("PUT /api/profile unauthorized", ctx);
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const guard = await requireRole("ADMIN");
+  if (!guard.ok) {
+    logger.warn("PUT /api/profile unauthorized", { ...ctx, status: guard.status });
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
   }
   try {
     const body = await req.json();

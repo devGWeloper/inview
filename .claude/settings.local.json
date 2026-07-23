@@ -51,7 +51,9 @@
       "Bash(git checkout *)",
       "Bash(echo \"started pid $!\")",
       "Read(//tmp/**)",
-      "Bash(break)"
+      "Bash(break)",
+      "Bash(node scripts/gen-user-insert.mjs I0103083 김기웅 \"eWorks1234!\" ADMIN \"시스템 관리자\")",
+      "Bash(node -e ' *2)"
     ]
   }
 }

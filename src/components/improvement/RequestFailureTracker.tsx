@@ -11,7 +11,6 @@ import {
   TraceDetailResponse,
   TraceRow,
 } from "@/lib/types";
-import { ADMIN_PASSWORD, ADMIN_PASSWORD_HEADER } from "@/lib/adminAuth";
 
 // Improvement Center 의 첫 모듈. 에이전트가 라우팅/LLM 단계에서 처리하지 못하고 튕긴
 // "실패 요청"(ACTION_TYP IS NULL AND RECV_MSG_CTN IS NOT NULL)을 좌측 리스트로 훑고,
@@ -318,11 +317,11 @@ function FailureDetail({
     try {
       const res = await fetch("/api/request-failures", {
         method: "PUT",
-        headers: { "Content-Type": "application/json", [ADMIN_PASSWORD_HEADER]: ADMIN_PASSWORD },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ traceId: item.traceId, status, note, handler }),
       });
       const d = await res.json();
-      if (res.status === 401) throw new Error("비밀번호가 올바르지 않습니다.");
+      if (res.status === 401 || res.status === 403) throw new Error("저장 권한이 없습니다. BR 이상 계정으로 로그인하세요.");
       if (!res.ok) throw new Error(d?.error ?? `HTTP ${res.status}`);
       onSaved({ status: d.status, note: d.note, handler: d.handler, triagedAt: d.triagedAt });
       setNote(d.note ?? "");

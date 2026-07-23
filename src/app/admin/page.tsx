@@ -3,17 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AgentProfile, WorkTask } from "@/lib/types";
-import { ADMIN_PASSWORD, ADMIN_PASSWORD_HEADER } from "@/lib/adminAuth";
-import { AdminGate } from "@/components/AdminGate";
 
 const EMPTY_TASK: WorkTask = { icon: "•", title: "", desc: "" };
 
+// 접근 제어는 미들웨어(운영자 전용)가 담당한다.
 export default function AdminPage() {
-  return (
-    <AdminGate title="관리자 편집" sub="비밀번호를 입력하면 프로필을 수정할 수 있습니다.">
-      <AdminEditor />
-    </AdminGate>
-  );
+  return <AdminEditor />;
 }
 
 function AdminEditor() {
@@ -127,13 +122,10 @@ function AdminEditor() {
     try {
       const res = await fetch("/api/profile", {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          [ADMIN_PASSWORD_HEADER]: ADMIN_PASSWORD,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...profile, skills, fteActionMinutes, fteDefaultMinutes, fteAnnualMinutes }),
       });
-      if (res.status === 401) throw new Error("비밀번호가 올바르지 않습니다.");
+      if (res.status === 401 || res.status === 403) throw new Error("저장 권한이 없습니다. 운영자 계정으로 로그인하세요.");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: { profile: AgentProfile } = await res.json();
       setProfile(data.profile);

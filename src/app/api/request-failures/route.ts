@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchRequestFailures, saveRequestFailureHandling } from "@/lib/requestFailures";
 import { getAppEnv } from "@/lib/db";
 import { FailureStatus, RequestFailureListResponse } from "@/lib/types";
-import { ADMIN_PASSWORD, ADMIN_PASSWORD_HEADER } from "@/lib/adminAuth";
+import { requireRole } from "@/lib/auth/current";
 import { logger, reqContext } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -46,12 +46,13 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(body);
 }
 
-/** 조치 정보 저장 (upsert). /admin 과 동일한 관리자 비밀번호 헤더 게이트. */
+/** 조치 정보 저장 (upsert). BR 이상 권한 필요. */
 export async function PUT(req: NextRequest) {
   const ctx = reqContext(req);
-  if (req.headers.get(ADMIN_PASSWORD_HEADER) !== ADMIN_PASSWORD) {
-    logger.warn("PUT /api/request-failures unauthorized", ctx);
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const guard = await requireRole("BR");
+  if (!guard.ok) {
+    logger.warn("PUT /api/request-failures unauthorized", { ...ctx, status: guard.status });
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
   }
   try {
     const body = await req.json();
@@ -60,11 +61,15 @@ export async function PUT(req: NextRequest) {
     if (!traceId) {
       return NextResponse.json({ error: "traceId 가 필요합니다." }, { status: 400 });
     }
+    // 담당자(handler)를 명시하지 않으면 현재 로그인 사용자로 자동 기록.
+    const handler = (typeof body?.handler === "string" && body.handler.trim())
+      ? body.handler
+      : guard.session.sub;
     const saved = await saveRequestFailureHandling({
       traceId,
       status,
       note: body?.note ?? null,
-      handler: body?.handler ?? null,
+      handler,
     });
     logger.info("PUT /api/request-failures ok", { ...ctx, traceId, status });
     return NextResponse.json({ traceId, ...saved });

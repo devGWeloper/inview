@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { AdminGate } from "@/components/AdminGate";
 import { RequestFailureTracker } from "@/components/improvement/RequestFailureTracker";
 
 // TraceX > Improvement Center — AI 에이전트 개선 허브(확장 가능한 플랫폼).
@@ -34,17 +33,9 @@ const PLANNED: { name: string; tagline: string; icon: string }[] = [
   { name: "Knowledge Gaps", tagline: "반복 실패 주제의 지식 보강", icon: "📚" },
 ];
 
+// 접근 제어는 미들웨어(BR 이상)가 담당한다.
 export default function ImprovementPage() {
-  return (
-    <AdminGate
-      title="Improvement Center"
-      sub="AI 에이전트 개선 허브 — 관리자 비밀번호를 입력하세요."
-      icon="🚀"
-      backHref="/agent"
-    >
-      <ImprovementCenter />
-    </AdminGate>
-  );
+  return <ImprovementCenter />;
 }
 
 function ImprovementCenter() {

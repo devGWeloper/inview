@@ -2,13 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { EventFabMapping, FAB_IDS } from "@/lib/types";
-import { ADMIN_PASSWORD, ADMIN_PASSWORD_HEADER } from "@/lib/adminAuth";
-import { AdminGate } from "@/components/AdminGate";
 
 // 이벤트(액션) × FAB 허용 매트릭스 편집기. 저장하면 MCP DB 의 TRX_EVENT_MAP 에
 // 전량 교체로 반영되고, MCP 로직이 요청 FAB 허용 여부 판정에 사용한다.
 // 이벤트가 100개로 늘어도 견디도록: 스티키 헤더 + 내부 스크롤 + 검색 필터 +
 // 열/행 단위 일괄 토글. (스키마·MCP 연동 예시: sql/create_trx_event_map.sql)
+// 접근 제어는 미들웨어(BR 이상)가 담당한다.
 
 interface EventFabApi {
   available: boolean;
@@ -17,16 +16,7 @@ interface EventFabApi {
 }
 
 export default function EventFabPage() {
-  return (
-    <AdminGate
-      title="FAB 적용 매핑"
-      sub="관리자 비밀번호를 입력하세요."
-      icon="🏭"
-      backHref="/admin"
-    >
-      <EventFabEditor />
-    </AdminGate>
-  );
+  return <EventFabEditor />;
 }
 
 function EventFabEditor() {
@@ -141,14 +131,11 @@ function EventFabEditor() {
     try {
       const res = await fetch("/api/event-fabs", {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          [ADMIN_PASSWORD_HEADER]: ADMIN_PASSWORD,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mappings: rows }),
       });
       const data = await res.json();
-      if (res.status === 401) throw new Error("비밀번호가 올바르지 않습니다.");
+      if (res.status === 401 || res.status === 403) throw new Error("저장 권한이 없습니다. BR 이상 계정으로 로그인하세요.");
       if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
       setRows(data.mappings);
       setBaseline(JSON.stringify(data.mappings));

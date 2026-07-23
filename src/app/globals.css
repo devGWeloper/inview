@@ -3584,6 +3584,8 @@ button.tbd-row:not(:disabled):hover {
 .login-shell {
   min-height: 100dvh; display: grid; grid-template-columns: 1.05fr 1fr;
   background: var(--bg);
+  /* 한글은 어절 단위로 줄바꿈 — 단어 중간에서 깨지는 것 방지 (공백에서만 개행) */
+  word-break: keep-all;
 }
 .login-hero {
   position: relative; overflow: hidden; color: #fff;

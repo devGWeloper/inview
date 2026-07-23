@@ -12,9 +12,30 @@ const MIN_LEFT = 360;
 const MIN_RIGHT = 480;
 const SPLITTER_W = 14;
 
+// 기간 프리셋 — datetime-local 두 개 대신 원클릭 범위. 'custom' 만 직접 입력을 편다.
+type DatePreset = "all" | "24h" | "7d" | "30d" | "custom";
+const DATE_PRESETS: { key: Exclude<DatePreset, "custom">; label: string; hours: number }[] = [
+  { key: "all", label: "전체", hours: 0 },
+  { key: "24h", label: "24시간", hours: 24 },
+  { key: "7d", label: "7일", hours: 24 * 7 },
+  { key: "30d", label: "30일", hours: 24 * 30 },
+];
+
 function fmtTs(ts: string | null): string {
   if (!ts) return "—";
   return ts.replace("T", " ").slice(0, 19);
+}
+
+/** Date → 로컬 ISO(TZ 없음, 초 포함) — DB TO_TIMESTAMP('YYYY-MM-DD"T"HH24:MI:SS') 포맷과 일치 */
+function toLocalIso(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+/** datetime-local 값("YYYY-MM-DDTHH:mm", 초 없음)에 초를 보정해 DB 포맷과 맞춘다 */
+function withSeconds(v: string | undefined): string | undefined {
+  if (!v) return undefined;
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v) ? `${v}:00` : v;
 }
 
 export default function Page() {
@@ -30,6 +51,8 @@ export default function Page() {
   const [facs, setFacs] = useState<string[]>([]);
   // ACTION_TYP 드롭다운 옵션 — DISTINCT ACTION_TYP(/api/action-types)에서 로드
   const [actionTypes, setActionTypes] = useState<string[]>([]);
+  // 기간 프리셋 선택 상태 (UI 전용)
+  const [datePreset, setDatePreset] = useState<DatePreset>("all");
 
   const layoutRef = useRef<HTMLDivElement>(null);
   const splitterRef = useRef<HTMLDivElement>(null);
@@ -83,8 +106,10 @@ export default function Page() {
       if (f.actionTyp) q.set("actionTyp", f.actionTyp);
       if (f.errCd) q.set("errCd", f.errCd);
       if (f.facId) q.set("facId", f.facId);
-      if (f.dateFrom) q.set("dateFrom", f.dateFrom);
-      if (f.dateTo) q.set("dateTo", f.dateTo);
+      const df = withSeconds(f.dateFrom);
+      const dt = withSeconds(f.dateTo);
+      if (df) q.set("dateFrom", df);
+      if (dt) q.set("dateTo", dt);
       if (f.onlyError) q.set("onlyError", "true");
       const res = await fetch(`/api/traces?${q.toString()}`, { cache: "no-store" });
       const data: TraceListResponse = await res.json();
@@ -143,18 +168,30 @@ export default function Page() {
     if (!selected && summaries.length > 0) setSelected(summaries[0].traceId);
   }, [summaries, selected]);
 
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const runList = (f: TraceFilter) => {
     setSelected(null);
     setDetailRows([]);
-    loadList(filter);
+    loadList(f);
+  };
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    runList(filter);
   };
 
   const onReset = () => {
     setFilter(DEFAULT_FILTER);
-    setSelected(null);
-    setDetailRows([]);
-    loadList(DEFAULT_FILTER);
+    setDatePreset("all");
+    runList(DEFAULT_FILTER);
+  };
+
+  // 프리셋 클릭 = 기간을 즉시 적용하고 재조회 (다른 필터는 현재 값 유지). 'custom' 은 입력만 편다.
+  const applyPreset = (p: Exclude<DatePreset, "custom">) => {
+    setDatePreset(p);
+    const from = p === "all" ? undefined : toLocalIso(new Date(Date.now() - DATE_PRESETS.find((x) => x.key === p)!.hours * 3600_000));
+    const next: TraceFilter = { ...filter, dateFrom: from, dateTo: undefined };
+    setFilter(next);
+    runList(next);
   };
 
   const errorCount = summaries.filter((s) => s.status === "error").length;
@@ -179,112 +216,120 @@ export default function Page() {
 
           <div className="filter">
             <form onSubmit={onSubmit}>
-              <div className="filter-search">
-                <svg className="filter-search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                  <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" strokeWidth="2" />
-                  <line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                </svg>
+              <div className="flt-controls">
                 <input
+                  className="flt-field"
                   type="text"
-                  className="filter-search-input"
-                  placeholder="USER_ID 로 검색 (부분 일치)"
-                  aria-label="USER_ID 로 검색"
+                  placeholder="TRACE_ID"
+                  aria-label="TRACE_ID"
+                  value={filter.traceId ?? ""}
+                  onChange={(e) => setFilter({ ...filter, traceId: e.target.value || undefined })}
+                />
+                <input
+                  className="flt-field"
+                  type="text"
+                  placeholder="USER_ID"
+                  aria-label="USER_ID (부분 일치)"
                   value={filter.userId ?? ""}
                   onChange={(e) => setFilter({ ...filter, userId: e.target.value || undefined })}
                 />
-                {filter.userId && (
-                  <button
-                    type="button"
-                    className="filter-search-clear"
-                    aria-label="USER_ID 검색 지우기"
-                    onClick={() => {
-                      const next = { ...filter, userId: undefined };
-                      setFilter(next);
-                      setSelected(null);
-                      setDetailRows([]);
-                      loadList(next);
-                    }}
-                  >
-                    ×
-                  </button>
-                )}
+                <select
+                  className="flt-field"
+                  aria-label="ACTION_TYP"
+                  data-empty={!filter.actionTyp}
+                  value={filter.actionTyp ?? ""}
+                  onChange={(e) => setFilter({ ...filter, actionTyp: e.target.value || undefined })}
+                >
+                  <option value="">ACTION_TYP · 전체</option>
+                  {actionTypes.map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+                <select
+                  className="flt-field"
+                  aria-label="FAIL CODE"
+                  data-empty={!filter.errCd}
+                  value={filter.errCd ?? ""}
+                  onChange={(e) => setFilter({ ...filter, errCd: e.target.value || undefined })}
+                >
+                  <option value="">FAIL CODE · 전체</option>
+                  {errCodes.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.desc ? `${c.code} — ${c.desc}` : c.code}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="flt-field"
+                  aria-label="FAB"
+                  data-empty={!filter.facId}
+                  value={filter.facId ?? ""}
+                  onChange={(e) => setFilter({ ...filter, facId: e.target.value || undefined })}
+                >
+                  <option value="">FAB</option>
+                  {facs.map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
               </div>
-              <div className="filter-grid">
-                <label>
-                  TRACE_ID
-                  <input
-                    type="text"
-                    value={filter.traceId ?? ""}
-                    onChange={(e) => setFilter({ ...filter, traceId: e.target.value || undefined })}
-                  />
-                </label>
-                <label>
-                  ACTION_TYP
-                  <select
-                    value={filter.actionTyp ?? ""}
-                    onChange={(e) => setFilter({ ...filter, actionTyp: e.target.value || undefined })}
-                  >
-                    <option value="">전체</option>
-                    {actionTypes.map((v) => (
-                      <option key={v} value={v}>{v}</option>
+
+              <div className="flt-bottom">
+                <div className="flt-dates">
+                  <span className="flt-tag">기간</span>
+                  <div className="seg" role="group" aria-label="기간 프리셋">
+                    {DATE_PRESETS.map((p) => (
+                      <button
+                        key={p.key}
+                        type="button"
+                        className={datePreset === p.key ? "on" : ""}
+                        onClick={() => applyPreset(p.key)}
+                      >
+                        {p.label}
+                      </button>
                     ))}
-                  </select>
-                </label>
-                <label>
-                  FAIL CODE
-                  <select
-                    value={filter.errCd ?? ""}
-                    onChange={(e) => setFilter({ ...filter, errCd: e.target.value || undefined })}
-                  >
-                    <option value="">전체</option>
-                    {errCodes.map((c) => (
-                      <option key={c.code} value={c.code}>
-                        {c.desc ? `${c.code} — ${c.desc}` : c.code}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  FAB
-                  <select
-                    value={filter.facId ?? ""}
-                    onChange={(e) => setFilter({ ...filter, facId: e.target.value || undefined })}
-                  >
-                    <option value="">전체</option>
-                    {facs.map((v) => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  FROM
-                  <input
-                    type="datetime-local"
-                    value={filter.dateFrom ?? ""}
-                    onChange={(e) => setFilter({ ...filter, dateFrom: e.target.value || undefined })}
-                  />
-                </label>
-                <label>
-                  TO
-                  <input
-                    type="datetime-local"
-                    value={filter.dateTo ?? ""}
-                    onChange={(e) => setFilter({ ...filter, dateTo: e.target.value || undefined })}
-                  />
-                </label>
+                    <button
+                      type="button"
+                      className={datePreset === "custom" ? "on" : ""}
+                      onClick={() => setDatePreset("custom")}
+                    >
+                      직접
+                    </button>
+                  </div>
+                </div>
+                <div className="flt-run">
+                  <label className="flt-check">
+                    <input
+                      type="checkbox"
+                      checked={!!filter.onlyError}
+                      onChange={(e) => setFilter({ ...filter, onlyError: e.target.checked || undefined })}
+                    />
+                    오류만
+                  </label>
+                  <button type="button" className="btn ghost xs" onClick={onReset}>초기화</button>
+                  <button type="submit" className="btn primary xs">조회</button>
+                </div>
               </div>
-              <div className="filter-actions">
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={!!filter.onlyError}
-                    onChange={(e) => setFilter({ ...filter, onlyError: e.target.checked || undefined })}
-                  />
-                  오류만 표시
-                </label>
-                <button type="button" className="btn" onClick={onReset}>초기화</button>
-                <button type="submit" className="btn primary">조회</button>
-              </div>
+
+              {datePreset === "custom" && (
+                <div className="flt-custom">
+                  <label>
+                    시작
+                    <input
+                      type="datetime-local"
+                      value={filter.dateFrom ?? ""}
+                      onChange={(e) => setFilter({ ...filter, dateFrom: e.target.value || undefined })}
+                    />
+                  </label>
+                  <label>
+                    종료
+                    <input
+                      type="datetime-local"
+                      value={filter.dateTo ?? ""}
+                      onChange={(e) => setFilter({ ...filter, dateTo: e.target.value || undefined })}
+                    />
+                  </label>
+                </div>
+              )}
             </form>
           </div>
 

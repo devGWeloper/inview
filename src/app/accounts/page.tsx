@@ -70,20 +70,32 @@ export default function AccountsPage() {
 
   return (
     <div className="acct-page">
-      <div className="acct-head">
-        <div>
-          <h1 className="acct-title">계정 관리</h1>
-          <p className="acct-sub">사번으로 로그인하는 사용자 계정과 권한을 관리합니다.</p>
+      <div className="acct-hero">
+        <div className="acct-hero-glow" aria-hidden />
+        <div className="acct-hero-main">
+          <div className="acct-hero-ic" aria-hidden>
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none">
+              <circle cx="9" cy="8.5" r="3.3" stroke="#fff" strokeWidth="1.8" />
+              <path d="M3.5 19c.6-3 2.9-4.7 5.5-4.7s4.9 1.7 5.5 4.7" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+              <circle cx="17.5" cy="9.5" r="2.4" stroke="#fff" strokeWidth="1.6" opacity=".85" />
+              <path d="M15 18c.4-2 1.6-3.2 3.2-3.4" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" opacity=".85" />
+            </svg>
+          </div>
+          <div className="acct-hero-titles">
+            <h1 className="acct-hero-title">계정 관리</h1>
+            <p className="acct-hero-sub">사번으로 로그인하는 사용자 계정과 권한을 관리합니다.</p>
+            <div className="acct-hero-pills">
+              <span className="acct-hero-pill total"><b>{counts.total}</b> 전체</span>
+              <span className="acct-hero-pill role-ADMIN"><b>{counts.admin}</b> 운영자</span>
+              <span className="acct-hero-pill role-BR"><b>{counts.br}</b> BR</span>
+              <span className="acct-hero-pill role-DEV"><b>{counts.dev}</b> 개발자</span>
+              {counts.off > 0 && <span className="acct-hero-pill off"><b>{counts.off}</b> 비활성</span>}
+            </div>
+          </div>
         </div>
-        <button type="button" className="btn primary" onClick={() => setEditor({ mode: "create" })}>+ 새 계정</button>
-      </div>
-
-      <div className="acct-stats">
-        <Stat label="전체" value={counts.total} />
-        <Stat label="운영자" value={counts.admin} tone="admin" />
-        <Stat label="BR" value={counts.br} tone="br" />
-        <Stat label="개발자" value={counts.dev} tone="dev" />
-        <Stat label="비활성" value={counts.off} tone="off" />
+        <button type="button" className="btn primary acct-hero-add" onClick={() => setEditor({ mode: "create" })}>
+          <span className="acct-hero-add-plus" aria-hidden>+</span> 새 계정
+        </button>
       </div>
 
       {!available && (
@@ -172,15 +184,6 @@ export default function AccountsPage() {
       {deleteFor && (
         <DeleteModal acc={deleteFor} onClose={() => setDeleteFor(null)} onDone={() => { setDeleteFor(null); void load(); }} />
       )}
-    </div>
-  );
-}
-
-function Stat({ label, value, tone }: { label: string; value: number; tone?: string }) {
-  return (
-    <div className={"acct-stat" + (tone ? " tone-" + tone : "")}>
-      <div className="acct-stat-value">{value}</div>
-      <div className="acct-stat-label">{label}</div>
     </div>
   );
 }

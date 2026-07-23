@@ -34,6 +34,54 @@ const SEED_ADMIN = {
   password: "admin1234",
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 로컬 디버깅용 더미 관리자 (⚠️ DB 없을 때만 · 운영 빌드에서는 절대 동작 안 함)
+//
+// 로컬에서 Oracle 이 없으면 로그인 자체가 불가해 UI 를 볼 수 없다. 그래서
+// "개발 모드(NODE_ENV!==production) + 계정 DB 미연결" 일 때만 admin/admin 으로
+// 통과시켜 화면을 디버깅할 수 있게 한다. 조건이 둘 다여서:
+//   - `npm run start`(운영) 이나 `npm run build` 산출물에서는 NODE_ENV=production → 비활성
+//   - DB 가 붙은 사내 환경에서는 dbUsable()=true → 비활성 (실제 계정만 유효)
+// 강제로 끄려면 DEV_AUTH_BYPASS=off.
+// ─────────────────────────────────────────────────────────────────────────────
+const DEV_ADMIN = {
+  userId: "admin",
+  password: "admin",
+  name: "로컬 관리자 (DEV)",
+  work: "로컬 디버깅용 더미 계정",
+  role: "ADMIN" as Role,
+};
+
+function devBypassAllowed(): boolean {
+  return process.env.NODE_ENV !== "production" && process.env.DEV_AUTH_BYPASS !== "off";
+}
+
+/** 계정 DB 를 실제로 쓸 수 있는가 (설정 + 드라이버 모두 존재). */
+async function dbUsable(): Promise<boolean> {
+  return getAppDbConfig() != null && (await getOracle()) != null;
+}
+
+function devAdminAccount(): UserAccount {
+  return {
+    userId: DEV_ADMIN.userId,
+    name: DEV_ADMIN.name,
+    work: DEV_ADMIN.work,
+    role: DEV_ADMIN.role,
+    useYn: "Y",
+    mustChangePw: false,
+    lastLoginDt: null,
+    regDt: null,
+    updDt: null,
+  };
+}
+
+/** 쓰기 작업 진입 시 로컬 더미 모드면 명확한 메시지로 막는다(무해). */
+async function guardDevWrite(): Promise<void> {
+  if (!(await dbUsable()) && devBypassAllowed()) {
+    throw new Error("로컬 디버깅 모드(DB 미연결)에서는 계정 저장/변경이 지원되지 않습니다.");
+  }
+}
+
 export interface UserAccount {
   userId: string;
   name: string;
@@ -124,6 +172,10 @@ async function ensureSeedAdmin(conn: Conn, oracle: NonNullable<Awaited<ReturnTyp
 
 /** 계정 목록 조회 (관리자 화면). DB 불가 시 available=false + reason. */
 export async function listUsers(): Promise<UserListResult> {
+  // 로컬 디버깅 모드: DB 없이도 더미 관리자 1건을 보여줘 화면을 확인할 수 있게 한다.
+  if (!(await dbUsable()) && devBypassAllowed()) {
+    return { available: true, users: [devAdminAccount()] };
+  }
   try {
     return await withConn(async (conn, oracle) => {
       await ensureSeedAdmin(conn, oracle);
@@ -177,6 +229,7 @@ export async function createUser(input: CreateUserInput): Promise<UserAccount> {
   if (!userId) throw new Error("사번(USER_ID)은 필수입니다.");
   if (!name) throw new Error("이름은 필수입니다.");
   if (!isRole(input.role)) throw new Error("권한 값이 올바르지 않습니다.");
+  await guardDevWrite();
   const { hash, salt } = hashPassword(input.password);
   return withConn(async (conn, oracle) => {
     try {
@@ -221,6 +274,7 @@ export interface UpdateUserInput {
 export async function updateUser(userId: string, input: UpdateUserInput): Promise<UserAccount> {
   const id = (userId ?? "").trim();
   if (!id) throw new Error("사번(USER_ID)이 비어 있습니다.");
+  await guardDevWrite();
   const sets: string[] = [];
   const binds: Record<string, unknown> = { id };
   if (input.name !== undefined) {
@@ -268,6 +322,7 @@ export async function updateUser(userId: string, input: UpdateUserInput): Promis
 export async function resetPassword(userId: string, newPassword: string): Promise<void> {
   const id = (userId ?? "").trim();
   if (!id) throw new Error("사번(USER_ID)이 비어 있습니다.");
+  await guardDevWrite();
   const { hash, salt } = hashPassword(newPassword);
   await withConn(async (conn) => {
     const res = await conn.execute(
@@ -285,6 +340,7 @@ export async function resetPassword(userId: string, newPassword: string): Promis
 export async function changeOwnPassword(userId: string, currentPw: string, newPw: string): Promise<void> {
   const id = (userId ?? "").trim();
   if (!id) throw new Error("사번(USER_ID)이 비어 있습니다.");
+  await guardDevWrite();
   await withConn(async (conn, oracle) => {
     const res = await conn.execute(
       `SELECT PWD_HASH, PWD_SALT FROM TRX_USER_MAS WHERE USER_ID = :id AND USE_YN = 'Y'`,
@@ -310,6 +366,7 @@ export async function changeOwnPassword(userId: string, currentPw: string, newPw
 export async function deleteUser(userId: string): Promise<void> {
   const id = (userId ?? "").trim();
   if (!id) throw new Error("사번(USER_ID)이 비어 있습니다.");
+  await guardDevWrite();
   await withConn(async (conn) => {
     const res = await conn.execute(`DELETE FROM TRX_USER_MAS WHERE USER_ID = :id`, { id }, { autoCommit: true });
     if (!res.rowsAffected) throw new Error("존재하지 않는 계정입니다.");
@@ -327,6 +384,16 @@ export type LoginResult =
 export async function verifyLogin(userId: string, password: string): Promise<LoginResult> {
   const id = (userId ?? "").trim();
   if (!id || !password) return { ok: false, reason: "사번과 비밀번호를 입력하세요." };
+
+  // 로컬 디버깅: DB 미연결 + 개발 모드면 더미 관리자(admin/admin)로 통과.
+  if (!(await dbUsable()) && devBypassAllowed()) {
+    if (id === DEV_ADMIN.userId && password === DEV_ADMIN.password) {
+      logger.warn("DEV auth bypass login (no DB) — admin/admin", { userId: id });
+      return { ok: true, user: devAdminAccount() };
+    }
+    return { ok: false, reason: "로컬(DB 미연결) 모드입니다. admin / admin 으로 로그인하세요." };
+  }
+
   try {
     return await withConn(async (conn, oracle) => {
       await ensureSeedAdmin(conn, oracle);

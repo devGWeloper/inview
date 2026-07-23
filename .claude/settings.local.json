@@ -53,7 +53,9 @@
       "Read(//tmp/**)",
       "Bash(break)",
       "Bash(node scripts/gen-user-insert.mjs I0103083 김기웅 \"eWorks1234!\" ADMIN \"시스템 관리자\")",
-      "Bash(node -e ' *2)"
+      "Bash(node -e ' *2)",
+      "Bash(git rm *)",
+      "PowerShell($c = Get-NetTCPConnection -LocalPort 5174 -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { $c.OwningProcess | Select-Object -Unique | ForEach-Object { try { Stop-Process -Id $_ -Force -ErrorAction Stop; \"killed PID $_\" } catch {} } } else { \"no listener on 5174\" }2)"
     ]
   }
 }

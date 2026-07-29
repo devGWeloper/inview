@@ -55,7 +55,13 @@
       "Bash(node scripts/gen-user-insert.mjs I0103083 김기웅 \"eWorks1234!\" ADMIN \"시스템 관리자\")",
       "Bash(node -e ' *2)",
       "Bash(git rm *)",
-      "PowerShell($c = Get-NetTCPConnection -LocalPort 5174 -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { $c.OwningProcess | Select-Object -Unique | ForEach-Object { try { Stop-Process -Id $_ -Force -ErrorAction Stop; \"killed PID $_\" } catch {} } } else { \"no listener on 5174\" }2)"
+      "PowerShell($c = Get-NetTCPConnection -LocalPort 5174 -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { $c.OwningProcess | Select-Object -Unique | ForEach-Object { try { Stop-Process -Id $_ -Force -ErrorAction Stop; \"killed PID $_\" } catch {} } } else { \"no listener on 5174\" }2)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(npx tsc --noEmit -p tsconfig.json)",
+      "Bash(node check.js)",
+      "PowerShell(git checkout *)",
+      "Bash(node -e \"const{scryptSync,randomBytes}=require\\('crypto'\\);const pw=process.argv[1];const salt=randomBytes\\(16\\).toString\\('hex'\\);const hash=scryptSync\\(pw,salt,64\\).toString\\('hex'\\);console.log\\('PW   :',pw\\);console.log\\('SALT :',salt\\);console.log\\('HASH :',hash\\);\" admin1234)",
+      "Bash(node -e \"const{scryptSync,timingSafeEqual}=require\\('crypto'\\);const salt='b5542b3d790dde900ed3b0025e1791c8';const hash='217ec34dd022a2a46cdeefea613bad4639a2c14c0a4adee9d959f7c0c0b6197c4436fef83e4f1d093a8a67a337c7608cde698fa5298ffb3bf8e25006e993da2f';console.log\\('match:',timingSafeEqual\\(Buffer.from\\(hash,'hex'\\),scryptSync\\('admin1234',salt,64\\)\\)\\);\")"
     ]
   }
 }

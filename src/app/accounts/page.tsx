@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { ROLES, ROLE_LABEL, ROLE_DESC, Role } from "@/lib/roles";
+import { apiFetch, asArray, errMessage, SESSION_EXPIRED_MSG } from "@/lib/apiClient";
 
 interface Account {
   userId: string;
@@ -35,14 +36,19 @@ export default function AccountsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/accounts", { cache: "no-store" });
-      const data = await res.json();
-      if (!res.ok) { setAvailable(false); setReason(data.error ?? "불러오기 실패"); setUsers([]); return; }
+      const res = await apiFetch("/api/accounts", { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAvailable(false);
+        setReason(res.status === 401 ? SESSION_EXPIRED_MSG : (data.error ?? "불러오기 실패"));
+        setUsers([]);
+        return;
+      }
       setAvailable(data.available);
       setReason(data.reason ?? null);
-      setUsers(data.users ?? []);
+      setUsers(asArray<Account>(data.users));
     } catch (e) {
-      setAvailable(false); setReason(String(e)); setUsers([]);
+      setAvailable(false); setReason(errMessage(e)); setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -214,13 +220,13 @@ function AccountEditor({
       let res: Response;
       if (mode === "create") {
         // 초기 비밀번호는 서버에서 사번으로 설정한다(별도 입력 없음).
-        res = await fetch("/api/accounts", {
+        res = await apiFetch("/api/accounts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId, name, work, role, useYn }),
         });
       } else {
-        res = await fetch(`/api/accounts/${encodeURIComponent(acc!.userId)}`, {
+        res = await apiFetch(`/api/accounts/${encodeURIComponent(acc!.userId)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, work, role, useYn }),
@@ -316,7 +322,7 @@ function ResetPasswordModal({ acc, onClose, onDone }: { acc: Account; onClose: (
     setErr(null);
     setSaving(true);
     try {
-      const res = await fetch(`/api/accounts/${encodeURIComponent(acc.userId)}/reset-password`, {
+      const res = await apiFetch(`/api/accounts/${encodeURIComponent(acc.userId)}/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(pw.trim() ? { newPassword: pw.trim() } : {}),
@@ -383,7 +389,7 @@ function DeleteModal({ acc, onClose, onDone }: { acc: Account; onClose: () => vo
     setErr(null);
     setSaving(true);
     try {
-      const res = await fetch(`/api/accounts/${encodeURIComponent(acc.userId)}`, { method: "DELETE" });
+      const res = await apiFetch(`/api/accounts/${encodeURIComponent(acc.userId)}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setErr(data.error ?? "삭제 실패"); setSaving(false); return; }
       onDone();

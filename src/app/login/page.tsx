@@ -181,7 +181,7 @@ function LoginInner() {
           </form>
 
           <div className="login-help">
-            계정이 없거나 비밀번호를 잊으셨나요? <b>운영자에게 문의</b>하세요.
+            계정·비밀번호는 <b>운영자</b>에게 문의하세요.
           </div>
         </div>
       </main>

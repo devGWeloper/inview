@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { EventFabMapping, FAB_IDS } from "@/lib/types";
+import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 
 // 이벤트(액션) × FAB 허용 매트릭스 편집기. 저장하면 MCP DB 의 TRX_EVENT_MAP 에
 // 전량 교체로 반영되고, MCP 로직이 요청 FAB 허용 여부 판정에 사용한다.
@@ -37,22 +38,22 @@ function EventFabEditor() {
     let alive = true;
     (async () => {
       try {
-        const [mapRes, actRes] = await Promise.all([
-          fetch("/api/event-fabs", { cache: "no-store" }),
-          fetch("/api/action-types", { cache: "no-store" }).catch(() => null),
+        const [data, acts] = await Promise.all([
+          apiJson<EventFabApi>("/api/event-fabs", { cache: "no-store" }),
+          apiJson<{ values: string[] }>("/api/action-types", { cache: "no-store" }).catch(() => null),
         ]);
-        const data: EventFabApi = await mapRes.json();
         if (!alive) return;
-        setRows(data.mappings);
-        setBaseline(JSON.stringify(data.mappings));
+        const mappings = asArray<EventFabMapping>(data.mappings);
+        setRows(mappings);
+        setBaseline(JSON.stringify(mappings));
         setAvailable(data.available);
         setReason(data.reason);
-        if (actRes?.ok) {
-          const acts: { values: string[] } = await actRes.json();
-          if (alive) setActionTypes(acts.values ?? []);
-        }
+        if (acts) setActionTypes(asArray<string>(acts.values));
       } catch (e) {
-        if (alive) setMsg({ kind: "err", text: "불러오기 실패: " + String(e) });
+        if (alive) {
+          setAvailable(false); // 못 읽었으면 저장도 막는다
+          setMsg({ kind: "err", text: "불러오기 실패: " + errMessage(e) });
+        }
       } finally {
         if (alive) setLoading(false);
       }
@@ -129,19 +130,17 @@ function EventFabEditor() {
     setSaving(true);
     setMsg(null);
     try {
-      const res = await fetch("/api/event-fabs", {
+      const data = await apiJson<EventFabApi>("/api/event-fabs", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mappings: rows }),
       });
-      const data = await res.json();
-      if (res.status === 401 || res.status === 403) throw new Error("저장 권한이 없습니다. BR 이상 계정으로 로그인하세요.");
-      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
-      setRows(data.mappings);
-      setBaseline(JSON.stringify(data.mappings));
+      const saved = asArray<EventFabMapping>(data.mappings);
+      setRows(saved);
+      setBaseline(JSON.stringify(saved));
       setMsg({ kind: "ok", text: "저장되었습니다." });
     } catch (e) {
-      setMsg({ kind: "err", text: "저장 실패: " + (e instanceof Error ? e.message : String(e)) });
+      setMsg({ kind: "err", text: "저장 실패: " + errMessage(e) });
     } finally {
       setSaving(false);
     }

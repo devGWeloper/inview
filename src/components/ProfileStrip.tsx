@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AgentProfile, FteStats } from "@/lib/types";
+import { apiJson } from "@/lib/apiClient";
 
 function fteDisplay(fte: number | null): string {
   return fte === null ? "—" : fte.toFixed(2);
@@ -20,10 +21,10 @@ export function ProfileStrip() {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch("/api/profile", { cache: "no-store" });
-        if (!res.ok) return;
-        const data: { profile: AgentProfile; fteStats: FteStats | null } = await res.json();
-        if (alive) {
+        const data = await apiJson<{ profile: AgentProfile; fteStats: FteStats | null }>(
+          "/api/profile", { cache: "no-store" }
+        );
+        if (alive && data.profile) {
           setProfile(data.profile);
           setFteStats(data.fteStats ?? null);
         }

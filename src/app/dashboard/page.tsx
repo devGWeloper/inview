@@ -11,6 +11,7 @@ import { StatusDonut } from "@/components/StatusDonut";
 import { TimeSeriesChart } from "@/components/TimeSeriesChart";
 import { TopList } from "@/components/TopList";
 import { StatsFilter, StatsResponse } from "@/lib/types";
+import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 
 type Preset = "1h" | "6h" | "24h" | "7d" | "30d" | "custom";
 
@@ -51,10 +52,8 @@ export default function DashboardPage() {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch("/api/action-types", { cache: "no-store" });
-        if (!res.ok) return;
-        const data: { values: string[] } = await res.json();
-        if (alive) setActionTypeOptions(data.values ?? []);
+        const data = await apiJson<{ values: string[] }>("/api/action-types", { cache: "no-store" });
+        if (alive) setActionTypeOptions(asArray<string>(data.values));
       } catch {
         /* ignore — falls back to empty options, user can still type via 직접입력 if added */
       }
@@ -66,9 +65,7 @@ export default function DashboardPage() {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch("/api/error-codes", { cache: "no-store" });
-        if (!res.ok) return;
-        const data: { codes: Record<string, string> } = await res.json();
+        const data = await apiJson<{ codes: Record<string, string> }>("/api/error-codes", { cache: "no-store" });
         if (alive) setErrorCodeMap(data.codes ?? {});
       } catch {
         /* ignore — 매핑 없으면 툴팁은 코드만 노출 */
@@ -111,12 +108,10 @@ export default function DashboardPage() {
       if (f.excludeErrCds && f.excludeErrCds.length > 0) {
         q.set("excludeErrCds", f.excludeErrCds.join(","));
       }
-      const res = await fetch(`/api/stats?${q.toString()}`, { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: StatsResponse = await res.json();
+      const data = await apiJson<StatsResponse>(`/api/stats?${q.toString()}`, { cache: "no-store" });
       setStats(data);
     } catch (e) {
-      setErr(String(e));
+      setErr(errMessage(e, "통계를 불러오지 못했습니다."));
       setStats(null);
     } finally {
       setLoading(false);

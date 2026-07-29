@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AgentProfile } from "@/lib/types";
+import { apiJson } from "@/lib/apiClient";
 
 /** 분석 성격의 탭 묶음 (세그먼트 컨트롤). Agent 는 성격이 달라 별도 칩으로 분리. */
 const ANALYSIS_TABS = [
@@ -51,11 +52,8 @@ export function AgentNavChip() {
   const [profile, setProfile] = useState<AgentProfile | null>(null);
   useEffect(() => {
     let alive = true;
-    fetch("/api/profile", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: { profile: AgentProfile } | null) => {
-        if (alive && d?.profile) setProfile(d.profile);
-      })
+    apiJson<{ profile: AgentProfile }>("/api/profile", { cache: "no-store" })
+      .then((d) => { if (alive && d?.profile) setProfile(d.profile); })
       .catch(() => {});
     return () => { alive = false; };
   }, []);

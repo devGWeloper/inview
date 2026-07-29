@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AgentProfile, WorkTask } from "@/lib/types";
+import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 
 const EMPTY_TASK: WorkTask = { icon: "•", title: "", desc: "" };
 
@@ -22,26 +23,33 @@ function AdminEditor() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
+  // 응답 프로필을 편집 폼 상태로 펼친다. 응답이 비정상(세션 만료 등)이면
+  // 던져서 아래 catch 가 사유를 보여주게 한다 — 폼을 반쯤 채우지 않는다.
+  const applyProfile = useCallback((p: AgentProfile | undefined) => {
+    if (!p) throw new Error("프로필 응답이 비어 있습니다.");
+    setProfile(p);
+    setSkillsText(asArray<string>(p.skills).join(", "));
+    setFteActs(asArray<{ action: string; minutes: number }>(p.fteActionMinutes)
+      .map((a) => ({ action: a.action, minutes: String(a.minutes) })));
+    setFteDefText(String(p.fteDefaultMinutes));
+    setFteAnnText(String(p.fteAnnualMinutes));
+  }, []);
+
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch("/api/profile", { cache: "no-store" });
-        const data: { profile: AgentProfile } = await res.json();
+        const data = await apiJson<{ profile: AgentProfile }>("/api/profile", { cache: "no-store" });
         if (!alive) return;
-        setProfile(data.profile);
-        setSkillsText(data.profile.skills.join(", "));
-        setFteActs(data.profile.fteActionMinutes.map((a) => ({ action: a.action, minutes: String(a.minutes) })));
-        setFteDefText(String(data.profile.fteDefaultMinutes));
-        setFteAnnText(String(data.profile.fteAnnualMinutes));
+        applyProfile(data.profile);
       } catch (e) {
-        if (alive) setMsg({ kind: "err", text: "불러오기 실패: " + String(e) });
+        if (alive) setMsg({ kind: "err", text: "불러오기 실패: " + errMessage(e) });
       } finally {
         if (alive) setLoading(false);
       }
     })();
     return () => { alive = false; };
-  }, []);
+  }, [applyProfile]);
 
   function set<K extends keyof AgentProfile>(key: K, value: AgentProfile[K]) {
     setProfile((p) => (p ? { ...p, [key]: value } : p));
@@ -120,22 +128,15 @@ function AdminEditor() {
       return;
     }
     try {
-      const res = await fetch("/api/profile", {
+      const data = await apiJson<{ profile: AgentProfile }>("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...profile, skills, fteActionMinutes, fteDefaultMinutes, fteAnnualMinutes }),
       });
-      if (res.status === 401 || res.status === 403) throw new Error("저장 권한이 없습니다. 운영자 계정으로 로그인하세요.");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: { profile: AgentProfile } = await res.json();
-      setProfile(data.profile);
-      setSkillsText(data.profile.skills.join(", "));
-      setFteActs(data.profile.fteActionMinutes.map((a) => ({ action: a.action, minutes: String(a.minutes) })));
-      setFteDefText(String(data.profile.fteDefaultMinutes));
-      setFteAnnText(String(data.profile.fteAnnualMinutes));
+      applyProfile(data.profile);
       setMsg({ kind: "ok", text: "저장되었습니다." });
     } catch (e) {
-      setMsg({ kind: "err", text: "저장 실패: " + String(e) });
+      setMsg({ kind: "err", text: "저장 실패: " + errMessage(e) });
     } finally {
       setSaving(false);
     }

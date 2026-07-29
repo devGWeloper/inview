@@ -143,6 +143,21 @@ The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTI
 - **화면**: `/login`(브랜드 히어로+폼 스플릿), `/accounts`(계정 목록·생성/수정/비번초기화/삭제, 권한 3택 카드), `/403`. `/agent` 헤더의 리포트/관리자 버튼은 서버에서 세션 권한으로 조건부 노출.
 - **기존 PUT 게이트 교체**: `/api/profile`=ADMIN, `/api/event-fabs`=BR, `/api/request-failures`=BR (모두 `requireRole`). `/admin`·`/report`·`/event-fabs`·`/improvement` 페이지의 `AdminGate` 래퍼 제거(미들웨어가 인가). **삭제된 파일**: `src/components/AdminGate.tsx`, `src/lib/adminAuth.ts` (⚠️ 사내 복붙 배포는 삭제가 전파 안 되니 그쪽 레포에서도 지울 것 — memory `deploy-copy-paste-sync`).
 
+### ⚠️ 클라이언트 API 호출 규칙 — 원시 `fetch` 금지 (`src/lib/apiClient.ts`)
+
+세션은 12시간이라 **화면을 열어둔 채 하루를 넘기면 만료**된다. 페이지 '이동' 은 미들웨어가
+`/login` 으로 리다이렉트해 주지만, **이미 떠 있는 탭의 fetch 는 리다이렉트가 아니라 401 JSON
+(`{error}`)** 을 받는다. 화면이 `res.ok` 를 안 보고 `await res.json()` 결과를 그대로 상태에
+넣으면 기대한 배열이 `undefined` 가 되어 렌더에서 죽는다 (실제 사례: Traces 화면의
+`summaries.filter` → `TypeError: Cannot read properties of undefined`).
+
+- 클라이언트에서 `/api/*` 를 부를 땐 **`apiJson<T>()`**(또는 상태코드 분기가 필요하면 `apiFetch()`)만 쓴다.
+- `apiJson` 은 401/403/그 외 실패를 **`ApiError`(`status` 보유)로 던진다** — 실패가 데이터로 둔갑하지 않는다.
+- 401 이면 전역 '세션 만료' 신호가 **1회** 발화 → `AuthProvider` 가 `SessionExpiredDialog` 를 띄우고
+  `/login?next=<현재경로>` 로 보낸다. `/api/auth/login` 의 401 은 '비밀번호 오류' 라 제외된다.
+- 응답의 배열은 **`asArray<T>()`** 로 감싸 렌더가 `undefined.map/filter` 를 만지지 않게 한다.
+- 에러 문구는 `errMessage(e)` 로 뽑아 화면에 사유를 보여준다(빈 표 ≠ 조회 실패). 패널 내부 배너 스타일은 `.load-error`.
+
 ## 두 가지 지연 지표 (둘 다 정규 — 재는 대상이 다름)
 
 지연은 **성격이 다른 두 지표**로 나뉜다. 하나로 합치지 말 것.

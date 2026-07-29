@@ -8,6 +8,7 @@ import { TokenStatsCards } from "@/components/TokenStatsCards";
 import { QuestionsTable } from "@/components/QuestionsTable";
 import { TopList } from "@/components/TopList";
 import { TokenFilter, TokenRow, TokenStatsResponse } from "@/lib/types";
+import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 
 type Preset = "1h" | "6h" | "24h" | "7d" | "30d" | "custom";
 
@@ -73,15 +74,13 @@ export default function TokensPage() {
       if (f.userId) q.set("userId", f.userId);
       if (f.nodeNm) q.set("nodeNm", f.nodeNm);
       if (f.modelNm) q.set("modelNm", f.modelNm);
-      const res = await fetch(`/api/tokens?${q.toString()}`, { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: TokenStatsResponse = await res.json();
+      const data = await apiJson<TokenStatsResponse>(`/api/tokens?${q.toString()}`, { cache: "no-store" });
       setStats(data);
       // 옵션 누적: 현재 응답의 차원 키를 합집합으로 유지 ('(none)' 제외)
-      setNodeOptions((prev) => unionKeys(prev, data.byNode.map((d) => d.key)));
-      setModelOptions((prev) => unionKeys(prev, data.byModel.map((d) => d.key)));
+      setNodeOptions((prev) => unionKeys(prev, asArray<{ key: string }>(data.byNode).map((d) => d.key)));
+      setModelOptions((prev) => unionKeys(prev, asArray<{ key: string }>(data.byModel).map((d) => d.key)));
     } catch (e) {
-      setErr(String(e));
+      setErr(errMessage(e, "토큰 통계를 불러오지 못했습니다."));
       setStats(null);
     } finally {
       setLoading(false);
@@ -100,10 +99,8 @@ export default function TokensPage() {
     if (f.nodeNm) query.set("nodeNm", f.nodeNm);
     if (f.modelNm) query.set("modelNm", f.modelNm);
     query.set("traceId", traceId);
-    const res = await fetch(`/api/tokens?${query.toString()}`, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data: TokenStatsResponse = await res.json();
-    return data.calls;
+    const data = await apiJson<TokenStatsResponse>(`/api/tokens?${query.toString()}`, { cache: "no-store" });
+    return asArray<TokenRow>(data.calls);
   }, [computeFilter]);
 
   const onApply = (e: React.FormEvent) => {

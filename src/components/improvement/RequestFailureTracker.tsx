@@ -11,6 +11,7 @@ import {
   TraceDetailResponse,
   TraceRow,
 } from "@/lib/types";
+import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 
 // Improvement Center 의 첫 모듈. 에이전트가 라우팅/LLM 단계에서 처리하지 못하고 튕긴
 // "실패 요청"(ACTION_TYP IS NULL AND RECV_MSG_CTN IS NOT NULL)을 좌측 리스트로 훑고,
@@ -65,6 +66,8 @@ export function RequestFailureTracker() {
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [errMap, setErrMap] = useState<Record<string, string>>({});
+  // 목록 로드 실패 사유 (세션 만료·권한 등) — 빈 목록과 구분해 보여준다
+  const [loadErr, setLoadErr] = useState<string | null>(null);
 
   const load = useCallback(async (rk: RangeKey) => {
     setLoading(true);
@@ -72,11 +75,14 @@ export function RequestFailureTracker() {
       const params = new URLSearchParams({ limit: "400" });
       const hours = RANGES.find((r) => r.key === rk)?.hours ?? 0;
       if (hours > 0) params.set("dateFrom", toLocalIso(new Date(Date.now() - hours * 3600_000)));
-      const res = await fetch(`/api/request-failures?${params.toString()}`, { cache: "no-store" });
-      const d: RequestFailureListResponse = await res.json();
-      setData(d);
-    } catch {
+      const d = await apiJson<RequestFailureListResponse>(
+        `/api/request-failures?${params.toString()}`, { cache: "no-store" }
+      );
+      setData({ ...d, items: asArray<RequestFailure>(d.items) });
+      setLoadErr(null);
+    } catch (e) {
       setData(null);
+      setLoadErr(errMessage(e, "실패 요청을 불러오지 못했습니다."));
     } finally {
       setLoading(false);
     }
@@ -85,9 +91,8 @@ export function RequestFailureTracker() {
   useEffect(() => { load(range); }, [range, load]);
 
   useEffect(() => {
-    fetch("/api/error-codes", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d: { codes?: Record<string, string> }) => setErrMap(d.codes ?? {}))
+    apiJson<{ codes?: Record<string, string> }>("/api/error-codes", { cache: "no-store" })
+      .then((d) => setErrMap(d.codes ?? {}))
       .catch(() => setErrMap({}));
   }, []);
 
@@ -198,7 +203,10 @@ export function RequestFailureTracker() {
 
           <div className="rft-list">
             {loading && <div className="rft-empty">불러오는 중…</div>}
-            {!loading && visible.length === 0 && (
+            {!loading && loadErr && (
+              <div className="load-error" style={{ margin: 10 }}><span aria-hidden>⚠</span>{loadErr}</div>
+            )}
+            {!loading && !loadErr && visible.length === 0 && (
               <div className="rft-empty">
                 {items.length === 0 ? "이 기간에 실패 요청이 없습니다. 🎉" : "조건에 맞는 실패 요청이 없습니다."}
               </div>
@@ -315,20 +323,19 @@ function FailureDetail({
     setSaving(true);
     setMsg(null);
     try {
-      const res = await fetch("/api/request-failures", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ traceId: item.traceId, status, note, handler }),
-      });
-      const d = await res.json();
-      if (res.status === 401 || res.status === 403) throw new Error("저장 권한이 없습니다. BR 이상 계정으로 로그인하세요.");
-      if (!res.ok) throw new Error(d?.error ?? `HTTP ${res.status}`);
+      const d = await apiJson<{ status: FailureStatus; note: string | null; handler: string | null; triagedAt: string | null }>(
+        "/api/request-failures", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ traceId: item.traceId, status, note, handler }),
+        }
+      );
       onSaved({ status: d.status, note: d.note, handler: d.handler, triagedAt: d.triagedAt });
       setNote(d.note ?? "");
       setHandler(d.handler ?? "");
       setMsg({ kind: "ok", text: "조치 정보를 저장했습니다." });
     } catch (e) {
-      setMsg({ kind: "err", text: "저장 실패: " + (e instanceof Error ? e.message : String(e)) });
+      setMsg({ kind: "err", text: "저장 실패: " + errMessage(e) });
     } finally {
       setSaving(false);
     }
@@ -459,9 +466,10 @@ function UserFlow({ traceId, errMap }: { traceId: string; errMap: Record<string,
     let alive = true;
     setLoading(true);
     setExpanded(null);
-    fetch(`/api/request-failures/${encodeURIComponent(traceId)}/context`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d: RequestFailureContextResponse) => { if (alive) setCtx(d); })
+    apiJson<RequestFailureContextResponse>(
+      `/api/request-failures/${encodeURIComponent(traceId)}/context`, { cache: "no-store" }
+    )
+      .then((d) => { if (alive) setCtx(d); })
       .catch(() => { if (alive) setCtx(null); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -472,9 +480,8 @@ function UserFlow({ traceId, errMap }: { traceId: string; errMap: Record<string,
     setExpanded(id);
     setRowsLoading(true);
     setRows([]);
-    fetch(`/api/traces/${encodeURIComponent(id)}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d: TraceDetailResponse) => setRows(d.rows ?? []))
+    apiJson<TraceDetailResponse>(`/api/traces/${encodeURIComponent(id)}`, { cache: "no-store" })
+      .then((d) => setRows(asArray<TraceRow>(d.rows)))
       .catch(() => setRows([]))
       .finally(() => setRowsLoading(false));
   }, [expanded]);

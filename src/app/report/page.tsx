@@ -23,6 +23,7 @@ import { TokenLatencyChart, fmtDuration } from "@/components/TokenLatencyChart";
 import { TokenStatsCards } from "@/components/TokenStatsCards";
 import { TopList } from "@/components/TopList";
 import { AgentProfile, DailyActionStat, StatsResponse, TokenStatsResponse } from "@/lib/types";
+import { apiJson, errMessage } from "@/lib/apiClient";
 
 type PeriodUnit = "day" | "week";
 type RangeMode = PeriodUnit | "custom";
@@ -454,17 +455,13 @@ function ReportContent() {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch("/api/profile", { cache: "no-store" });
-        if (!res.ok) return;
-        const data: { profile: AgentProfile } = await res.json();
-        if (alive) setProfile(data.profile);
+        const data = await apiJson<{ profile: AgentProfile }>("/api/profile", { cache: "no-store" });
+        if (alive) setProfile(data.profile ?? null);
       } catch { /* ignore */ }
     })();
     (async () => {
       try {
-        const res = await fetch("/api/error-codes", { cache: "no-store" });
-        if (!res.ok) return;
-        const data: { codes: Record<string, string> } = await res.json();
+        const data = await apiJson<{ codes: Record<string, string> }>("/api/error-codes", { cache: "no-store" });
         if (alive) setErrorCodeMap(data.codes ?? {});
       } catch { /* ignore */ }
     })();
@@ -476,17 +473,14 @@ function ReportContent() {
     setErr(null);
     try {
       const q = new URLSearchParams({ dateFrom: from, dateTo: to });
-      const [sRes, tRes] = await Promise.all([
-        fetch(`/api/stats?${q.toString()}`, { cache: "no-store" }),
-        fetch(`/api/tokens?${q.toString()}`, { cache: "no-store" }),
+      const [sData, tData] = await Promise.all([
+        apiJson<StatsResponse>(`/api/stats?${q.toString()}`, { cache: "no-store" }),
+        apiJson<TokenStatsResponse>(`/api/tokens?${q.toString()}`, { cache: "no-store" }),
       ]);
-      if (!sRes.ok) throw new Error(`stats HTTP ${sRes.status}`);
-      if (!tRes.ok) throw new Error(`tokens HTTP ${tRes.status}`);
-      const [sData, tData] = await Promise.all([sRes.json(), tRes.json()]);
-      setStats(sData as StatsResponse);
-      setTok(tData as TokenStatsResponse);
+      setStats(sData);
+      setTok(tData);
     } catch (e) {
-      setErr(String(e));
+      setErr(errMessage(e, "리포트 데이터를 불러오지 못했습니다."));
       setStats(null);
       setTok(null);
     } finally {

@@ -6,6 +6,7 @@ import {
   LAYER_COLOR, LAYER_ORDER,
   TraceFilter, TraceListResponse, TraceDetailResponse, TraceSummary, TraceRow
 } from "@/lib/types";
+import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 
 const DEFAULT_FILTER: TraceFilter = {};
 const MIN_LEFT = 360;
@@ -45,6 +46,9 @@ export default function Page() {
   const [detailRows, setDetailRows] = useState<TraceRow[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  // 조회 실패 사유 (세션 만료·권한·DB 오류 등) — 빈 표 대신 이유를 보여준다
+  const [listErr, setListErr] = useState<string | null>(null);
+  const [detailErr, setDetailErr] = useState<string | null>(null);
   // FAIL CODE 드롭다운 옵션 — TRX_ERRMSG_COD 마스터(/api/error-codes)에서 로드
   const [errCodes, setErrCodes] = useState<Array<{ code: string; desc: string }>>([]);
   // FAB 드롭다운 옵션 — MCP DB 의 DISTINCT FAC_ID(/api/facs)에서 로드
@@ -99,6 +103,7 @@ export default function Page() {
 
   const loadList = useCallback(async (f: TraceFilter) => {
     setListLoading(true);
+    setListErr(null);
     try {
       const q = new URLSearchParams();
       if (f.traceId) q.set("traceId", f.traceId);
@@ -111,9 +116,12 @@ export default function Page() {
       if (df) q.set("dateFrom", df);
       if (dt) q.set("dateTo", dt);
       if (f.onlyError) q.set("onlyError", "true");
-      const res = await fetch(`/api/traces?${q.toString()}`, { cache: "no-store" });
-      const data: TraceListResponse = await res.json();
-      setSummaries(data.summaries);
+      // apiJson: 401(세션 만료)/에러 응답을 데이터로 오인하지 않고 ApiError 로 던진다.
+      const data = await apiJson<TraceListResponse>(`/api/traces?${q.toString()}`, { cache: "no-store" });
+      setSummaries(asArray<TraceSummary>(data.summaries));
+    } catch (e) {
+      setListErr(errMessage(e, "목록을 불러오지 못했습니다."));
+      setSummaries([]);
     } finally {
       setListLoading(false);
     }
@@ -121,10 +129,15 @@ export default function Page() {
 
   const loadDetail = useCallback(async (traceId: string) => {
     setDetailLoading(true);
+    setDetailErr(null);
     try {
-      const res = await fetch(`/api/traces/${encodeURIComponent(traceId)}`, { cache: "no-store" });
-      const data: TraceDetailResponse = await res.json();
-      setDetailRows(data.rows);
+      const data = await apiJson<TraceDetailResponse>(
+        `/api/traces/${encodeURIComponent(traceId)}`, { cache: "no-store" }
+      );
+      setDetailRows(asArray<TraceRow>(data.rows));
+    } catch (e) {
+      setDetailErr(errMessage(e, "상세를 불러오지 못했습니다."));
+      setDetailRows([]);
     } finally {
       setDetailLoading(false);
     }
@@ -134,9 +147,8 @@ export default function Page() {
 
   // FAIL CODE 옵션 로드 (TRX_ERRMSG_COD). 실패/미구성 시 빈 목록 → 셀렉트는 '전체'만.
   useEffect(() => {
-    fetch("/api/error-codes", { cache: "no-store" })
-      .then((res) => res.json())
-      .then((data: { codes?: Record<string, string> }) => {
+    apiJson<{ codes?: Record<string, string> }>("/api/error-codes", { cache: "no-store" })
+      .then((data) => {
         const codes = data.codes ?? {};
         setErrCodes(
           Object.entries(codes)
@@ -149,17 +161,15 @@ export default function Page() {
 
   // FAB 옵션 로드 (MCP DISTINCT FAC_ID). 실패/미구성 시 빈 목록 → 셀렉트는 '전체'만.
   useEffect(() => {
-    fetch("/api/facs", { cache: "no-store" })
-      .then((res) => res.json())
-      .then((data: { values?: string[] }) => setFacs(data.values ?? []))
+    apiJson<{ values?: string[] }>("/api/facs", { cache: "no-store" })
+      .then((data) => setFacs(asArray<string>(data.values)))
       .catch(() => setFacs([]));
   }, []);
 
   // ACTION_TYP 옵션 로드. 실패/미구성 시 빈 목록 → 셀렉트는 '전체'만.
   useEffect(() => {
-    fetch("/api/action-types", { cache: "no-store" })
-      .then((res) => res.json())
-      .then((data: { values?: string[] }) => setActionTypes(data.values ?? []))
+    apiJson<{ values?: string[] }>("/api/action-types", { cache: "no-store" })
+      .then((data) => setActionTypes(asArray<string>(data.values)))
       .catch(() => setActionTypes([]));
   }, []);
   useEffect(() => { if (selected) loadDetail(selected); }, [selected, loadDetail]);
@@ -348,7 +358,12 @@ export default function Page() {
                 {listLoading && (
                   <tr><td colSpan={5} className="muted" style={{ padding: 16 }}>불러오는 중…</td></tr>
                 )}
-                {!listLoading && summaries.length === 0 && (
+                {!listLoading && listErr && (
+                  <tr><td colSpan={5} style={{ padding: 12 }}>
+                    <div className="load-error"><span aria-hidden>⚠</span>{listErr}</div>
+                  </td></tr>
+                )}
+                {!listLoading && !listErr && summaries.length === 0 && (
                   <tr><td colSpan={5} className="muted" style={{ padding: 16 }}>조건에 맞는 TRACE 가 없습니다.</td></tr>
                 )}
                 {summaries.map((s) => (
@@ -412,6 +427,9 @@ export default function Page() {
             <span className="meta">{LAYER_ORDER.join(" → ")}</span>
           </div>
           <div className="panel-body tight">
+            {detailErr && !detailLoading && (
+              <div className="load-error" style={{ margin: 12 }}><span aria-hidden>⚠</span>{detailErr}</div>
+            )}
             <TraceTimeline traceId={selected} rows={detailRows} loading={detailLoading} />
           </div>
         </section>

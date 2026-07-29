@@ -3572,6 +3572,16 @@ button.tbd-row:not(:disabled):hover {
   background: var(--ok-soft); color: var(--ok); font-size: 24px; font-weight: 800;
 }
 
+/* 조회 실패 안내 — '결과 없음' 과 '불러오지 못함' 을 화면에서 구분하기 위한 배너.
+   세션 만료(401) 처럼 응답이 데이터가 아닐 때 여기로 표시된다. */
+.load-error {
+  display: flex; align-items: center; gap: 8px; margin: 0;
+  font-size: 13px; font-weight: 600; color: var(--err);
+  background: var(--err-soft); border: 1px solid #f4c1bc; border-radius: 8px;
+  padding: 10px 12px;
+}
+.panel-body > .load-error { margin: 12px; }
+
 /* danger 버튼 변형 */
 .btn.danger { color: var(--err); }
 .btn.danger:hover { background: var(--err-soft); border-color: #f4c1bc; }

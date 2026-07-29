@@ -2,6 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Role } from "@/lib/roles";
+import { onSessionExpired, resetSessionExpired } from "@/lib/apiClient";
+import { SessionExpiredDialog } from "./SessionExpiredDialog";
 
 export interface SessionUser {
   userId: string;
@@ -26,6 +28,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [expired, setExpired] = useState(false);
 
   const refresh = useCallback(async (): Promise<SessionUser | null> => {
     try {
@@ -51,9 +54,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
+  // 열어둔 탭에서 세션이 만료되면(어느 API 든 401) 안내 모달을 띄운다.
+  // 화면이 401 응답을 데이터로 오인해 터지는 일을 막는 마지막 장치.
+  useEffect(() => onSessionExpired(() => {
+    setUser(null);
+    setExpired(true);
+  }), []);
+
+  const dismissExpired = useCallback(() => {
+    setExpired(false);
+    resetSessionExpired(); // 이후 401 이 또 오면 다시 안내
+  }, []);
+
   return (
     <AuthContext.Provider value={{ user, loading, refresh, logout, setUser }}>
       {children}
+      {expired && <SessionExpiredDialog onClose={dismissExpired} />}
     </AuthContext.Provider>
   );
 }

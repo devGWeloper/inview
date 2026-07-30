@@ -79,6 +79,15 @@ interface RawFailure {
 const s = (r: Record<string, unknown>, k: string): string | null =>
   (r[k] ?? r[k.toLowerCase()] ?? null) as string | null;
 
+/**
+ * 숫자 파라미터를 [min,max] 로 클램프. `??` 만 쓰면 Number("abc") = NaN 이 그대로
+ * 통과해 SQL 로 흘러가므로(예: NUMTODSINTERVAL(NaN,'HOUR')) 유한수 검사를 함께 한다.
+ */
+function clampNum(v: unknown, dflt: number, min: number, max: number): number {
+  const n = typeof v === "number" && Number.isFinite(v) ? v : dflt;
+  return Math.max(min, Math.min(n, max));
+}
+
 // 오라클 에러를 화면에 한 줄로 보여주기 위한 축약 (ORA-xxxxx: … 첫 줄만).
 function oraMsg(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e);
@@ -107,9 +116,9 @@ export async function fetchRequestFailures(q: RequestFailureQuery): Promise<Requ
     return { ...empty, reason: "oracledb 드라이버를 사용할 수 없습니다." };
   }
 
-  const limit = Math.max(1, Math.min(q.limit ?? 300, 1000));
+  const limit = clampNum(q.limit, 300, 1, 1000);
   const where: string[] = ["ACTION_TYP IS NULL", "RECV_MSG_CTN IS NOT NULL"];
-  const binds: Record<string, unknown> = {};
+  const binds: Record<string, unknown> = { limit };
   if (q.dateFrom) {
     where.push("RECV_TM >= TO_TIMESTAMP(:dateFrom, 'YYYY-MM-DD\"T\"HH24:MI:SS')");
     binds.dateFrom = q.dateFrom;
@@ -135,7 +144,7 @@ export async function fetchRequestFailures(q: RequestFailureQuery): Promise<Requ
       FROM BIZ_AIACTIONTXN_HIS
      WHERE ${where.join(" AND ")}
      ORDER BY TIMEKEY DESC
-     FETCH FIRST ${limit} ROWS ONLY`;
+     FETCH FIRST :limit ROWS ONLY`;
 
   let conn: Awaited<ReturnType<typeof oracle.getConnection>> | undefined;
   const t0 = Date.now();
@@ -312,8 +321,8 @@ export async function fetchRequestFailureContext(
     return { userId: null, items: [], available: false, reason: "oracledb 드라이버를 사용할 수 없습니다." };
   }
 
-  const windowHours = Math.max(1, Math.min(opts?.windowHours ?? 12, 72));
-  const limit = Math.max(1, Math.min(opts?.limit ?? 80, 300));
+  const windowHours = clampNum(opts?.windowHours, 12, 1, 72);
+  const limit = clampNum(opts?.limit, 80, 1, 300);
 
   let conn: Awaited<ReturnType<typeof oracle.getConnection>> | undefined;
   try {
@@ -355,23 +364,33 @@ export async function fetchRequestFailureContext(
     // 2) 같은 사용자의 ±windowHours 요청 흐름 (TRACE_ID 단위로 묶음)
     let rawRows: Record<string, unknown>[];
     try {
+      // ⚠️ 집계는 인라인 뷰 안에서 끝내고 ORDER BY / FETCH FIRST 는 바깥에서 건다.
+      //    Oracle 은 FETCH FIRST 를 ROW_NUMBER() OVER (ORDER BY …) 로 재작성하므로
+      //    `ORDER BY MIN(RECV_TM)` 처럼 정렬식이 집계함수면 분석함수 안에 집계가
+      //    중첩돼 ORA-00935(group function is nested too deeply) 가 난다.
+      //    RECV_TM 은 'YYYY-MM-DDTHH24:MI:SS.FF3' 고정폭 ISO 문자열이라 문자열
+      //    정렬 = 시간 정렬이다.
+      //    앞뒤 기간·행수는 INTERVAL 리터럴 대신 NUMTODSINTERVAL 로 바인드한다
+      //    (INTERVAL 'n' HOUR 는 리터럴만 받아 바인드가 불가). 행수도 :limit 바인드.
       const rows = await conn.execute(
-        `SELECT TRACE_ID,
-                TO_CHAR(MIN(RECV_TM), 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS RECV_TM,
-                MAX(ACTION_TYP)   AS ACTION_TYP,
-                MAX(ERR_CD)       AS ERR_CD,
-                MAX(HTTP_STS_CD)  AS HTTP_STS_CD,
-                MAX(RECV_MSG_CTN) AS RECV_MSG_CTN,
-                MAX(RESP_MSG_CTN) AS RESP_MSG_CTN
-           FROM BIZ_AIACTIONTXN_HIS
-          WHERE USER_ID = :userId
-            AND RECV_MSG_CTN IS NOT NULL
-            AND RECV_TM BETWEEN TO_TIMESTAMP(:centerTm, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') - INTERVAL '${windowHours}' HOUR
-                            AND TO_TIMESTAMP(:centerTm, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') + INTERVAL '${windowHours}' HOUR
-          GROUP BY TRACE_ID
-          ORDER BY MIN(RECV_TM)
-          FETCH FIRST ${limit} ROWS ONLY`,
-        { userId, centerTm },
+        `SELECT * FROM (
+           SELECT TRACE_ID,
+                  TO_CHAR(MIN(RECV_TM), 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS RECV_TM,
+                  MAX(ACTION_TYP)   AS ACTION_TYP,
+                  MAX(ERR_CD)       AS ERR_CD,
+                  MAX(HTTP_STS_CD)  AS HTTP_STS_CD,
+                  MAX(RECV_MSG_CTN) AS RECV_MSG_CTN,
+                  MAX(RESP_MSG_CTN) AS RESP_MSG_CTN
+             FROM BIZ_AIACTIONTXN_HIS
+            WHERE USER_ID = :userId
+              AND RECV_MSG_CTN IS NOT NULL
+              AND RECV_TM BETWEEN TO_TIMESTAMP(:centerTm, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') - NUMTODSINTERVAL(:windowHours, 'HOUR')
+                              AND TO_TIMESTAMP(:centerTm, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') + NUMTODSINTERVAL(:windowHours, 'HOUR')
+            GROUP BY TRACE_ID
+         )
+         ORDER BY RECV_TM
+         FETCH FIRST :limit ROWS ONLY`,
+        { userId, centerTm, windowHours, limit },
         { outFormat: oracle.OBJECT }
       );
       rawRows = (rows.rows ?? []) as Record<string, unknown>[];

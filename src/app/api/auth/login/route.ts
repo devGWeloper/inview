@@ -31,7 +31,6 @@ export async function POST(req: NextRequest) {
         userId: result.user.userId,
         name: result.user.name,
         role: result.user.role,
-        mustChangePw: result.user.mustChangePw,
       },
     });
     res.cookies.set(AUTH_COOKIE, token, sessionCookieOptions(SESSION_TTL_SEC));

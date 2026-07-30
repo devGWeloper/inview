@@ -4,16 +4,16 @@ import { useState } from "react";
 import { useAuth } from "./AuthProvider";
 
 /**
- * 본인 비밀번호 변경 모달.
- * - forced=true : 비밀번호 초기화 직후 강제 변경 (닫기 불가).
- * - 그 외        : 사용자 메뉴에서 자발적 변경 (닫기 가능).
+ * 본인 비밀번호 변경 모달. 사용자 메뉴에서 자발적으로 여는 용도(항상 닫기 가능).
+ *
+ * ⚠️ TEMP(강제 변경 비활성): 최초 로그인 시 강제 변경(`forced` 모드) 은 임시로 뺐다.
+ *    아직 권한별 실질 로직이 적고 내부 인원끼리만 쓰는 단계라 번거로움이 더 커서다.
+ *    되살릴 때 = CLAUDE.md "TEMP — 비밀번호 강제 변경 비활성" 절 참고.
  */
 export function ChangePasswordModal({
-  forced = false,
   onClose,
   onDone,
 }: {
-  forced?: boolean;
   onClose?: () => void;
   onDone?: () => void;
 }) {
@@ -50,19 +50,12 @@ export function ChangePasswordModal({
   }
 
   return (
-    <div className="auth-modal-backdrop" onMouseDown={forced ? undefined : onClose}>
+    <div className="auth-modal-backdrop" onMouseDown={onClose}>
       <form className="auth-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={submit}>
         <div className="auth-modal-head">
-          <div className="auth-modal-title">{forced ? "비밀번호 변경 필요" : "비밀번호 변경"}</div>
-          {!forced && (
-            <button type="button" className="auth-modal-x" onClick={onClose} aria-label="닫기">×</button>
-          )}
+          <div className="auth-modal-title">비밀번호 변경</div>
+          <button type="button" className="auth-modal-x" onClick={onClose} aria-label="닫기">×</button>
         </div>
-        {forced && (
-          <p className="auth-modal-note">
-            비밀번호가 초기화되었습니다. 계속하려면 새 비밀번호로 변경하세요.
-          </p>
-        )}
         {done ? (
           <div className="auth-modal-done">
             <div className="auth-modal-done-icon">✓</div>
@@ -88,7 +81,7 @@ export function ChangePasswordModal({
             </label>
             {err && <div className="auth-error">{err}</div>}
             <div className="auth-modal-actions">
-              {!forced && <button type="button" className="btn ghost" onClick={onClose}>취소</button>}
+              <button type="button" className="btn ghost" onClick={onClose}>취소</button>
               <button type="submit" className="btn primary" disabled={saving}>
                 {saving ? "변경 중…" : "변경"}
               </button>

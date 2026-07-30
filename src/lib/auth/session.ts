@@ -15,8 +15,13 @@
 import { Role, isRole } from "../roles";
 
 export const AUTH_COOKIE = "trx_session";
-/** 세션 유효기간 (초). 기본 12시간. */
-export const SESSION_TTL_SEC = 12 * 60 * 60;
+/**
+ * 세션 유효기간 (초). 기본 7일.
+ *
+ * 슬라이딩 갱신은 없다 — **로그인 시각 기준 고정 만료**라 사용 중이어도 7일이 지나면 끊긴다.
+ * (활동 기준으로 연장하려면 미들웨어에서 매 요청 재서명해야 한다.)
+ */
+export const SESSION_TTL_SEC = 7 * 24 * 60 * 60;
 
 /**
  * 세션 쿠키 옵션. `secure` 는 기본 false 다 — 사내 배포가 HTTP 일 수 있어

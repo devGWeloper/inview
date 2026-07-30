@@ -36,9 +36,6 @@ export function UserMenu() {
 
   return (
     <>
-      {/* 비밀번호 초기화 직후엔 강제 변경 */}
-      {user.mustChangePw && <ChangePasswordModal forced onClose={() => { /* 변경 완료 시 refresh 로 해제됨 */ }} />}
-
       <div className="usermenu" ref={ref}>
         <button
           type="button"

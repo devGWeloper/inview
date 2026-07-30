@@ -11,7 +11,6 @@ interface Account {
   work: string | null;
   role: Role;
   useYn: "Y" | "N";
-  mustChangePw: boolean;
   lastLoginDt: string | null;
   regDt: string | null;
 }
@@ -144,7 +143,7 @@ export default function AccountsPage() {
             {filtered.map((u) => (
               <tr key={u.userId} className={u.useYn === "N" ? "off" : ""}>
                 <td className="mono strong">{u.userId}{me?.userId === u.userId && <span className="acct-you">나</span>}</td>
-                <td>{u.name}{u.mustChangePw && <span className="acct-flag" title="다음 로그인 시 비밀번호 변경 필요">PW</span>}</td>
+                <td>{u.name}</td>
                 <td className="acct-work">{u.work || "—"}</td>
                 <td><span className={"acct-role role-" + u.role}>{ROLE_LABEL[u.role]}</span></td>
                 <td>
@@ -285,7 +284,7 @@ function AccountEditor({
           <div className="acct-initpw-note">
             <span className="acct-initpw-ic" aria-hidden>🔑</span>
             <span>
-              초기 비밀번호는 <b>사번과 동일</b>하게 설정됩니다. 사용자가 <b>최초 로그인 시 직접 변경</b>합니다.
+              초기 비밀번호는 <b>사번과 동일</b>하게 설정됩니다. 변경은 사용자가 <b>원할 때</b> 계정 메뉴에서 하면 됩니다.
             </span>
           </div>
         )}
@@ -353,7 +352,7 @@ function ResetPasswordModal({ acc, onClose, onDone }: { acc: Account; onClose: (
               <span>초기화된 비밀번호</span>
               <code>{result}</code>
             </div>
-            <div className="acct-temp-note">이 값을 대상자에게 전달하세요. 다음 로그인 시 변경이 요구됩니다.</div>
+            <div className="acct-temp-note">이 값을 대상자에게 전달하세요. 이 비밀번호로 바로 로그인할 수 있습니다.</div>
             <button type="button" className="btn primary" onClick={onClose}>확인</button>
           </div>
         ) : (

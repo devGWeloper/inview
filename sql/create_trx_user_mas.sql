@@ -21,12 +21,13 @@
 --
 --   [비밀번호] 평문 저장 금지. Node 내장 crypto 의 scrypt 로 해시(PWD_HASH)하고
 --     계정별 난수 솔트(PWD_SALT)를 함께 저장한다 (src/lib/auth/password.ts).
---     비밀번호 초기화 시 MUST_CHG_YN='Y' 로 두면 다음 로그인에서 변경을 유도한다.
+--     ※ TEMP: 강제 변경 흐름은 현재 임시로 꺼져 있어 앱이 MUST_CHG_YN 을 항상 'N' 으로만
+--       쓴다(컬럼/제약은 되살릴 때를 위해 그대로 둔다). CLAUDE.md TEMP 절 참고.
 --
 --   [최초 관리자 시드] 테이블이 비어 있으면 앱이 최초 로그인/계정목록 조회 시
 --     기본 운영자 계정을 1건 자동 생성한다 (src/lib/users.ts ensureSeedAdmin):
---       USER_ID='admin' / 비밀번호='admin1234' / ROLE_CD='ADMIN' / MUST_CHG_YN='Y'
---     ⚠️ 최초 로그인 후 반드시 비밀번호를 변경할 것.
+--       USER_ID='admin' / 비밀번호='admin1234' / ROLE_CD='ADMIN'
+--     ⚠️ 최초 로그인 후 비밀번호를 변경할 것 (강제되지는 않음).
 -- ============================================================================
 
 CREATE TABLE TRX_USER_MAS (
@@ -37,7 +38,7 @@ CREATE TABLE TRX_USER_MAS (
     PWD_HASH      VARCHAR2(256)  NOT NULL,                   -- 비밀번호 scrypt 해시 (hex)
     PWD_SALT      VARCHAR2(64)   NOT NULL,                   -- 비밀번호 솔트 (hex, 계정별 난수)
     USE_YN        CHAR(1)        DEFAULT 'Y' NOT NULL,       -- 사용 여부 (N=비활성/로그인 차단)
-    MUST_CHG_YN   CHAR(1)        DEFAULT 'N' NOT NULL,       -- 다음 로그인 시 비밀번호 변경 필요
+    MUST_CHG_YN   CHAR(1)        DEFAULT 'N' NOT NULL,       -- 비번 강제 변경 (TEMP: 현재 미사용, 항상 N)
     LAST_LOGIN_DT TIMESTAMP,                                 -- 최근 로그인 일시
     REG_DT        TIMESTAMP      DEFAULT SYSTIMESTAMP,       -- 등록 일시
     UPD_DT        TIMESTAMP      DEFAULT SYSTIMESTAMP,       -- 최근 수정 일시
@@ -56,7 +57,7 @@ COMMENT ON COLUMN TRX_USER_MAS.ROLE_CD       IS '권한 (ADMIN=운영자/BR=상�
 COMMENT ON COLUMN TRX_USER_MAS.PWD_HASH      IS '비밀번호 scrypt 해시 (hex)';
 COMMENT ON COLUMN TRX_USER_MAS.PWD_SALT      IS '비밀번호 솔트 (hex, 계정별 난수)';
 COMMENT ON COLUMN TRX_USER_MAS.USE_YN        IS '사용 여부 (Y/N)';
-COMMENT ON COLUMN TRX_USER_MAS.MUST_CHG_YN   IS '다음 로그인 시 비밀번호 변경 필요 (Y/N)';
+COMMENT ON COLUMN TRX_USER_MAS.MUST_CHG_YN   IS '비밀번호 강제 변경 플래그 (현재 미사용 - 항상 N)';
 COMMENT ON COLUMN TRX_USER_MAS.LAST_LOGIN_DT IS '최근 로그인 일시';
 COMMENT ON COLUMN TRX_USER_MAS.REG_DT        IS '등록 일시';
 COMMENT ON COLUMN TRX_USER_MAS.UPD_DT        IS '최근 수정 일시';

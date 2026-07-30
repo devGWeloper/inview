@@ -548,6 +548,12 @@ export interface RequestFailureContextResponse {
   /** 시간 오름차순. 중심 요청 앞뒤로 같은 사용자의 요청 흐름 */
   items: RequestFailureContextItem[];
   available: boolean;
+  /**
+   * 흐름이 비어 있는 이유. available=false 면 조회 실패 사유(ORA 에러 등),
+   * available=true 인데 채워져 있으면 기준값(USER_ID·RECV_TM) 부재 같은 데이터 사유.
+   * 빈 흐름과 조회 실패를 화면에서 구분하기 위한 필드 — 정상 조회면 없다.
+   */
+  reason?: string | null;
 }
 
 export interface StatsResponse {

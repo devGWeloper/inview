@@ -461,6 +461,8 @@ function UserFlow({ traceId, errMap }: { traceId: string; errMap: Record<string,
   const [expanded, setExpanded] = useState<string | null>(null);
   const [rows, setRows] = useState<TraceRow[]>([]);
   const [rowsLoading, setRowsLoading] = useState(false);
+  // 흐름 조회 실패 사유 (세션 만료·권한·DB 오류) — 빈 흐름과 구분해 보여준다.
+  const [flowErr, setFlowErr] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -469,8 +471,16 @@ function UserFlow({ traceId, errMap }: { traceId: string; errMap: Record<string,
     apiJson<RequestFailureContextResponse>(
       `/api/request-failures/${encodeURIComponent(traceId)}/context`, { cache: "no-store" }
     )
-      .then((d) => { if (alive) setCtx(d); })
-      .catch(() => { if (alive) setCtx(null); })
+      .then((d) => {
+        if (!alive) return;
+        setCtx(d);
+        setFlowErr(d.available ? null : d.reason || "흐름을 조회하지 못했습니다.");
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setCtx(null);
+        setFlowErr(errMessage(e, "흐름을 조회하지 못했습니다."));
+      })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [traceId]);
@@ -497,7 +507,14 @@ function UserFlow({ traceId, errMap }: { traceId: string; errMap: Record<string,
         </span>
       </div>
       {loading && <div className="rft-empty sm">흐름 불러오는 중…</div>}
-      {!loading && items.length === 0 && <div className="rft-empty sm">주변 요청을 찾지 못했습니다.</div>}
+      {!loading && flowErr && (
+        <div className="load-error"><span aria-hidden>⚠</span>{flowErr}</div>
+      )}
+      {!loading && !flowErr && items.length === 0 && (
+        <div className="rft-empty sm">
+          {ctx?.reason ? ctx.reason : "이 사용자의 앞뒤 12시간에 다른 요청이 없습니다."}
+        </div>
+      )}
       {!loading && items.length > 0 && (
         <ol className="rft-flow-list">
           {items.map((f) => {

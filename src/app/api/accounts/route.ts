@@ -18,7 +18,7 @@ export async function GET(_req: NextRequest) {
 
 /**
  * 계정 생성 (BR 이상).
- * - 초기 비밀번호 = 사번(USER_ID). MUST_CHG_YN='Y' 로 최초 로그인 시 변경 강제.
+ * - 초기 비밀번호 = 사번(USER_ID). ⚠️ TEMP: 최초 로그인 강제 변경은 임시로 뺐다(CLAUDE.md TEMP 절).
  * - 권한 상향 방지: ADMIN 계정은 ADMIN 만 생성할 수 있다(BR 은 BR/DEV 만).
  */
 export async function POST(req: NextRequest) {
@@ -42,7 +42,6 @@ export async function POST(req: NextRequest) {
       role,
       password: userId, // 초기 비밀번호 = 사번
       useYn: body.useYn === "N" ? "N" : "Y",
-      mustChangePw: true, // 최초 로그인 시 변경 강제
     });
     logger.info("account created", { ...ctx, by: guard.session.sub, userId: user.userId, role: user.role });
     return NextResponse.json({ user });

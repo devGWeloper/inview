@@ -68,7 +68,6 @@ function devAdminAccount(): UserAccount {
     work: DEV_ADMIN.work,
     role: DEV_ADMIN.role,
     useYn: "Y",
-    mustChangePw: false,
     lastLoginDt: null,
     regDt: null,
     updDt: null,
@@ -88,7 +87,6 @@ export interface UserAccount {
   work: string | null;
   role: Role;
   useYn: "Y" | "N";
-  mustChangePw: boolean;
   lastLoginDt: string | null;
   regDt: string | null;
   updDt: string | null;
@@ -111,14 +109,13 @@ function rowToAccount(r: Record<string, unknown>): UserAccount {
     work: s(r, "WORK_CTN"),
     role: isRole(roleRaw) ? roleRaw : "DEV",
     useYn: s(r, "USE_YN") === "N" ? "N" : "Y",
-    mustChangePw: s(r, "MUST_CHG_YN") === "Y",
     lastLoginDt: s(r, "LAST_LOGIN_DT"),
     regDt: s(r, "REG_DT"),
     updDt: s(r, "UPD_DT"),
   };
 }
 
-const SELECT_COLS = `USER_ID, USER_NM, WORK_CTN, ROLE_CD, USE_YN, MUST_CHG_YN,
+const SELECT_COLS = `USER_ID, USER_NM, WORK_CTN, ROLE_CD, USE_YN,
        TO_CHAR(LAST_LOGIN_DT, 'YYYY-MM-DD"T"HH24:MI:SS') AS LAST_LOGIN_DT,
        TO_CHAR(REG_DT, 'YYYY-MM-DD"T"HH24:MI:SS') AS REG_DT,
        TO_CHAR(UPD_DT, 'YYYY-MM-DD"T"HH24:MI:SS') AS UPD_DT`;
@@ -160,7 +157,7 @@ async function ensureSeedAdmin(conn: Conn, oracle: NonNullable<Awaited<ReturnTyp
     await conn.execute(
       `INSERT INTO TRX_USER_MAS
          (USER_ID, USER_NM, WORK_CTN, ROLE_CD, PWD_HASH, PWD_SALT, USE_YN, MUST_CHG_YN, REG_DT, UPD_DT)
-       VALUES (:userId, :name, :work, :role, :hash, :salt, 'Y', 'Y', SYSTIMESTAMP, SYSTIMESTAMP)`,
+       VALUES (:userId, :name, :work, :role, :hash, :salt, 'Y', 'N', SYSTIMESTAMP, SYSTIMESTAMP)`,
       { userId: SEED_ADMIN.userId, name: SEED_ADMIN.name, work: SEED_ADMIN.work, role: SEED_ADMIN.role, hash, salt },
       { autoCommit: true }
     );
@@ -219,7 +216,6 @@ export interface CreateUserInput {
   role: Role;
   password: string;
   useYn?: "Y" | "N";
-  mustChangePw?: boolean;
 }
 
 /** 계정 생성. 사번 중복 시 throw. */
@@ -236,7 +232,7 @@ export async function createUser(input: CreateUserInput): Promise<UserAccount> {
       await conn.execute(
         `INSERT INTO TRX_USER_MAS
            (USER_ID, USER_NM, WORK_CTN, ROLE_CD, PWD_HASH, PWD_SALT, USE_YN, MUST_CHG_YN, REG_DT, UPD_DT)
-         VALUES (:userId, :name, :work, :role, :hash, :salt, :useYn, :mustChg, SYSTIMESTAMP, SYSTIMESTAMP)`,
+         VALUES (:userId, :name, :work, :role, :hash, :salt, :useYn, 'N', SYSTIMESTAMP, SYSTIMESTAMP)`,
         {
           userId,
           name,
@@ -245,7 +241,6 @@ export async function createUser(input: CreateUserInput): Promise<UserAccount> {
           hash,
           salt,
           useYn: input.useYn === "N" ? "N" : "Y",
-          mustChg: input.mustChangePw === false ? "N" : "Y",
         },
         { autoCommit: true }
       );
@@ -318,7 +313,11 @@ export async function updateUser(userId: string, input: UpdateUserInput): Promis
   });
 }
 
-/** 관리자에 의한 비밀번호 초기화. mustChangePw 를 켜 다음 로그인에서 변경 유도. */
+/**
+ * 관리자에 의한 비밀번호 초기화.
+ * ⚠️ TEMP(강제 변경 비활성): MUST_CHG_YN 을 'N' 으로 둔다 — 대상자는 초기화된 값 그대로
+ *    로그인하고, 원할 때 직접 변경한다. 되살리려면 'Y' 로 (CLAUDE.md TEMP 절 참고).
+ */
 export async function resetPassword(userId: string, newPassword: string): Promise<void> {
   const id = (userId ?? "").trim();
   if (!id) throw new Error("사번(USER_ID)이 비어 있습니다.");
@@ -327,7 +326,7 @@ export async function resetPassword(userId: string, newPassword: string): Promis
   await withConn(async (conn) => {
     const res = await conn.execute(
       `UPDATE TRX_USER_MAS
-          SET PWD_HASH = :hash, PWD_SALT = :salt, MUST_CHG_YN = 'Y', UPD_DT = SYSTIMESTAMP
+          SET PWD_HASH = :hash, PWD_SALT = :salt, MUST_CHG_YN = 'N', UPD_DT = SYSTIMESTAMP
         WHERE USER_ID = :id`,
       { hash, salt, id },
       { autoCommit: true }
@@ -336,7 +335,7 @@ export async function resetPassword(userId: string, newPassword: string): Promis
   });
 }
 
-/** 본인 비밀번호 변경 (현재 비밀번호 확인 후). mustChangePw 해제. */
+/** 본인 비밀번호 변경 (현재 비밀번호 확인 후). */
 export async function changeOwnPassword(userId: string, currentPw: string, newPw: string): Promise<void> {
   const id = (userId ?? "").trim();
   if (!id) throw new Error("사번(USER_ID)이 비어 있습니다.");

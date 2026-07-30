@@ -12,27 +12,39 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest, { params }: { params: { traceId: string } }) {
   const t0 = Date.now();
   const ctx = reqContext(req);
-  const traceId = decodeURIComponent(params.traceId);
+  // params 는 Next 가 이미 URL 디코딩해 준다 — 여기서 또 decodeURIComponent 하면
+  // '%' 가 든 TRACE_ID 에서 URIError 로 500 이 난다.
+  const traceId = params.traceId;
   const sp = req.nextUrl.searchParams;
 
-  const result = await fetchRequestFailureContext(traceId, {
-    windowHours: sp.get("windowHours") ? Number(sp.get("windowHours")) : undefined,
-    limit: sp.get("limit") ? Number(sp.get("limit")) : undefined,
-  });
+  try {
+    const result = await fetchRequestFailureContext(traceId, {
+      windowHours: sp.get("windowHours") ? Number(sp.get("windowHours")) : undefined,
+      limit: sp.get("limit") ? Number(sp.get("limit")) : undefined,
+    });
 
-  const body: RequestFailureContextResponse = {
-    traceId,
-    userId: result.userId,
-    items: result.items,
-    available: result.available,
-  };
+    const body: RequestFailureContextResponse = {
+      traceId,
+      userId: result.userId,
+      items: result.items,
+      available: result.available,
+      reason: result.reason ?? null,
+    };
 
-  logger.info("GET /api/request-failures/[traceId]/context", {
-    ...ctx,
-    traceId,
-    userId: result.userId,
-    items: result.items.length,
-    ms: Date.now() - t0,
-  });
-  return NextResponse.json(body);
+    logger.info("GET /api/request-failures/[traceId]/context", {
+      ...ctx,
+      traceId,
+      userId: result.userId,
+      items: result.items.length,
+      available: result.available,
+      reason: result.reason ?? null,
+      ms: Date.now() - t0,
+    });
+    return NextResponse.json(body);
+  } catch (e) {
+    // 조회 계층이 예외를 삼키므로 여기까지 오는 건 예상 밖 오류 — 사유를 담아 내린다.
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.error("GET /api/request-failures/[traceId]/context failed", { ...ctx, traceId, err: msg, ms: Date.now() - t0 });
+    return NextResponse.json({ error: `사용자 흐름 조회 실패: ${msg}` }, { status: 500 });
+  }
 }

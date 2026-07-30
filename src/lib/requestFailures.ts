@@ -79,6 +79,12 @@ interface RawFailure {
 const s = (r: Record<string, unknown>, k: string): string | null =>
   (r[k] ?? r[k.toLowerCase()] ?? null) as string | null;
 
+// 오라클 에러를 화면에 한 줄로 보여주기 위한 축약 (ORA-xxxxx: … 첫 줄만).
+function oraMsg(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e);
+  return raw.split("\n")[0].trim() || "알 수 없는 오류";
+}
+
 /**
  * 실패 요청 목록 조회 + 조치 정보 병합.
  * DB 를 못 쓰는 상황은 throw 대신 available=false 로 내려 화면에서 안내한다.
@@ -286,11 +292,25 @@ export async function saveRequestFailureHandling(input: {
 export async function fetchRequestFailureContext(
   traceId: string,
   opts?: { windowHours?: number; limit?: number }
-): Promise<{ userId: string | null; items: RequestFailureContextItem[]; available: boolean }> {
+): Promise<{
+  userId: string | null;
+  items: RequestFailureContextItem[];
+  available: boolean;
+  reason?: string;
+}> {
   const cfg = getAppDbConfig();
-  if (!cfg) return { userId: null, items: [], available: false };
+  if (!cfg) {
+    return {
+      userId: null,
+      items: [],
+      available: false,
+      reason: `${APP_DB_LAYER} DB 미구성 (config.yml 의 layers.${APP_DB_LAYER})`,
+    };
+  }
   const oracle = await getOracle();
-  if (!oracle) return { userId: null, items: [], available: false };
+  if (!oracle) {
+    return { userId: null, items: [], available: false, reason: "oracledb 드라이버를 사용할 수 없습니다." };
+  }
 
   const windowHours = Math.max(1, Math.min(opts?.windowHours ?? 12, 72));
   const limit = Math.max(1, Math.min(opts?.limit ?? 80, 300));
@@ -300,44 +320,67 @@ export async function fetchRequestFailureContext(
     conn = await oracle.getConnection(cfg);
 
     // 1) 중심 요청의 사용자·수신시각
-    const center = await conn.execute(
-      `SELECT USER_ID, TO_CHAR(MIN(RECV_TM), 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS RECV_TM
-         FROM BIZ_AIACTIONTXN_HIS
-        WHERE TRACE_ID = :traceId AND RECV_MSG_CTN IS NOT NULL
-        GROUP BY USER_ID`,
-      { traceId },
-      { outFormat: oracle.OBJECT }
-    );
-    const cRow = (center.rows ?? [])[0] as Record<string, unknown> | undefined;
+    //    쿼리별로 격리 실행해(fetchTokenStats 의 run() 과 같은 이유) 어느 단계가
+    //    왜 죽었는지 reason 으로 올려보낸다 — 빈 흐름과 조회 실패는 다른 사건이다.
+    let cRow: Record<string, unknown> | undefined;
+    try {
+      const center = await conn.execute(
+        `SELECT USER_ID, TO_CHAR(MIN(RECV_TM), 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS RECV_TM
+           FROM BIZ_AIACTIONTXN_HIS
+          WHERE TRACE_ID = :traceId AND RECV_MSG_CTN IS NOT NULL
+          GROUP BY USER_ID`,
+        { traceId },
+        { outFormat: oracle.OBJECT }
+      );
+      cRow = (center.rows ?? [])[0] as Record<string, unknown> | undefined;
+    } catch (e) {
+      logger.error("fetchRequestFailureContext [center] query failed", { traceId, err: String(e) });
+      return { userId: null, items: [], available: false, reason: `중심 요청 조회 실패 — ${oraMsg(e)}` };
+    }
+
     const userId = cRow ? s(cRow, "USER_ID") : null;
     const centerTm = cRow ? s(cRow, "RECV_TM") : null;
 
     if (!userId || !centerTm) {
-      return { userId, items: [], available: true };
+      // 조회는 됐지만 기준값이 없어 흐름을 만들 수 없는 경우 — 사유를 구분해 올린다.
+      const reason = !cRow
+        ? "이 TRACE_ID 로 수신(RECV) 행을 찾지 못했습니다."
+        : !userId
+          ? `이 요청에 USER_ID 가 없어 같은 사용자를 특정할 수 없습니다 (${APP_DB_LAYER} 행).`
+          : `이 요청에 RECV_TM(수신시각) 이 없어 앞뒤 기간을 잡을 수 없습니다 (${APP_DB_LAYER} 행).`;
+      logger.warn("fetchRequestFailureContext: no anchor", { traceId, userId, centerTm, reason });
+      return { userId, items: [], available: true, reason };
     }
 
     // 2) 같은 사용자의 ±windowHours 요청 흐름 (TRACE_ID 단위로 묶음)
-    const rows = await conn.execute(
-      `SELECT TRACE_ID,
-              TO_CHAR(MIN(RECV_TM), 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS RECV_TM,
-              MAX(ACTION_TYP)   AS ACTION_TYP,
-              MAX(ERR_CD)       AS ERR_CD,
-              MAX(HTTP_STS_CD)  AS HTTP_STS_CD,
-              MAX(RECV_MSG_CTN) AS RECV_MSG_CTN,
-              MAX(RESP_MSG_CTN) AS RESP_MSG_CTN
-         FROM BIZ_AIACTIONTXN_HIS
-        WHERE USER_ID = :userId
-          AND RECV_MSG_CTN IS NOT NULL
-          AND RECV_TM BETWEEN TO_TIMESTAMP(:centerTm, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') - INTERVAL '${windowHours}' HOUR
-                          AND TO_TIMESTAMP(:centerTm, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') + INTERVAL '${windowHours}' HOUR
-        GROUP BY TRACE_ID
-        ORDER BY MIN(RECV_TM)
-        FETCH FIRST ${limit} ROWS ONLY`,
-      { userId, centerTm },
-      { outFormat: oracle.OBJECT }
-    );
+    let rawRows: Record<string, unknown>[];
+    try {
+      const rows = await conn.execute(
+        `SELECT TRACE_ID,
+                TO_CHAR(MIN(RECV_TM), 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS RECV_TM,
+                MAX(ACTION_TYP)   AS ACTION_TYP,
+                MAX(ERR_CD)       AS ERR_CD,
+                MAX(HTTP_STS_CD)  AS HTTP_STS_CD,
+                MAX(RECV_MSG_CTN) AS RECV_MSG_CTN,
+                MAX(RESP_MSG_CTN) AS RESP_MSG_CTN
+           FROM BIZ_AIACTIONTXN_HIS
+          WHERE USER_ID = :userId
+            AND RECV_MSG_CTN IS NOT NULL
+            AND RECV_TM BETWEEN TO_TIMESTAMP(:centerTm, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') - INTERVAL '${windowHours}' HOUR
+                            AND TO_TIMESTAMP(:centerTm, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') + INTERVAL '${windowHours}' HOUR
+          GROUP BY TRACE_ID
+          ORDER BY MIN(RECV_TM)
+          FETCH FIRST ${limit} ROWS ONLY`,
+        { userId, centerTm },
+        { outFormat: oracle.OBJECT }
+      );
+      rawRows = (rows.rows ?? []) as Record<string, unknown>[];
+    } catch (e) {
+      logger.error("fetchRequestFailureContext [flow] query failed", { traceId, userId, err: String(e) });
+      return { userId, items: [], available: false, reason: `주변 요청 조회 실패 — ${oraMsg(e)}` };
+    }
 
-    const items: RequestFailureContextItem[] = ((rows.rows ?? []) as Record<string, unknown>[]).map((r) => {
+    const items: RequestFailureContextItem[] = rawRows.map((r) => {
       const id = String(s(r, "TRACE_ID") ?? "");
       const actionTyp = s(r, "ACTION_TYP");
       return {
@@ -353,10 +396,12 @@ export async function fetchRequestFailureContext(
       };
     });
 
+    logger.info("fetchRequestFailureContext ok", { traceId, userId, centerTm, items: items.length, windowHours });
     return { userId, items, available: true };
   } catch (e) {
+    // 커넥션 획득/종료 등 쿼리 밖 실패 — 사유를 그대로 올려 화면에서 구분되게 한다.
     logger.error("fetchRequestFailureContext failed", { traceId, err: String(e) });
-    return { userId: null, items: [], available: false };
+    return { userId: null, items: [], available: false, reason: oraMsg(e) };
   } finally {
     if (conn) {
       try { await conn.close(); } catch { /* ignore */ }

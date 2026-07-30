@@ -3842,10 +3842,6 @@ button.tbd-row:not(:disabled):hover {
   margin-left: 6px; font-size: 10px; font-weight: 800; color: var(--accent);
   background: var(--accent-soft); border-radius: 99px; padding: 1px 6px; vertical-align: middle;
 }
-.acct-flag {
-  margin-left: 6px; font-size: 9.5px; font-weight: 800; color: var(--warn);
-  background: var(--warn-soft); border: 1px solid #f6d9b0; border-radius: 4px; padding: 0 4px; vertical-align: middle;
-}
 .acct-role {
   display: inline-block; font-size: 11.5px; font-weight: 800; padding: 2px 9px; border-radius: 99px;
   color: var(--role-c); background: var(--role-bg); border: 1px solid var(--role-bd);

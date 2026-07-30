@@ -133,19 +133,41 @@ The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTI
 
 - **권한 단일 소스 `src/lib/roles.ts`** (클라이언트·Edge 미들웨어·서버 공용 — Node 전용 모듈 import 금지). `Role`, `ROLE_LABEL`, `roleAtLeast(role,min)`, 그리고 **경로→최소권한 매핑 `ROUTE_RULES`**(`requiredRoleForPath`). 접근 범위가 바뀌면 여기만 고친다. 현재: `/admin`=ADMIN, `/accounts`·`/api/accounts`·`/report`·`/improvement`·`/event-fabs`=BR, 그 외=인증만 되면 DEV. **계정 관리는 BR 이상**이되 권한 상향 방지 가드가 API 에 있다 — ADMIN 계정 생성/수정/삭제/초기화·ADMIN 승격은 **ADMIN 만**(BR 은 BR/DEV 만 다룰 수 있고 UI 도 ADMIN 옵션·행 버튼을 가림).
 - **계정 저장소 `TRX_USER_MAS`** (`sql/create_trx_user_mas.sql`, **앱 자체 DB=GAIA 에서만 1회 실행**, ADM 소유 + GRANT + PUBLIC SYNONYM — 다른 앱 테이블과 동일 패턴). 컬럼: USER_ID(사번,PK)/USER_NM/WORK_CTN(업무)/ROLE_CD/PWD_HASH/PWD_SALT/USE_YN/MUST_CHG_YN/LAST_LOGIN_DT/감사일시. `src/lib/users.ts` 가 CRUD·로그인검증·시드를 담당(lazy-`oracledb`-swallow, DB 불가 시 `available=false`).
-  - **최초 관리자 시드**: 테이블이 비면 로그인/목록 조회 시 `ensureSeedAdmin` 이 기본 운영자(USER_ID=`admin`/PW=`admin1234`/ADMIN/MUST_CHG_YN=Y)를 1회 생성. **최초 로그인 후 즉시 변경**.
-- **비밀번호**: 평문 저장 금지. `src/lib/auth/password.ts` 가 Node 내장 `crypto` scrypt 로 해시(외부 의존성 없음 — 배포가 src 복붙이라 native dep 회피). 관리자 초기화 시 MUST_CHG_YN='Y' → 다음 로그인에서 강제 변경(`ChangePasswordModal forced`).
-- **세션**: `src/lib/auth/session.ts` 서명 쿠키(`trx_session`, httpOnly, 12h). 형식 `base64url(payload).HMAC-SHA256`, **Web Crypto(`crypto.subtle`)만 사용**해 Edge 미들웨어·Node 라우트 공용. 비밀키 `AUTH_SECRET`(미설정 시 개발용 폴백 — **운영 배포 시 반드시 환경변수 설정**). 쿠키 `secure` 는 기본 off(사내 HTTP 배포에서 로그인 막힘 방지) — HTTPS 면 `AUTH_COOKIE_SECURE=true`. 옵션은 `sessionCookieOptions()` 한 곳.
+  - **최초 관리자 시드**: 테이블이 비면 로그인/목록 조회 시 `ensureSeedAdmin` 이 기본 운영자(USER_ID=`admin`/PW=`admin1234`/ADMIN)를 1회 생성. **최초 로그인 후 즉시 변경**(강제되진 않음 — 아래 TEMP 절).
+- **비밀번호**: 평문 저장 금지. `src/lib/auth/password.ts` 가 Node 내장 `crypto` scrypt 로 해시(외부 의존성 없음 — 배포가 src 복붙이라 native dep 회피). 변경은 사용자 메뉴의 `ChangePasswordModal` 에서 **자율**로만 한다 (강제 변경은 아래 TEMP 절 참고).
+- **세션**: `src/lib/auth/session.ts` 서명 쿠키(`trx_session`, httpOnly, **7일** — `SESSION_TTL_SEC` 한 곳. 슬라이딩 갱신 없음 = 로그인 시각 기준 고정 만료). 형식 `base64url(payload).HMAC-SHA256`, **Web Crypto(`crypto.subtle`)만 사용**해 Edge 미들웨어·Node 라우트 공용. 비밀키 `AUTH_SECRET`(미설정 시 개발용 폴백 — **운영 배포 시 반드시 환경변수 설정**). 쿠키 `secure` 는 기본 off(사내 HTTP 배포에서 로그인 막힘 방지) — HTTPS 면 `AUTH_COOKIE_SECURE=true`. 옵션은 `sessionCookieOptions()` 한 곳.
 - **미들웨어 `src/middleware.ts`**(Edge): 비로그인 페이지→`/login?next=`, API→401; 권한 부족 페이지→`/403`, API→403. 인가 근거는 `ROUTE_RULES`. 정적 자산·`/login`·`/api/auth/*` 는 통과.
 - **API**: `POST /api/auth/login`·`logout`, `GET /api/auth/me`(비로그인 200+`{user:null}`), `POST /api/auth/change-password`(본인). 계정관리(BR 이상 + 위 상향방지 가드): `GET/POST /api/accounts`, `PUT/DELETE /api/accounts/[userId]`, `POST /api/accounts/[userId]/reset-password`. 서버 방어는 `src/lib/auth/current.ts` `requireRole(min)`.
-- **초기 비밀번호 = 사번**: 계정 생성 시 비밀번호를 **USER_ID(사번)와 동일**하게 설정하고 `MUST_CHG_YN='Y'` → 최초 로그인에서 사용자가 강제 변경(`ChangePasswordModal forced`). 등록 폼엔 비번 입력이 없다. 관리자 **비밀번호 초기화**도 값 미지정 시 **사번으로** 초기화(지정하면 그 값). 결과 비번은 화면에 1회 노출해 전달용으로 보여준다.
+- **초기 비밀번호 = 사번**: 계정 생성 시 비밀번호를 **USER_ID(사번)와 동일**하게 설정한다 (강제 변경 없음 — 사번 그대로 로그인). 등록 폼엔 비번 입력이 없다. 관리자 **비밀번호 초기화**도 값 미지정 시 **사번으로** 초기화(지정하면 그 값). 결과 비번은 화면에 1회 노출해 전달용으로 보여준다.
 - **클라이언트**: `AuthProvider`(`/api/auth/me` 컨텍스트, `useAuth()`) → `AppChrome`(상단바/푸터 셸, `/login` 은 셸 없이 전체화면) → `UserMenu`(계정 칩+드롭다운, 권한별 관리 링크·비번변경·로그아웃). 기존 mutation 클라이언트 fetch 들은 `x-admin-password` 헤더를 떼고 **세션 쿠키 자동 전송**에 의존(401/403 시 안내 문구).
 - **화면**: `/login`(브랜드 히어로+폼 스플릿), `/accounts`(계정 목록·생성/수정/비번초기화/삭제, 권한 3택 카드), `/403`. `/agent` 헤더의 리포트/관리자 버튼은 서버에서 세션 권한으로 조건부 노출.
 - **기존 PUT 게이트 교체**: `/api/profile`=ADMIN, `/api/event-fabs`=BR, `/api/request-failures`=BR (모두 `requireRole`). `/admin`·`/report`·`/event-fabs`·`/improvement` 페이지의 `AdminGate` 래퍼 제거(미들웨어가 인가). **삭제된 파일**: `src/components/AdminGate.tsx`, `src/lib/adminAuth.ts` (⚠️ 사내 복붙 배포는 삭제가 전파 안 되니 그쪽 레포에서도 지울 것 — memory `deploy-copy-paste-sync`).
 
+### ⚠️ TEMP — 비밀번호 강제 변경 비활성 (되살리기 전제)
+
+**배경**: 아직 권한별로 실질 동작하는 로직이 적어 로그인/권한 자체의 중요도가 낮고, 내부 인원끼리만
+쓰는 단계라 "최초 로그인 시 비밀번호 강제 변경" 이 번거로움만 됐다. 그래서 **임시로 비활성**했다
+(기능 폐기가 아님 — 외부/타 조직에 열 때 되살릴 것).
+
+**현재 동작**: 계정 생성·관리자 초기화 후에도 **사번(또는 지정한 값) 그대로 로그인**하고, 변경은
+사용자 메뉴 → "비밀번호 변경" 에서 자율로만 한다. `TRX_USER_MAS.MUST_CHG_YN` 컬럼/제약은 **그대로
+두되 앱은 항상 `'N'` 만 쓰고 읽지 않는다** (기존 `'Y'` 행이 남아 있어도 무해).
+
+**비활성 지점** (`// TEMP` / `⚠️ TEMP` 주석):
+- `src/lib/users.ts` — `ensureSeedAdmin`/`createUser` INSERT 가 `'N'` 고정, `resetPassword` 가 `MUST_CHG_YN='N'`. `UserAccount.mustChangePw` 와 `CreateUserInput.mustChangePw`, `SELECT_COLS` 의 `MUST_CHG_YN` 은 제거됨.
+- `src/components/auth/ChangePasswordModal.tsx` — `forced` prop 제거(항상 닫기 가능).
+- `src/components/auth/UserMenu.tsx` — `mustChangePw` 일 때 강제 모달을 띄우던 렌더 제거.
+- `src/app/api/auth/me/route.ts` — 강제 여부 확인용 `getUser()` 재조회 제거(로그인마다 DB 1회 절약).
+- `src/app/api/auth/login/route.ts`·`src/components/auth/AuthProvider.tsx`(`SessionUser`)·`src/app/accounts/page.tsx`(`Account` + "PW" 배지, `.acct-flag` CSS) — `mustChangePw` 필드/표시 제거.
+
+**되살리는 법**: 위 지점을 역순으로 복원한다 — `MUST_CHG_YN` 을 `SELECT_COLS`/`UserAccount` 에 다시 넣고
+(생성 시 `'Y'`, `resetPassword` `'Y'`), `/api/auth/me` 가 계정을 되읽어 `mustChangePw` 를 내리게 한 뒤,
+`ChangePasswordModal` 의 `forced` 모드(닫기 불가 + 안내문)와 `UserMenu` 의 강제 렌더를 되살린다.
+DB 마이그레이션은 불필요(컬럼 유지). 되살릴 땐 남아 있는 `'Y'` 행을 한 번 정리할지 판단할 것.
+
 ### ⚠️ 클라이언트 API 호출 규칙 — 원시 `fetch` 금지 (`src/lib/apiClient.ts`)
 
-세션은 12시간이라 **화면을 열어둔 채 하루를 넘기면 만료**된다. 페이지 '이동' 은 미들웨어가
+세션은 7일(고정 만료)이라 **화면을 오래 열어두면 결국 만료**된다. 페이지 '이동' 은 미들웨어가
 `/login` 으로 리다이렉트해 주지만, **이미 떠 있는 탭의 fetch 는 리다이렉트가 아니라 401 JSON
 (`{error}`)** 을 받는다. 화면이 `res.ok` 를 안 보고 `await res.json()` 결과를 그대로 상태에
 넣으면 기대한 배열이 `undefined` 가 되어 렌더에서 죽는다 (실제 사례: Traces 화면의

@@ -9,7 +9,6 @@ export interface SessionUser {
   userId: string;
   name: string;
   role: Role;
-  mustChangePw: boolean;
 }
 
 interface AuthContextValue {

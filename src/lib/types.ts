@@ -536,6 +536,18 @@ export interface RequestFailureContextItem {
   httpStsCd: string | null;
   recvMsgCtn: string | null;
   respMsgCtn: string | null;
+  /**
+   * 사용자 관점의 질문(Q). 사용자 I/F 레이어인 CUBE 의 SEND_MSG_CTN 이 권위값이다.
+   * CUBE 를 못 읽는 경우(미구성 등) TRX_TOKEN_DET.QUERY_CTN 으로 폴백하고,
+   * 그마저 없으면 null → 화면이 RECV_MSG_CTN 을 보여준다.
+   */
+  queryCtn: string | null;
+  /**
+   * 사용자 관점의 최종 응답(A) = CUBE 의 RESP_MSG_CTN.
+   * CUBE 가 사용자 I/F 라 이 값이 사용자가 실제로 받은 답이다. 하위 레이어의
+   * RESP_MSG_CTN(예: GAIA)은 다운스트림 툴 응답이므로 A 가 아니다.
+   */
+  answerCtn: string | null;
   /** ACTION_TYP 이 없어 이 요청도 실패(라우팅 실패)인가 */
   isFailure: boolean;
   /** 지금 선택한(중심) 실패 요청인가 */

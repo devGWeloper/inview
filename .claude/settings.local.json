@@ -62,7 +62,10 @@
       "PowerShell(git checkout *)",
       "Bash(node -e \"const{scryptSync,randomBytes}=require\\('crypto'\\);const pw=process.argv[1];const salt=randomBytes\\(16\\).toString\\('hex'\\);const hash=scryptSync\\(pw,salt,64\\).toString\\('hex'\\);console.log\\('PW   :',pw\\);console.log\\('SALT :',salt\\);console.log\\('HASH :',hash\\);\" admin1234)",
       "Bash(node -e \"const{scryptSync,timingSafeEqual}=require\\('crypto'\\);const salt='b5542b3d790dde900ed3b0025e1791c8';const hash='217ec34dd022a2a46cdeefea613bad4639a2c14c0a4adee9d959f7c0c0b6197c4436fef83e4f1d093a8a67a337c7608cde698fa5298ffb3bf8e25006e993da2f';console.log\\('match:',timingSafeEqual\\(Buffer.from\\(hash,'hex'\\),scryptSync\\('admin1234',salt,64\\)\\)\\);\")",
-      "Bash(git diff *)"
+      "Bash(git diff *)",
+      "Bash(grep -nA8 '^\\\\.json-content' src/app/globals.css)",
+      "PowerShell(Start-Process \"http://127.0.0.1:8099/__harness.html\"; \"opened\")",
+      "PowerShell($c = Get-NetTCPConnection -LocalPort 8099 -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { $c.OwningProcess | Select-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue; \"killed PID $_\" } } else { \"8099 리스너 없음\" })"
     ]
   }
 }

@@ -1,10 +1,11 @@
-import { getAppDbConfig, APP_DB_LAYER } from "./config";
+import { getAppDbConfig, APP_DB_LAYER, loadConfig } from "./config";
 import {
   RequestFailure,
   FailureStatus,
   FailureStatusCounts,
   RequestFailureContextItem,
   FAILURE_STATUSES,
+  LAYER_ORDER,
 } from "./types";
 import { logger } from "./logger";
 
@@ -78,6 +79,14 @@ interface RawFailure {
 
 const s = (r: Record<string, unknown>, k: string): string | null =>
   (r[k] ?? r[k.toLowerCase()] ?? null) as string | null;
+
+/**
+ * 사용자 I/F 레이어 = 요청 경로의 첫 레이어(CUBE).
+ * 사용자는 이 레이어와만 대화하므로 **CUBE 의 SEND_MSG_CTN = 사용자가 던진 질문(Q),
+ * RESP_MSG_CTN = 사용자가 받은 최종 응답(A)** 이다. 하위 레이어의 RESP 는 다운스트림
+ * 툴 응답이라 A 가 아니다. 경로가 바뀌어도 LAYERS 배열만 고치면 따라온다.
+ */
+const USER_IF_LAYER = LAYER_ORDER[0];
 
 /**
  * 숫자 파라미터를 [min,max] 로 클램프. `??` 만 쓰면 Number("abc") = NaN 이 그대로
@@ -293,6 +302,72 @@ export async function saveRequestFailureHandling(input: {
 }
 
 /**
+ * 사용자 관점 Q/A 를 CUBE(= USER_IF_LAYER) 에서 붙인다.
+ *   Q = SEND_MSG_CTN (가장 이른 non-null), A = RESP_MSG_CTN (가장 늦은 non-null)
+ * CUBE 는 앱 자체 DB(GAIA)와 **다른 DB** 라 커넥션을 따로 연다 — monthlyActionSuccess
+ * 가 쓰는 CUBE+GAIA 크로스 조회와 같은 방식(조회 후 TRACE_ID 로 JS 조인).
+ * 실패하면 조용히 넘긴다: Q 는 TRX_TOKEN_DET 폴백이 있고 A 는 비면 화면이 안내한다.
+ */
+async function attachUserFacingQa(
+  oracle: typeof import("oracledb"),
+  items: RequestFailureContextItem[]
+): Promise<void> {
+  const ids = items.map((i) => i.traceId).filter(Boolean);
+  if (ids.length === 0) return;
+
+  const cfg = loadConfig().layers[USER_IF_LAYER] ?? null;
+  if (!cfg) {
+    logger.warn("attachUserFacingQa: 사용자 I/F 레이어 DB 미구성 — Q/A 없이 표시", { layer: USER_IF_LAYER });
+    return;
+  }
+
+  let conn: Awaited<ReturnType<typeof oracle.getConnection>> | undefined;
+  try {
+    conn = await oracle.getConnection(cfg);
+    const binds: Record<string, unknown> = {};
+    const placeholders = ids
+      .map((id, i) => {
+        binds[`t${i}`] = id;
+        return `:t${i}`;
+      })
+      .join(", ");
+    const res = await conn.execute(
+      // KEEP DENSE_RANK: NVL2 로 non-null 을 먼저(Q) / 나중(A) 로 몰아 시각 순으로 고른다.
+      `SELECT TRACE_ID,
+              MAX(SEND_MSG_CTN) KEEP (DENSE_RANK FIRST ORDER BY NVL2(SEND_MSG_CTN, 0, 1), SEND_TM) AS QCTN,
+              MAX(RESP_MSG_CTN) KEEP (DENSE_RANK LAST  ORDER BY NVL2(RESP_MSG_CTN, 1, 0), RESP_TM) AS ACTN
+         FROM BIZ_AIACTIONTXN_HIS
+        WHERE TRACE_ID IN (${placeholders})
+        GROUP BY TRACE_ID`,
+      binds,
+      { outFormat: oracle.OBJECT }
+    );
+    const map = new Map<string, { q: string | null; a: string | null }>();
+    for (const r of (res.rows ?? []) as Record<string, unknown>[]) {
+      const id = s(r, "TRACE_ID");
+      if (id) map.set(id, { q: s(r, "QCTN"), a: s(r, "ACTN") });
+    }
+    let withA = 0;
+    for (const it of items) {
+      const hit = map.get(it.traceId);
+      if (!hit) continue;
+      if (hit.q) it.queryCtn = hit.q; // CUBE SEND 가 권위 — 폴백을 덮는다
+      if (hit.a) {
+        it.answerCtn = hit.a;
+        withA += 1;
+      }
+    }
+    logger.info("attachUserFacingQa ok", { layer: USER_IF_LAYER, traces: map.size, withAnswer: withA });
+  } catch (e) {
+    logger.warn("attachUserFacingQa failed — Q/A 없이 표시", { layer: USER_IF_LAYER, err: String(e) });
+  } finally {
+    if (conn) {
+      try { await conn.close(); } catch { /* ignore */ }
+    }
+  }
+}
+
+/**
  * 특정 실패 요청 주변의 "사용자 요청 흐름".
  * 중심 요청의 USER_ID·수신시각을 찾고, 같은 사용자가 그 앞뒤(±windowHours)로 낸 요청들을
  * GAIA(BIZ)에서 TRACE_ID 단위로 묶어 시간순으로 돌려준다. 라우팅 실패(ACTION_TYP 없음)한
@@ -410,10 +485,53 @@ export async function fetchRequestFailureContext(
         httpStsCd: s(r, "HTTP_STS_CD"),
         recvMsgCtn: s(r, "RECV_MSG_CTN"),
         respMsgCtn: s(r, "RESP_MSG_CTN"),
+        queryCtn: null,
+        answerCtn: null,
         isFailure: !actionTyp,
         isCenter: id === traceId,
       };
     });
+
+    // 3) 질의 폴백 — CUBE 를 못 읽을 때만 쓰는 LLM 프롬프트(QUERY_CTN).
+    //    TRX_TOKEN_DET 도 앱 자체 DB(GAIA)라 같은 커넥션에서 배치로 붙인다.
+    //    tokens.ts 의 '원본 질의' 집계와 같은 규칙(non-null 우선 → 첫 호출).
+    //    테이블 미생성/미적재여도 흐름은 그대로 보여야 하므로 격리 실행한다.
+    const ids = items.map((i) => i.traceId).filter(Boolean);
+    if (ids.length > 0) {
+      try {
+        const qBinds: Record<string, unknown> = {};
+        const placeholders = ids
+          .map((id, i) => {
+            qBinds[`t${i}`] = id;
+            return `:t${i}`;
+          })
+          .join(", ");
+        const qres = await conn.execute(
+          `SELECT TRACE_ID,
+                  MIN(QUERY_CTN) KEEP (DENSE_RANK FIRST ORDER BY NVL2(QUERY_CTN, 0, 1), CALL_TM) AS QCTN
+             FROM TRX_TOKEN_DET
+            WHERE TRACE_ID IN (${placeholders})
+            GROUP BY TRACE_ID`,
+          qBinds,
+          { outFormat: oracle.OBJECT }
+        );
+        const qmap = new Map<string, string>();
+        for (const r of (qres.rows ?? []) as Record<string, unknown>[]) {
+          const id = s(r, "TRACE_ID");
+          const q = s(r, "QCTN");
+          if (id && q) qmap.set(id, q);
+        }
+        for (const it of items) it.queryCtn = qmap.get(it.traceId) ?? null;
+      } catch (e) {
+        logger.warn("fetchRequestFailureContext [query] TRX_TOKEN_DET unavailable — 질의문 없이 표시", {
+          traceId,
+          err: String(e),
+        });
+      }
+    }
+
+    // 4) 사용자 관점 Q/A — CUBE(사용자 I/F) 의 SEND/RESP. 권위값이라 3) 의 폴백을 덮는다.
+    await attachUserFacingQa(oracle, items);
 
     logger.info("fetchRequestFailureContext ok", { traceId, userId, centerTm, items: items.length, windowHours });
     return { userId, items, available: true };

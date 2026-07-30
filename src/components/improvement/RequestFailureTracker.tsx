@@ -1,15 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { TraceTimeline } from "@/components/TraceTimeline";
 import {
   FAILURE_STATUSES,
   FailureStatus,
   RequestFailure,
   RequestFailureListResponse,
+  RequestFailureContextItem,
   RequestFailureContextResponse,
-  TraceDetailResponse,
-  TraceRow,
 } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 
@@ -56,6 +54,39 @@ function snippet(s: string | null, n = 140): string {
   if (!s) return "";
   const t = s.replace(/\s+/g, " ").trim();
   return t.length > n ? t.slice(0, n) + "…" : t;
+}
+
+// CUBE 의 SEND/RESP 는 보통 JSON envelope 이다. 대화로 읽히게 사람이 읽는 문장만 뽑고,
+// 못 찾으면 원문을 그대로 둔다(말풍선이 pre-wrap 이라 잘리지 않는다).
+const TEXT_KEYS = [
+  "query", "question", "message", "msg", "text", "content",
+  "answer", "reply", "response", "result", "output",
+];
+function humanText(raw: string | null): string {
+  if (!raw) return "";
+  const t = raw.trim();
+  if (!t.startsWith("{") && !t.startsWith("[")) return t;
+  try {
+    const seen = new Set<unknown>();
+    const walk = (v: unknown, depth: number): string => {
+      if (typeof v === "string") return v.trim();
+      if (!v || typeof v !== "object" || depth > 3 || seen.has(v)) return "";
+      seen.add(v);
+      const o = v as Record<string, unknown>;
+      for (const k of TEXT_KEYS) {
+        const hit = o[k];
+        if (typeof hit === "string" && hit.trim()) return hit.trim();
+      }
+      for (const nested of Object.values(o)) {
+        const found = walk(nested, depth + 1);
+        if (found) return found;
+      }
+      return "";
+    };
+    return walk(JSON.parse(t), 0) || t;
+  } catch {
+    return t; // JSON 이 아니면 원문
+  }
 }
 
 export function RequestFailureTracker() {
@@ -459,15 +490,12 @@ function UserFlow({ traceId, errMap }: { traceId: string; errMap: Record<string,
   const [ctx, setCtx] = useState<RequestFailureContextResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [rows, setRows] = useState<TraceRow[]>([]);
-  const [rowsLoading, setRowsLoading] = useState(false);
   // 흐름 조회 실패 사유 (세션 만료·권한·DB 오류) — 빈 흐름과 구분해 보여준다.
   const [flowErr, setFlowErr] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    setExpanded(null);
     apiJson<RequestFailureContextResponse>(
       `/api/request-failures/${encodeURIComponent(traceId)}/context`, { cache: "no-store" }
     )
@@ -485,23 +513,12 @@ function UserFlow({ traceId, errMap }: { traceId: string; errMap: Record<string,
     return () => { alive = false; };
   }, [traceId]);
 
-  const toggle = useCallback((id: string) => {
-    if (expanded === id) { setExpanded(null); return; }
-    setExpanded(id);
-    setRowsLoading(true);
-    setRows([]);
-    apiJson<TraceDetailResponse>(`/api/traces/${encodeURIComponent(id)}`, { cache: "no-store" })
-      .then((d) => setRows(asArray<TraceRow>(d.rows)))
-      .catch(() => setRows([]))
-      .finally(() => setRowsLoading(false));
-  }, [expanded]);
-
-  const items = ctx?.items ?? [];
+  const items = asArray<RequestFailureContextItem>(ctx?.items);
 
   return (
     <div className="rft-flow">
       <div className="rft-flow-head">
-        <span className="rft-flow-title">사용자 요청 흐름</span>
+        <span className="rft-flow-title">사용자 대화 흐름</span>
         <span className="rft-flow-sub">
           {ctx?.userId ? `${ctx.userId} · 앞뒤 ±12시간` : "같은 사용자의 앞뒤 요청"}
         </span>
@@ -516,44 +533,42 @@ function UserFlow({ traceId, errMap }: { traceId: string; errMap: Record<string,
         </div>
       )}
       {!loading && items.length > 0 && (
-        <ol className="rft-flow-list">
+        <ol className="rft-chat">
           {items.map((f) => {
-            const isOpen = expanded === f.traceId;
+            // Q/A = 사용자 I/F(CUBE) 의 SEND/RESP. Q 는 없으면 수신 메시지로 폴백.
+            const q = humanText(f.queryCtn) || snippet(f.recvMsgCtn, 400);
+            const a = humanText(f.answerCtn);
+            const mean = f.errCd ? errMap[f.errCd] : "";
             return (
-              <li
-                key={f.traceId}
-                className={
-                  "rft-flow-node" +
-                  (f.isCenter ? " center" : "") +
-                  (f.isFailure ? " failure" : " ok") +
-                  (isOpen ? " open" : "")
-                }
-              >
-                <span className="rft-flow-rail" aria-hidden>
-                  <span className="rft-flow-mark" />
-                </span>
-                <button type="button" className="rft-flow-card" onClick={() => toggle(f.traceId)}>
-                  <span className="rft-flow-card-top">
-                    <span className="rft-flow-time">{fmtTs(f.recvTm).slice(11) || fmtTs(f.recvTm)}</span>
+              <li key={f.traceId} className={"rft-turn" + (f.isCenter ? " center" : "")}>
+                <div className="rft-msg q">
+                  <div className="rft-msg-meta">
+                    <span className="rft-msg-time">{fmtTs(f.recvTm).slice(11) || fmtTs(f.recvTm)}</span>
                     {f.isCenter && <span className="rft-flow-here">이 요청</span>}
+                  </div>
+                  <div className="rft-bubble q">{q || <em>질의 내용 없음</em>}</div>
+                </div>
+
+                <div className="rft-msg a">
+                  <div className="rft-msg-meta">
                     {f.isFailure ? (
                       <span className="rft-flow-badge fail">{f.errCd || "라우팅 실패"}</span>
                     ) : (
                       <span className="rft-flow-badge ok">{f.actionTyp}</span>
                     )}
                     {f.httpStsCd && <span className="rft-flow-http">HTTP {f.httpStsCd}</span>}
-                    <span className="rft-flow-toggle">{isOpen ? "접기 ▲" : "상세 ▼"}</span>
-                  </span>
-                  <span className="rft-flow-msg">{snippet(f.recvMsgCtn, 120) || <em>메시지 없음</em>}</span>
-                  {f.isFailure && f.errCd && errMap[f.errCd] && (
-                    <span className="rft-flow-mean">{errMap[f.errCd]}</span>
-                  )}
-                </button>
-                {isOpen && (
-                  <div className="rft-flow-detail">
-                    <TraceTimeline traceId={f.traceId} rows={rows} loading={rowsLoading} />
                   </div>
-                )}
+                  {/* A = CUBE RESP_MSG_CTN(사용자가 받은 최종 응답). 없을 때만 에러 의미
+                      → 안내 문구 순으로 내려간다. */}
+                  <div className={"rft-bubble a" + (f.isFailure ? " fail" : "")}>
+                    {a || mean || (
+                      <span className="rft-bubble-none">
+                        {f.isFailure ? "응답 없이 실패" : "응답 기록 없음"}
+                      </span>
+                    )}
+                  </div>
+                  {a && mean && <span className="rft-msg-mean">{mean}</span>}
+                </div>
               </li>
             );
           })}

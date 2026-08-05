@@ -65,7 +65,15 @@
       "Bash(git diff *)",
       "Bash(grep -nA8 '^\\\\.json-content' src/app/globals.css)",
       "PowerShell(Start-Process \"http://127.0.0.1:8099/__harness.html\"; \"opened\")",
-      "PowerShell($c = Get-NetTCPConnection -LocalPort 8099 -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { $c.OwningProcess | Select-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue; \"killed PID $_\" } } else { \"8099 리스너 없음\" })"
+      "PowerShell($c = Get-NetTCPConnection -LocalPort 8099 -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { $c.OwningProcess | Select-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue; \"killed PID $_\" } } else { \"8099 리스너 없음\" })",
+      "Bash(node -e ' *)",
+      "Bash(taskkill //FI \"WINDOWTITLE eq *4321*\" //F)",
+      "Bash(taskkill *)",
+      "Bash(node -e \"require\\('oracledb'\\);console.log\\('oracledb OK'\\)\")",
+      "Bash(node \"C:/Users/10333/AppData/Local/Temp/claude/C--Users-10333-Desktop-AI-inview/8e4e6891-0550-4878-aeb1-a4bc73825231/scratchpad/probe.js\")",
+      "Bash(NODE_PATH=\"C:/Users/10333/Desktop/AI/inview/node_modules\" node \"C:/Users/10333/AppData/Local/Temp/claude/C--Users-10333-Desktop-AI-inview/8e4e6891-0550-4878-aeb1-a4bc73825231/scratchpad/probe.js\")",
+      "Bash(NODE_PATH=./node_modules node -e ' *)",
+      "Bash(node *)"
     ]
   }
 }

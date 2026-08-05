@@ -89,19 +89,15 @@ export default function TokensPage() {
 
   useEffect(() => { load(computeFilter()); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
-  // 질문 행 펼침: 현재 필터 + traceId 로 그 질문의 호출별 행을 가져온다.
+  // 질문 행 펼침: traceId 로만 그 질문의 호출별 행을 가져온다.
+  // 화면 필터(기간/노드/모델)를 같이 보내지 않는 이유: 한 질문을 펼치면 그 질문이 거친 호출
+  // 전부가 보여야 한다. 특히 프리셋 기간은 호출 시점의 Date.now() 로 계산되므로, 같이 보내면
+  // 화면을 띄운 뒤 시간이 흐른 만큼 창이 밀려 같은 질문의 호출이 잘려 보였다.
   const fetchCalls = useCallback(async (traceId: string): Promise<TokenRow[]> => {
-    const f = computeFilter();
-    const query = new URLSearchParams();
-    if (f.dateFrom) query.set("dateFrom", f.dateFrom);
-    if (f.dateTo) query.set("dateTo", f.dateTo);
-    if (f.userId) query.set("userId", f.userId);
-    if (f.nodeNm) query.set("nodeNm", f.nodeNm);
-    if (f.modelNm) query.set("modelNm", f.modelNm);
-    query.set("traceId", traceId);
+    const query = new URLSearchParams({ traceId });
     const data = await apiJson<TokenStatsResponse>(`/api/tokens?${query.toString()}`, { cache: "no-store" });
     return asArray<TokenRow>(data.calls);
-  }, [computeFilter]);
+  }, []);
 
   const onApply = (e: React.FormEvent) => {
     e.preventDefault();

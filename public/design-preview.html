@@ -1,0 +1,1457 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TraceX · 레이아웃 개편 시안 4종</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════════════
+   시안 뷰어 크롬 (어느 시안에도 속하지 않는 중립 셸)
+   ═══════════════════════════════════════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:#0e1116;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR","Malgun Gothic",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.vw-bar{
+  position:sticky; top:0; z-index:9000;
+  height:56px; padding:0 16px;
+  background:#12161d; border-bottom:1px solid #232a35;
+  display:flex; align-items:center; gap:14px;
+}
+.vw-brand{display:flex;align-items:center;gap:9px;color:#e7ebf2;font-size:13px;font-weight:700;letter-spacing:.2px;white-space:nowrap}
+.vw-brand em{font-style:normal;color:#7d8798;font-weight:500}
+.vw-dot{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);display:grid;place-items:center;font-size:11px}
+.vw-tabs{display:flex;gap:6px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none}
+.vw-tabs::-webkit-scrollbar{display:none}
+.vw-tab{
+  appearance:none;border:1px solid #232a35;background:#171c25;color:#98a3b4;
+  border-radius:8px;padding:6px 12px 7px;cursor:pointer;text-align:left;white-space:nowrap;
+  display:flex;flex-direction:column;gap:1px;line-height:1.25;transition:.14s;
+}
+.vw-tab b{font-size:12.5px;font-weight:650;color:#c6cede}
+.vw-tab span{font-size:10.5px;color:#6d7686;letter-spacing:.1px}
+.vw-tab:hover{border-color:#33404f;background:#1b212c}
+.vw-tab.on{background:#1e293b;border-color:#3b82f6;box-shadow:0 0 0 1px rgba(59,130,246,.35)}
+.vw-tab.on b{color:#fff}
+.vw-tab.on span{color:#8fb4f5}
+.vw-tab kbd{
+  position:absolute;opacity:0;
+}
+.vw-actions{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.vw-btn{
+  appearance:none;border:1px solid #2a3341;background:#171c25;color:#aeb8c7;
+  font-size:12px;border-radius:7px;padding:7px 12px;cursor:pointer;transition:.14s;
+}
+.vw-btn:hover{background:#1f2733;color:#e7ebf2}
+.vw-btn.on{background:#3b82f6;border-color:#3b82f6;color:#fff}
+.vw-hint{font-size:11px;color:#5c6675;letter-spacing:.2px}
+
+/* 설명 드로어 */
+.vw-note{
+  display:none; background:#12161d; border-bottom:1px solid #232a35;
+  padding:18px 20px 20px; color:#aab4c3;
+}
+.vw-note.open{display:block}
+.vw-note h3{margin:0 0 4px;font-size:14px;color:#e7ebf2;letter-spacing:-.1px}
+.vw-note .lead{margin:0 0 14px;font-size:12.5px;color:#7d8798;line-height:1.6}
+.vw-note-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.vw-note-card{background:#171c25;border:1px solid #232a35;border-radius:9px;padding:12px 13px}
+.vw-note-card b{display:block;font-size:11px;color:#8fb4f5;letter-spacing:.6px;text-transform:uppercase;margin-bottom:5px}
+.vw-note-card p{margin:0;font-size:12px;line-height:1.65;color:#98a3b4}
+.vw-note-card p + p{margin-top:6px}
+.vw-note-card u{text-decoration:none;color:#d6dde8;font-weight:600}
+
+.vw-stage{min-height:calc(100dvh - 56px)}
+.design{display:none}
+.design.on{display:block}
+/* 레일/사이드바를 쓰는 시안은 grid 로 (.design.on 의 block 을 덮어씀) */
+.design.on.d-binance,
+.design.on.d-bmw{display:grid}
+.mock-nolink{cursor:default}
+
+/* 시안 공통: 목업 안의 클릭 안 되는 요소 표시 억제 */
+.design button,.design a{font:inherit;cursor:pointer;text-decoration:none}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   시안 A — APPLE : "Executive Canvas"
+   전폭 밴드 스택. 스크롤 = 한 편의 보고서.
+   ═══════════════════════════════════════════════════════════════════════ */
+.d-apple{
+  --blue:#0066cc; --blue-dk:#2997ff;
+  --ink:#1d1d1f; --ink80:#333; --ink48:#7a7a7a;
+  --canvas:#fff; --parch:#f5f5f7; --pearl:#fafafc;
+  --tile:#272729; --tile2:#2a2a2c; --hair:#e0e0e0;
+  background:var(--canvas); color:var(--ink);
+  font-family:"SF Pro Text",-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;
+  letter-spacing:-.374px;
+}
+.ap-gnav{
+  position:sticky;top:56px;z-index:60;
+  height:44px;background:#000;color:#fff;
+  display:flex;align-items:center;gap:26px;padding:0 34px;
+  font-size:12px;letter-spacing:-.12px;
+}
+.ap-gnav .mark{font-weight:600;font-size:13px;letter-spacing:-.2px}
+.ap-gnav a{color:#f5f5f7;opacity:.82}
+.ap-gnav a.cur{opacity:1;font-weight:600}
+.ap-gnav .grow{flex:1}
+.ap-gnav .util{display:flex;align-items:center;gap:14px;opacity:.82}
+.ap-gnav .who{display:flex;align-items:center;gap:6px}
+.ap-gnav .who i{width:18px;height:18px;border-radius:50%;background:#3a3a3c;display:grid;place-items:center;font-style:normal;font-size:9px}
+
+.ap-subnav{
+  position:sticky;top:100px;z-index:55;height:56px;
+  background:rgba(245,245,247,.82);backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid rgba(0,0,0,.06);
+  display:flex;align-items:center;gap:18px;padding:0 34px;
+}
+.ap-subnav .who{font-size:21px;font-weight:600;letter-spacing:.231px}
+.ap-subnav .crumbs{display:flex;gap:16px;font-size:14px;color:var(--ink80);letter-spacing:-.224px}
+.ap-subnav .crumbs a.cur{color:var(--ink);font-weight:600}
+.ap-subnav .grow{flex:1}
+.ap-seg{display:flex;background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:9999px;padding:2px}
+.ap-seg button{border:0;background:transparent;border-radius:9999px;padding:6px 13px;font-size:13px;color:var(--ink80)}
+.ap-seg button.on{background:var(--ink);color:#fff}
+.ap-pill{background:var(--blue);color:#fff;border:0;border-radius:9999px;padding:9px 20px;font-size:14px}
+.ap-pill.ghost{background:transparent;color:var(--blue);border:1px solid var(--blue)}
+
+.ap-band{padding:80px 34px}
+.ap-band.parch{background:var(--parch)}
+.ap-band.dark{background:var(--tile);color:#fff}
+.ap-band.dark2{background:var(--tile2);color:#fff}
+.ap-in{max-width:1080px;margin:0 auto}
+.ap-eyebrow{font-size:14px;font-weight:600;color:var(--blue);letter-spacing:-.224px;margin-bottom:14px}
+.ap-band.dark .ap-eyebrow{color:var(--blue-dk)}
+.ap-h1{
+  font-family:"SF Pro Display",-apple-system,sans-serif;
+  font-size:56px;font-weight:600;line-height:1.07;letter-spacing:-1.2px;margin:0 0 20px;
+}
+.ap-h2{font-family:"SF Pro Display",-apple-system,sans-serif;font-size:40px;font-weight:600;line-height:1.1;letter-spacing:-.6px;margin:0 0 10px}
+.ap-lead{font-size:24px;font-weight:300;line-height:1.5;color:var(--ink80);margin:0;max-width:660px}
+.ap-band.dark .ap-lead{color:#ccc}
+.ap-ctas{display:flex;gap:14px;margin-top:30px}
+
+.ap-figures{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:64px;border-top:1px solid var(--hair)}
+.ap-fig{padding:28px 28px 4px;border-right:1px solid var(--hair)}
+.ap-fig:last-child{border-right:0}
+.ap-band.dark .ap-figures{border-color:rgba(255,255,255,.14)}
+.ap-band.dark .ap-fig{border-color:rgba(255,255,255,.14)}
+.ap-fig .n{font-family:"SF Pro Display",-apple-system,sans-serif;font-size:48px;font-weight:600;letter-spacing:-1.4px;line-height:1.05;display:block}
+.ap-fig .n small{font-size:22px;font-weight:400;letter-spacing:-.3px;margin-left:3px;color:var(--ink48)}
+.ap-band.dark .ap-fig .n small{color:#8e8e93}
+.ap-fig .k{font-size:17px;color:var(--ink80);margin-top:8px}
+.ap-band.dark .ap-fig .k{color:#ccc}
+.ap-fig .d{font-size:14px;color:var(--ink48);margin-top:3px;letter-spacing:-.224px}
+
+.ap-chartwrap{margin-top:44px}
+.ap-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:44px}
+.ap-card{background:#fff;border:1px solid var(--hair);border-radius:18px;padding:24px}
+.ap-band.dark .ap-card{background:var(--tile2);border-color:rgba(255,255,255,.1)}
+.ap-card .t{font-size:17px;font-weight:600;margin-bottom:4px}
+.ap-card .s{font-size:14px;color:var(--ink48);margin-bottom:16px}
+.ap-band.dark .ap-card .s{color:#8e8e93}
+.ap-card .big{font-family:"SF Pro Display",sans-serif;font-size:34px;font-weight:600;letter-spacing:-.8px}
+.ap-card a{color:var(--blue);font-size:17px}
+.ap-band.dark .ap-card a{color:var(--blue-dk)}
+
+.ap-two{display:grid;grid-template-columns:1fr 1fr;gap:60px;margin-top:44px}
+.ap-list{list-style:none;margin:0;padding:0}
+.ap-list li{display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid var(--hair)}
+.ap-band.dark .ap-list li{border-color:rgba(255,255,255,.1)}
+.ap-list .lbl{font-size:17px;min-width:110px}
+.ap-list .bar{flex:1;height:6px;border-radius:9999px;background:rgba(0,0,0,.07);overflow:hidden}
+.ap-band.dark .ap-list .bar{background:rgba(255,255,255,.14)}
+.ap-list .bar i{display:block;height:100%;background:var(--blue);border-radius:9999px}
+.ap-band.dark .ap-list .bar i{background:var(--blue-dk)}
+.ap-list .val{font-size:17px;font-variant-numeric:tabular-nums;min-width:74px;text-align:right}
+.ap-list .pct{font-size:14px;color:var(--ink48);min-width:48px;text-align:right}
+
+.ap-foot{background:var(--parch);padding:56px 34px 40px;color:var(--ink80);font-size:12px}
+.ap-foot-in{max-width:1080px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:30px}
+.ap-foot h4{font-size:14px;font-weight:600;color:var(--ink);margin:0 0 6px}
+.ap-foot ul{list-style:none;margin:0;padding:0}
+.ap-foot li{line-height:2.1;font-size:12px}
+.ap-foot a{color:var(--ink80)}
+.ap-legal{max-width:1080px;margin:34px auto 0;padding-top:16px;border-top:1px solid var(--hair);font-size:12px;color:var(--ink48)}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   시안 B — BINANCE : "Ops Console"
+   좌측 아이콘 레일 + 실시간 티커 + 8/4 고밀도 그리드.
+   ═══════════════════════════════════════════════════════════════════════ */
+.d-binance{
+  --y:#fcd535; --y2:#f0b90b;
+  --bg:#0b0e11; --card:#1e2329; --up1:#2b3139;
+  --tx:#eaecef; --mut:#707a8a; --mut2:#929aa5;
+  --up:#0ecb81; --dn:#f6465d;
+  background:var(--bg);color:var(--tx);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif;
+  min-height:calc(100dvh - 56px);
+  grid-template-columns:68px 1fr; /* display:grid 는 .design.on.d-binance 에서 */
+}
+.bn-num{font-family:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+
+.bn-rail{
+  background:#0b0e11;border-right:1px solid #1c2127;
+  padding:12px 0;display:flex;flex-direction:column;align-items:center;gap:4px;
+  position:sticky;top:56px;height:calc(100dvh - 56px);
+}
+.bn-logo{width:36px;height:36px;border-radius:9px;background:var(--y);display:grid;place-items:center;color:#181a20;font-weight:800;font-size:15px;margin-bottom:12px}
+.bn-grp{font-size:8.5px;color:#4b5563;letter-spacing:.9px;text-transform:uppercase;margin:12px 0 3px}
+.bn-ic{
+  width:46px;height:42px;border-radius:8px;border:0;background:transparent;color:var(--mut);
+  display:grid;place-items:center;gap:2px;position:relative;font-size:9px;line-height:1;
+}
+.bn-ic svg{display:block}
+.bn-ic em{font-style:normal;font-size:8.5px;letter-spacing:-.2px}
+.bn-ic:hover{background:var(--up1);color:var(--tx)}
+.bn-ic.on{background:rgba(252,213,53,.12);color:var(--y)}
+.bn-ic.on::before{content:"";position:absolute;left:-11px;top:9px;bottom:9px;width:3px;border-radius:0 3px 3px 0;background:var(--y)}
+.bn-ic .badge{
+  position:absolute;top:2px;right:2px;min-width:15px;height:15px;padding:0 4px;border-radius:9999px;
+  background:var(--dn);color:#fff;font-size:9px;font-weight:700;display:grid;place-items:center;
+}
+.bn-rail .spacer{flex:1}
+
+.bn-main{min-width:0;display:flex;flex-direction:column}
+.bn-top{
+  height:56px;border-bottom:1px solid #1c2127;background:#0b0e11;
+  display:flex;align-items:center;gap:14px;padding:0 18px;position:sticky;top:56px;z-index:40;
+}
+.bn-search{
+  flex:1;max-width:420px;height:36px;background:var(--card);border:1px solid #262d36;border-radius:8px;
+  display:flex;align-items:center;gap:9px;padding:0 12px;color:var(--mut);font-size:13px;
+}
+.bn-search kbd{margin-left:auto;background:var(--up1);border-radius:4px;padding:2px 6px;font-size:10px;color:var(--mut2);font-family:inherit}
+.bn-chip{
+  display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:6px;
+  background:var(--card);border:1px solid #262d36;font-size:12px;color:var(--tx);
+}
+.bn-chip .dot{width:6px;height:6px;border-radius:50%;background:var(--up);box-shadow:0 0 0 3px rgba(14,203,129,.15)}
+.bn-chip.live .dot{animation:bnpulse 1.8s infinite}
+@keyframes bnpulse{0%,100%{opacity:1}50%{opacity:.35}}
+.bn-btn{height:32px;padding:0 14px;border-radius:6px;border:0;background:var(--y);color:#181a20;font-size:13px;font-weight:600}
+.bn-btn.sec{background:var(--card);color:var(--tx);border:1px solid #262d36;font-weight:500}
+.bn-avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#f0b90b,#fcd535);color:#181a20;display:grid;place-items:center;font-size:11px;font-weight:700}
+
+.bn-ticker{
+  height:42px;border-bottom:1px solid #1c2127;background:#0d1116;
+  display:flex;align-items:center;gap:0;padding:0 18px;overflow:hidden;
+}
+.bn-tk{display:flex;align-items:baseline;gap:7px;padding:0 20px;border-right:1px solid #191f26;white-space:nowrap}
+.bn-tk:first-child{padding-left:0}
+.bn-tk .k{font-size:11px;color:var(--mut)}
+.bn-tk .v{font-size:14px;font-weight:600}
+.bn-tk .d{font-size:11px}
+.bn-up{color:var(--up)}.bn-dn{color:var(--dn)}.bn-y{color:var(--y)}
+
+.bn-body{padding:16px 18px 28px;display:grid;grid-template-columns:minmax(0,2.35fr) minmax(300px,1fr);gap:14px;align-items:start}
+.bn-card{background:var(--card);border-radius:12px;padding:16px 18px}
+.bn-card.tight{padding:0}
+.bn-ch{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.bn-ch h3{margin:0;font-size:16px;font-weight:600;letter-spacing:-.1px}
+.bn-ch .sub{font-size:11.5px;color:var(--mut)}
+.bn-ch .grow{flex:1}
+.bn-tabs{display:flex;gap:2px;background:#171b21;border-radius:6px;padding:2px}
+.bn-tabs button{border:0;background:transparent;color:var(--mut);font-size:12px;padding:5px 11px;border-radius:5px}
+.bn-tabs button.on{background:var(--up1);color:var(--tx)}
+.bn-stack{display:grid;gap:14px}
+
+.bn-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.bn-tbl th{
+  text-align:left;color:var(--mut);font-weight:500;font-size:11px;letter-spacing:.3px;
+  padding:9px 14px;border-bottom:1px solid #262d36;text-transform:uppercase;
+}
+.bn-tbl td{padding:11px 14px;border-bottom:1px solid #191f26;color:var(--tx)}
+.bn-tbl tr:last-child td{border-bottom:0}
+.bn-tbl .r{text-align:right}
+.bn-tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10.5px;font-weight:600;letter-spacing:.2px}
+.bn-tag.open{background:rgba(246,70,93,.14);color:var(--dn)}
+.bn-tag.doing{background:rgba(252,213,53,.14);color:var(--y)}
+.bn-tag.done{background:rgba(14,203,129,.13);color:var(--up)}
+.bn-mini{border:0;background:var(--y);color:#181a20;font-size:11px;font-weight:600;border-radius:4px;padding:4px 10px}
+
+.bn-err{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #191f26}
+.bn-err:last-child{border-bottom:0}
+.bn-err .cd{font-size:12px;font-family:ui-monospace,monospace;color:var(--tx);min-width:120px}
+.bn-err .bar{flex:1;height:4px;background:#262d36;border-radius:2px;overflow:hidden}
+.bn-err .bar i{display:block;height:100%;background:var(--dn)}
+.bn-err .n{font-size:12px;color:var(--mut2);min-width:34px;text-align:right}
+
+.bn-alert{
+  background:linear-gradient(180deg,rgba(246,70,93,.12),rgba(246,70,93,.04));
+  border:1px solid rgba(246,70,93,.3);border-radius:12px;padding:14px 16px;
+}
+.bn-alert .top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.bn-alert .top b{font-size:13px}
+.bn-alert .cnt{font-size:34px;font-weight:700;line-height:1;letter-spacing:-1px}
+.bn-alert p{margin:6px 0 12px;font-size:11.5px;color:var(--mut2);line-height:1.55}
+
+.bn-donut{display:flex;align-items:center;gap:18px}
+.bn-legend{display:grid;gap:7px;font-size:12px}
+.bn-legend div{display:flex;align-items:center;gap:8px}
+.bn-legend i{width:8px;height:8px;border-radius:2px;display:block}
+.bn-legend .n{margin-left:auto;color:var(--mut2);font-family:ui-monospace,monospace}
+
+.bn-fabgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.bn-fab{background:#171b21;border-radius:8px;padding:11px 12px}
+.bn-fab .id{font-size:11px;color:var(--mut);letter-spacing:.5px}
+.bn-fab .v{font-size:17px;font-weight:600;margin-top:2px}
+.bn-fab .p{font-size:10.5px;margin-top:1px}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   시안 C — BMW : "Corporate Precision"
+   좌측 그룹 사이드바 + 0px 라디우스 + 표 중심 정형 보고.
+   ═══════════════════════════════════════════════════════════════════════ */
+.d-bmw{
+  --bl:#1c69d4; --bl2:#0653b6;
+  --ink:#262626; --body:#3c3c3c; --mut:#6b6b6b; --mut2:#9a9a9a;
+  --hair:#e6e6e6; --hair2:#ccc;
+  --cv:#fff; --soft:#f7f7f7; --plate:#fafafa; --strong:#ebebeb;
+  --dk:#1a2129; --dk2:#262e38;
+  background:var(--cv);color:var(--body);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Roboto,sans-serif;
+  min-height:calc(100dvh - 56px);
+  grid-template-columns:264px 1fr; /* display:grid 는 .design.on.d-bmw 에서 */
+}
+.bm-up{text-transform:uppercase;letter-spacing:1.5px;font-weight:700;font-size:13px}
+
+.bm-side{border-right:1px solid var(--hair);background:var(--cv);position:sticky;top:56px;height:calc(100dvh - 56px);overflow:auto;display:flex;flex-direction:column}
+.bm-side-top{height:64px;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:10px;padding:0 22px;flex-shrink:0}
+.bm-badge{width:30px;height:30px;border-radius:50%;border:2px solid var(--ink);display:grid;place-items:center;font-size:10px;font-weight:700;color:var(--ink);letter-spacing:-.3px}
+.bm-side-top b{font-size:15px;font-weight:700;color:var(--ink);letter-spacing:.3px}
+.bm-nav{padding:22px 0 0;flex:1}
+.bm-nav .grp{padding:0 22px;font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--mut2);text-transform:uppercase;margin:22px 0 8px}
+.bm-nav .grp:first-child{margin-top:0}
+.bm-nav a{
+  display:flex;align-items:center;gap:10px;padding:9px 22px;font-size:14px;color:var(--body);
+  border-left:3px solid transparent;
+}
+.bm-nav a:hover{background:var(--soft)}
+.bm-nav a.cur{border-left-color:var(--bl);color:var(--ink);font-weight:700;background:var(--soft)}
+.bm-nav a .n{margin-left:auto;font-size:11px;color:#fff;background:var(--bl);padding:1px 6px;font-weight:700}
+.bm-nav a .n.warn{background:#dc2626}
+.bm-nav a .lk{margin-left:auto;font-size:10px;color:var(--mut2);letter-spacing:1px}
+.bm-side-foot{border-top:1px solid var(--hair);padding:14px 22px;flex-shrink:0;background:var(--plate)}
+.bm-side-foot .who{font-size:14px;font-weight:700;color:var(--ink)}
+.bm-side-foot .rl{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--bl);font-weight:700;margin-top:2px}
+.bm-side-foot .dept{font-size:12px;color:var(--mut);font-weight:300}
+
+.bm-main{min-width:0}
+.bm-top{
+  height:64px;border-bottom:1px solid var(--hair);background:var(--cv);
+  display:flex;align-items:center;gap:14px;padding:0 32px;position:sticky;top:56px;z-index:30;
+}
+.bm-crumb{display:flex;align-items:center;gap:9px;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mut)}
+.bm-crumb b{color:var(--ink)}
+.bm-crumb i{font-style:normal;color:var(--hair2)}
+.bm-top .grow{flex:1}
+.bm-sel{height:40px;border:1px solid var(--hair2);background:#fff;padding:0 14px;font-size:14px;font-weight:300;color:var(--ink);display:flex;align-items:center;gap:8px}
+.bm-btn{height:40px;padding:0 26px;border:0;background:var(--bl);color:#fff;font-size:14px;font-weight:700;letter-spacing:.5px}
+.bm-btn.sec{background:#fff;color:var(--ink);border:1px solid var(--hair2)}
+
+.bm-hero{background:var(--dk);color:#fff;padding:48px 32px}
+.bm-hero-in{max-width:1400px;margin:0 auto;display:flex;align-items:flex-end;gap:40px}
+.bm-hero .lead{flex:1;min-width:0}
+.bm-hero .eyebrow{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#bbb;font-weight:700;margin-bottom:10px}
+.bm-hero h1{margin:0;font-size:48px;font-weight:700;line-height:1.05;letter-spacing:0}
+.bm-hero p{margin:10px 0 0;font-size:16px;font-weight:300;color:#bbb;line-height:1.55}
+.bm-specs{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));border-left:1px solid rgba(255,255,255,.18)}
+.bm-spec{padding:0 26px;border-right:1px solid rgba(255,255,255,.18)}
+.bm-spec:last-child{border-right:0}
+.bm-spec .v{font-size:30px;font-weight:700;line-height:1.1;letter-spacing:0}
+.bm-spec .v small{font-size:15px;font-weight:300;color:#bbb;margin-left:2px}
+.bm-spec .k{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#bbb;font-weight:700;margin-top:7px}
+
+.bm-sec{padding:56px 32px;border-bottom:1px solid var(--hair)}
+.bm-sec.soft{background:var(--soft)}
+.bm-in{max-width:1400px;margin:0 auto}
+.bm-sh{display:flex;align-items:flex-end;gap:16px;margin-bottom:26px}
+.bm-sh h2{margin:0;font-size:32px;font-weight:700;color:var(--ink);line-height:1.15}
+.bm-sh .desc{font-size:14px;font-weight:300;color:var(--mut);margin-bottom:4px}
+.bm-sh .grow{flex:1}
+.bm-link{font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink)}
+.bm-tabs{display:flex;gap:28px;border-bottom:1px solid var(--hair);margin-bottom:26px}
+.bm-tabs button{border:0;background:transparent;padding:0 0 12px;font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--mut);border-bottom:2px solid transparent;margin-bottom:-1px}
+.bm-tabs button.on{color:var(--ink);border-bottom-color:var(--ink)}
+
+.bm-grid2{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:0;border:1px solid var(--hair)}
+.bm-cell{padding:26px;border-right:1px solid var(--hair)}
+.bm-cell:last-child{border-right:0}
+.bm-cell h3{margin:0 0 3px;font-size:18px;font-weight:700;color:var(--ink)}
+.bm-cell .cap{font-size:12px;color:var(--mut);letter-spacing:.5px;margin-bottom:20px}
+
+.bm-table{width:100%;border-collapse:collapse;font-size:14px;background:#fff}
+.bm-table th{
+  text-align:left;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--mut);padding:12px 16px;border-bottom:2px solid var(--ink);white-space:nowrap;
+}
+.bm-table td{padding:14px 16px;border-bottom:1px solid var(--hair);font-weight:300;color:var(--body)}
+.bm-table td b{font-weight:700;color:var(--ink)}
+.bm-table .r{text-align:right;font-variant-numeric:tabular-nums}
+.bm-table tr.total td{border-top:2px solid var(--ink);border-bottom:0;font-weight:700;color:var(--ink);background:var(--plate)}
+.bm-pct{display:inline-flex;align-items:center;gap:9px;justify-content:flex-end;width:100%}
+.bm-pct .b{width:70px;height:6px;background:var(--strong)}
+.bm-pct .b i{display:block;height:100%;background:var(--bl)}
+.bm-ok{color:#15803d;font-weight:700}
+.bm-bad{color:#dc2626;font-weight:700}
+.bm-flag{display:inline-block;width:8px;height:8px;background:#dc2626;margin-right:7px}
+
+.bm-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:24px}
+.bm-card{background:#fff;border-bottom:3px solid var(--ink)}
+.bm-card .plate{background:var(--plate);height:96px;display:grid;place-items:center;color:var(--mut2);font-size:11px;letter-spacing:1.5px;text-transform:uppercase}
+.bm-card .bd{padding:18px 0 20px}
+.bm-card h4{margin:0 0 5px;font-size:18px;font-weight:700;color:var(--ink)}
+.bm-card p{margin:0 0 14px;font-size:14px;font-weight:300;color:var(--mut);line-height:1.55;min-height:44px}
+
+.bm-foot{background:var(--soft);padding:56px 32px 28px}
+.bm-foot-in{max-width:1400px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:32px}
+.bm-foot h4{margin:0 0 12px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink)}
+.bm-foot ul{list-style:none;margin:0;padding:0}
+.bm-foot li{font-size:14px;font-weight:300;line-height:2;color:var(--mut)}
+.bm-foot .legal{max-width:1400px;margin:36px auto 0;padding-top:18px;border-top:1px solid var(--hair);font-size:12px;font-weight:300;color:var(--mut2);display:flex;justify-content:space-between}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   시안 D — VERCEL : "Developer Platform"
+   얕고 넓은 탭 + 커맨드 팔레트 + 헤어라인 카드 그리드.
+   ═══════════════════════════════════════════════════════════════════════ */
+.d-vercel{
+  --ink:#171717; --body:#4d4d4d; --mute:#8f8f8f; --faint:#a1a1a1;
+  --hair:#ebebeb; --hair2:#f2f2f2; --cv:#fafafa; --el:#fff;
+  --link:#0070f3;
+  background:var(--cv);color:var(--body);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Roboto,sans-serif;
+  min-height:calc(100dvh - 56px);
+}
+.vc-mono{font-family:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace}
+.vc-eyebrow{font-family:ui-monospace,monospace;font-size:12px;font-weight:500;letter-spacing:.02em;color:var(--mute);text-transform:uppercase}
+
+.vc-nav{
+  height:52px;background:var(--cv);border-bottom:1px solid var(--hair);
+  display:flex;align-items:center;gap:12px;padding:0 24px;position:sticky;top:56px;z-index:40;
+}
+.vc-tri{width:20px;height:18px;background:var(--ink);clip-path:polygon(50% 0,100% 100%,0 100%)}
+.vc-slash{color:#d4d4d4;font-size:18px;font-weight:300}
+.vc-scope{
+  display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 9px;border-radius:6px;
+  border:1px solid transparent;font-size:14px;color:var(--ink);
+}
+.vc-scope:hover{background:#f1f1f1}
+.vc-scope .av{width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#0070f3,#50e3c2)}
+.vc-scope .cv{color:var(--faint);font-size:11px}
+.vc-scope .env{font-family:ui-monospace,monospace;font-size:10.5px;letter-spacing:.4px;background:#ecf3ff;color:#0761d1;border:1px solid #d3e5ff;border-radius:4px;padding:1px 5px}
+.vc-nav .grow{flex:1}
+.vc-k{
+  display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 10px;border-radius:6px;
+  border:1px solid var(--hair);background:var(--el);color:var(--faint);font-size:13px;min-width:190px;
+}
+.vc-k kbd{margin-left:auto;font-family:inherit;font-size:11px;border:1px solid var(--hair);border-radius:4px;padding:1px 5px;color:var(--mute);background:var(--cv)}
+.vc-sq{height:30px;padding:0 11px;border-radius:6px;border:1px solid var(--hair);background:var(--el);color:var(--ink);font-size:14px;font-weight:500}
+.vc-sq.dark{background:var(--ink);color:#fff;border-color:var(--ink)}
+.vc-av{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#7928ca,#ff0080)}
+.vc-pill{border:0;border-radius:100px;background:var(--ink);color:#fff;font-size:14px;font-weight:500;height:36px;padding:0 18px}
+.vc-pill.sec{background:var(--el);color:var(--ink);border:1px solid var(--hair)}
+
+.vc-tabs{
+  height:44px;background:var(--cv);border-bottom:1px solid var(--hair);
+  display:flex;align-items:flex-end;gap:2px;padding:0 24px;position:sticky;top:108px;z-index:39;
+}
+.vc-tabs a{
+  padding:0 10px 12px;font-size:14px;color:var(--body);border-bottom:2px solid transparent;
+  display:flex;align-items:center;gap:7px;
+}
+.vc-tabs a:hover{color:var(--ink)}
+.vc-tabs a.cur{color:var(--ink);border-bottom-color:var(--ink);font-weight:500}
+.vc-tabs a .cnt{font-family:ui-monospace,monospace;font-size:10.5px;background:#fee;color:#c50000;border-radius:4px;padding:1px 5px}
+
+.vc-hero{
+  border-bottom:1px solid var(--hair);padding:30px 24px 28px;position:relative;overflow:hidden;background:var(--el);
+}
+.vc-hero::before{
+  content:"";position:absolute;inset:-70% -10% auto -10%;height:280px;pointer-events:none;
+  background:
+    radial-gradient(38% 60% at 18% 55%, rgba(0,124,240,.28), transparent 70%),
+    radial-gradient(34% 55% at 44% 40%, rgba(0,223,216,.22), transparent 70%),
+    radial-gradient(34% 58% at 66% 58%, rgba(121,40,202,.20), transparent 70%),
+    radial-gradient(30% 52% at 86% 44%, rgba(255,0,128,.16), transparent 70%);
+  filter:blur(38px);
+}
+.vc-hero-in{position:relative;max-width:1200px;margin:0 auto}
+.vc-h1{margin:8px 0 6px;font-size:32px;font-weight:600;line-height:40px;letter-spacing:-1.28px;color:var(--ink)}
+.vc-sub{margin:0;font-size:16px;line-height:24px;color:var(--body)}
+.vc-jump{display:flex;gap:8px;margin-top:20px;flex-wrap:wrap;align-items:center}
+.vc-input{
+  flex:1;min-width:280px;max-width:440px;height:40px;background:var(--el);border:1px solid var(--hair);
+  border-radius:100px;display:flex;align-items:center;gap:9px;padding:0 8px 0 16px;
+  font-family:ui-monospace,monospace;font-size:13px;color:var(--faint);
+}
+.vc-input .go{margin-left:auto;height:28px;padding:0 13px;border-radius:100px;background:var(--ink);color:#fff;font-size:13px;font-weight:500;border:0;font-family:-apple-system,sans-serif}
+.vc-recent{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.vc-tagpill{
+  font-family:ui-monospace,monospace;font-size:11.5px;color:var(--body);background:var(--el);
+  border:1px solid var(--hair);border-radius:64px;padding:5px 11px;
+}
+.vc-tagpill.bad{color:#c50000;border-color:#fbd5d5;background:#fff7f7}
+
+.vc-wrap{max-width:1200px;margin:0 auto;padding:32px 24px 64px}
+.vc-band{margin-bottom:40px}
+.vc-band-h{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.vc-band-h h2{margin:0;font-size:20px;font-weight:600;line-height:28px;letter-spacing:-.4px;color:var(--ink)}
+.vc-band-h .grow{flex:1}
+.vc-band-h a{font-size:14px;color:var(--ink);border-bottom:1px solid var(--hair)}
+
+.vc-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.vc-card{background:var(--el);border:1px solid var(--hair);border-radius:12px;padding:20px}
+.vc-card.lg{border-radius:16px;padding:24px}
+.vc-kpi .k{font-family:ui-monospace,monospace;font-size:12px;color:var(--mute);text-transform:uppercase;letter-spacing:.02em}
+.vc-kpi .v{font-size:32px;font-weight:600;letter-spacing:-1.28px;color:var(--ink);line-height:40px;margin-top:8px}
+.vc-kpi .v small{font-size:16px;font-weight:400;letter-spacing:0;color:var(--mute);margin-left:2px}
+.vc-kpi .d{font-size:12px;line-height:16px;margin-top:2px;display:flex;align-items:center;gap:6px}
+.vc-kpi .d .up{color:#0070f3;font-family:ui-monospace,monospace}
+.vc-kpi .d .dn{color:#c50000;font-family:ui-monospace,monospace}
+.vc-kpi .d .fl{color:var(--faint)}
+.vc-spark{margin-top:12px}
+
+.vc-2col{display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);gap:16px;align-items:start}
+.vc-3col{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.vc-ch{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.vc-ch h3{margin:0;font-size:16px;font-weight:600;letter-spacing:-.2px;color:var(--ink)}
+.vc-ch .grow{flex:1}
+.vc-ch .seg{display:flex;border:1px solid var(--hair);border-radius:6px;overflow:hidden}
+.vc-ch .seg button{border:0;background:var(--el);color:var(--body);font-size:12px;padding:4px 10px;border-right:1px solid var(--hair)}
+.vc-ch .seg button:last-child{border-right:0}
+.vc-ch .seg button.on{background:var(--ink);color:#fff}
+
+.vc-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--hair2);font-size:14px}
+.vc-row:last-child{border-bottom:0}
+.vc-row .nm{color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vc-row .nm.mono{font-family:ui-monospace,monospace;font-size:12.5px}
+.vc-row .meter{width:96px;height:6px;background:var(--hair);border-radius:100px;overflow:hidden;flex-shrink:0}
+.vc-row .meter i{display:block;height:100%;background:var(--ink);border-radius:100px}
+.vc-row .meter.blue i{background:var(--link)}
+.vc-row .meter.red i{background:#ee0000}
+.vc-row .n{font-family:ui-monospace,monospace;font-size:13px;color:var(--body);min-width:60px;text-align:right}
+
+.vc-code{
+  background:var(--el);border:1px solid var(--hair);border-radius:12px;overflow:hidden;
+  font-family:ui-monospace,monospace;font-size:13px;line-height:20px;
+}
+.vc-code .bar{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--hair2)}
+.vc-code .bar span{font-size:12px;color:var(--mute)}
+.vc-code .bar .dots{display:flex;gap:5px}
+.vc-code .bar .dots i{width:9px;height:9px;border-radius:50%;background:#e0e0e0;display:block}
+.vc-code .ln{display:flex;gap:14px;padding:5px 14px;border-bottom:1px solid var(--hair2)}
+.vc-code .ln:last-child{border-bottom:0}
+.vc-code .ln:hover{background:#fbfbfb}
+.vc-code .t{color:var(--faint);min-width:56px}
+.vc-code .id{color:var(--ink)}
+.vc-code .st{margin-left:auto;font-size:11.5px;border-radius:4px;padding:1px 7px}
+.vc-code .st.f{background:#fee;color:#c50000}
+.vc-code .st.p{background:#fff3d9;color:#ab570a}
+.vc-code .st.o{background:#eaf4ff;color:#0761d1}
+
+.vc-foot{border-top:1px solid var(--hair);background:var(--cv);padding:48px 24px 40px}
+.vc-foot-in{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1.4fr repeat(3,1fr);gap:32px}
+.vc-foot h4{margin:0 0 10px;font-size:12px;font-family:ui-monospace,monospace;text-transform:uppercase;color:var(--ink)}
+.vc-foot ul{list-style:none;margin:0;padding:0}
+.vc-foot li{font-size:14px;line-height:28px;color:var(--body)}
+.vc-foot .about{font-size:14px;line-height:22px;color:var(--mute);max-width:280px}
+
+/* 공통 목업 차트 (시안별로 색만 override) */
+.mk-bars{display:flex;align-items:stretch;gap:6px;height:170px}
+.mk-bars .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;position:relative;min-width:0}
+.mk-bars .ok{border-radius:3px 3px 0 0}
+.mk-bars .fl{border-radius:0}
+.mk-bars .col.partial{opacity:.45}
+.mk-xaxis{display:flex;gap:6px;margin-top:9px}
+.mk-xaxis span{flex:1;text-align:center;font-size:10px;letter-spacing:-.2px}
+
+@media (max-width:1100px){
+  .bn-body,.vc-2col{grid-template-columns:1fr}
+  .vc-3col,.bm-cards{grid-template-columns:1fr 1fr}
+  .vc-kpis{grid-template-columns:1fr 1fr}
+  .ap-cards,.ap-two,.bm-grid2{grid-template-columns:1fr}
+  .d-bmw,.d-binance{grid-template-columns:1fr}
+  .bm-side,.bn-rail{position:static;height:auto}
+  .bn-rail{flex-direction:row;flex-wrap:wrap;height:auto}
+  .bm-hero-in{flex-direction:column;align-items:stretch}
+  .bm-specs{border-left:0;border-top:1px solid rgba(255,255,255,.18);padding-top:22px;margin-top:24px}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ 시안 선택 바 ══════════════════ -->
+<div class="vw-bar">
+  <div class="vw-brand"><span class="vw-dot">🎨</span>TraceX <em>· 레이아웃 개편 시안</em></div>
+  <div class="vw-tabs" id="tabs">
+    <button class="vw-tab on" data-v="apple"><b>A · Apple</b><span>Executive Canvas — 보고서형 밴드</span></button>
+    <button class="vw-tab" data-v="binance"><b>B · Binance</b><span>Ops Console — 관제형 고밀도</span></button>
+    <button class="vw-tab" data-v="bmw"><b>C · BMW</b><span>Corporate Precision — 조직/표 중심</span></button>
+    <button class="vw-tab" data-v="vercel"><b>D · Vercel</b><span>Developer Platform — 검색/딥링크</span></button>
+  </div>
+  <div class="vw-actions">
+    <span class="vw-hint">1–4 키로 전환</span>
+    <button class="vw-btn" id="noteBtn">설계 노트</button>
+  </div>
+</div>
+
+<!-- ══════════════════ 설계 노트 드로어 ══════════════════ -->
+<div class="vw-note" id="note">
+  <h3 id="noteTitle">A · Apple — Executive Canvas</h3>
+  <p class="lead" id="noteLead"></p>
+  <div class="vw-note-grid" id="noteGrid"></div>
+</div>
+
+<div class="vw-stage">
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     A · APPLE — Executive Canvas
+     ═══════════════════════════════════════════════════════════════════ -->
+<section class="design d-apple on" data-v="apple">
+
+  <nav class="ap-gnav">
+    <span class="mark">TraceX</span>
+    <a href="#" class="cur">성과</a>
+    <a href="#">현황</a>
+    <a href="#">트레이스</a>
+    <a href="#">토큰</a>
+    <a href="#">개선</a>
+    <a href="#">리포트</a>
+    <a href="#">관리</a>
+    <span class="grow"></span>
+    <span class="util">
+      <span>􀊫 검색</span>
+      <span class="who"><i>이</i> 이억수 · BR</span>
+    </span>
+  </nav>
+
+  <div class="ap-subnav">
+    <span class="who">Action Agent</span>
+    <span class="crumbs">
+      <a href="#" class="cur">개요</a><a href="#">사용 추이</a><a href="#">비용</a><a href="#">개선</a>
+    </span>
+    <span class="grow"></span>
+    <div class="ap-seg">
+      <button>7일</button><button class="on">30일</button><button>분기</button><button>직접</button>
+    </div>
+    <button class="ap-pill">리포트 복사</button>
+  </div>
+
+  <!-- 밴드 1 : 성과 (흰색) -->
+  <section class="ap-band">
+    <div class="ap-in">
+      <div class="ap-eyebrow">2026. 07. 01 — 07. 31</div>
+      <h1 class="ap-h1">지난 30일,<br/>에이전트가 12,847건을 처리했습니다.</h1>
+      <p class="ap-lead">사람이 직접 했다면 1,070시간. 시즈닝·AutoQual 실행·취소를 대신 수행했고, 218명이 사용했습니다.</p>
+      <div class="ap-ctas">
+        <button class="ap-pill">주간 리포트 만들기</button>
+        <button class="ap-pill ghost">에이전트 프로필</button>
+      </div>
+
+      <div class="ap-figures">
+        <div class="ap-fig">
+          <span class="n">0.71<small>FTE</small></span>
+          <div class="k">연간 인력 환산 절감</div>
+          <div class="d">액션당 5분 · 연 65,984분 기준</div>
+        </div>
+        <div class="ap-fig">
+          <span class="n">96.4<small>%</small></span>
+          <div class="k">액션 성공률</div>
+          <div class="d">실패 462건 · 전월 대비 +1.8%p</div>
+        </div>
+        <div class="ap-fig">
+          <span class="n">218<small>명</small></span>
+          <div class="k">기간 내 사용자</div>
+          <div class="d">일 평균 47명 · M14 최다</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 밴드 2 : 추이 (parchment) -->
+  <section class="ap-band parch">
+    <div class="ap-in">
+      <div class="ap-eyebrow">사용 추이</div>
+      <h2 class="ap-h2">매일 쓰이고 있습니다.</h2>
+      <p class="ap-lead">일 단위 처리량. 어두운 부분이 실패입니다.</p>
+      <div class="ap-chartwrap" id="apChart"></div>
+    </div>
+  </section>
+
+  <!-- 밴드 3 : 비용 (dark) -->
+  <section class="ap-band dark">
+    <div class="ap-in">
+      <div class="ap-eyebrow">LLM 비용</div>
+      <h2 class="ap-h2">8.42M 토큰을 썼습니다.</h2>
+      <p class="ap-lead">액션 라우팅부터 시즈닝 판단까지, 노드별로 나눠 봅니다.</p>
+      <div class="ap-two">
+        <ul class="ap-list" id="apNodes"></ul>
+        <div>
+          <div class="ap-figures" style="margin-top:0;border-top:0">
+            <div class="ap-fig" style="padding-left:0">
+              <span class="n">31.2<small>K</small></span>
+              <div class="k">LLM 호출</div>
+            </div>
+            <div class="ap-fig">
+              <span class="n">1.18<small>s</small></span>
+              <div class="k">평균 호출 지연</div>
+            </div>
+            <div class="ap-fig">
+              <span class="n">3.2<small>s</small></span>
+              <div class="k">체감 응답시간</div>
+            </div>
+          </div>
+          <p class="ap-lead" style="font-size:17px;margin-top:24px">
+            체감 응답시간 3.2초 중 LLM이 1.18초. 나머지는 MCP·ONEOIS 왕복입니다.
+            <a href="#" style="color:var(--blue-dk)">토큰 상세 보기 ›</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 밴드 4 : 개선 (흰색) -->
+  <section class="ap-band">
+    <div class="ap-in">
+      <div class="ap-eyebrow">개선</div>
+      <h2 class="ap-h2">막힌 곳은 23건입니다.</h2>
+      <p class="ap-lead">라우팅에 실패해 액션까지 도달하지 못한 요청. 아직 아무도 손대지 않았습니다.</p>
+      <div class="ap-cards">
+        <div class="ap-card">
+          <div class="t">미조치</div>
+          <div class="s">담당자 배정 전</div>
+          <div class="big" style="color:#b42318">23</div>
+          <div style="margin-top:14px"><a href="#">Improvement Center 열기 ›</a></div>
+        </div>
+        <div class="ap-card">
+          <div class="t">조치중</div>
+          <div class="s">원인 분석 진행</div>
+          <div class="big" style="color:#b54708">7</div>
+          <div style="margin-top:14px"><a href="#">진행 상황 ›</a></div>
+        </div>
+        <div class="ap-card">
+          <div class="t">조치완료</div>
+          <div class="s">누적</div>
+          <div class="big" style="color:#067647">118</div>
+          <div style="margin-top:14px"><a href="#">완료 내역 ›</a></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 밴드 5 : 어디서 (parchment) -->
+  <section class="ap-band parch">
+    <div class="ap-in">
+      <div class="ap-eyebrow">현장별</div>
+      <h2 class="ap-h2">M14가 가장 많이 씁니다.</h2>
+      <div class="ap-two">
+        <div>
+          <div class="ap-eyebrow" style="color:var(--ink48);font-weight:400;margin-top:30px">FAC별</div>
+          <ul class="ap-list" id="apFac"></ul>
+        </div>
+        <div>
+          <div class="ap-eyebrow" style="color:var(--ink48);font-weight:400;margin-top:30px">액션 타입별</div>
+          <ul class="ap-list" id="apAct"></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="ap-foot">
+    <div class="ap-foot-in">
+      <div><h4>분석</h4><ul><li><a href="#">개요</a></li><li><a href="#">사용 추이</a></li><li><a href="#">트레이스</a></li><li><a href="#">토큰</a></li></ul></div>
+      <div><h4>개선</h4><ul><li><a href="#">Improvement Center</a></li><li><a href="#">실패 요청 추적</a></li><li><a href="#">Prompt Insights (예정)</a></li></ul></div>
+      <div><h4>보고</h4><ul><li><a href="#">주간 리포트</a></li><li><a href="#">에이전트 프로필</a></li><li><a href="#">FTE 성과</a></li></ul></div>
+      <div><h4>관리</h4><ul><li><a href="#">계정</a></li><li><a href="#">이벤트-FAB 매핑</a></li><li><a href="#">프로필 편집</a></li></ul></div>
+    </div>
+    <div class="ap-legal">© 2026 SK hynix · eWorks Agent · TraceX v2.0 — 관리자 기능은 권한에 따라 표시됩니다.</div>
+  </footer>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     B · BINANCE — Ops Console
+     ═══════════════════════════════════════════════════════════════════ -->
+<section class="design d-binance" data-v="binance">
+
+  <aside class="bn-rail">
+    <div class="bn-logo">T</div>
+    <div class="bn-grp">관제</div>
+    <button class="bn-ic on" title="Overview"><svg width="17" height="17" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="1.5" y="9.5" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="9.5" y="1.5" width="5" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="9.5" y="7.5" width="5" height="7" rx="1" stroke="currentColor" stroke-width="1.4"/></svg><em>현황</em></button>
+    <button class="bn-ic" title="Alerts"><svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M8 1.8v0a4.2 4.2 0 0 1 4.2 4.2v3l1.1 2H2.7l1.1-2V6A4.2 4.2 0 0 1 8 1.8Z" stroke="currentColor" stroke-width="1.4"/><path d="M6.4 13.4a1.7 1.7 0 0 0 3.2 0" stroke="currentColor" stroke-width="1.4"/></svg><em>알람</em><span class="badge">4</span></button>
+    <div class="bn-grp">분석</div>
+    <button class="bn-ic" title="Traces"><svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h12M2 12h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="13" cy="12" r="1.3" fill="currentColor"/></svg><em>트레이스</em></button>
+    <button class="bn-ic" title="Tokens"><svg width="17" height="17" viewBox="0 0 16 16" fill="none"><ellipse cx="8" cy="4" rx="5" ry="2.1" stroke="currentColor" stroke-width="1.4"/><path d="M3 4v4c0 1.2 2.2 2.1 5 2.1s5-.9 5-2.1V4M3 8v4c0 1.2 2.2 2.1 5 2.1s5-.9 5-2.1V8" stroke="currentColor" stroke-width="1.4"/></svg><em>토큰</em></button>
+    <div class="bn-grp">개선</div>
+    <button class="bn-ic" title="Failures"><svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M8 2.2 14.2 13H1.8L8 2.2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6.4v2.8M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><em>실패</em><span class="badge">23</span></button>
+    <div class="bn-grp">보고</div>
+    <button class="bn-ic" title="Report"><svg width="17" height="17" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="1.8" width="11" height="12.4" rx="1.4" stroke="currentColor" stroke-width="1.4"/><path d="M5.2 5.4h5.6M5.2 8h5.6M5.2 10.6h3.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg><em>리포트</em></button>
+    <span class="spacer"></span>
+    <button class="bn-ic" title="Admin"><svg width="17" height="17" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.6v1.8M8 12.6v1.8M14.4 8h-1.8M3.4 8H1.6M12.5 3.5l-1.3 1.3M4.8 11.2l-1.3 1.3M12.5 12.5l-1.3-1.3M4.8 4.8 3.5 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg><em>관리</em></button>
+  </aside>
+
+  <div class="bn-main">
+    <div class="bn-top">
+      <div class="bn-search">🔍 TRACE_ID · USER_ID · 에러코드 검색 <kbd>⌘K</kbd></div>
+      <span class="grow" style="flex:1"></span>
+      <span class="bn-chip live"><span class="dot"></span>LIVE · 30s</span>
+      <span class="bn-chip">PRD</span>
+      <span class="bn-chip">최근 30일 ▾</span>
+      <button class="bn-btn">리포트 복사</button>
+      <span class="bn-avatar">이억</span>
+    </div>
+
+    <div class="bn-ticker">
+      <div class="bn-tk"><span class="k">총 실행</span><span class="v bn-num">12,847</span><span class="d bn-up">▲ 6.2%</span></div>
+      <div class="bn-tk"><span class="k">성공률</span><span class="v bn-num bn-up">96.4%</span><span class="d bn-up">▲ 1.8%p</span></div>
+      <div class="bn-tk"><span class="k">실패</span><span class="v bn-num bn-dn">462</span><span class="d bn-dn">▲ 34</span></div>
+      <div class="bn-tk"><span class="k">응답 지연</span><span class="v bn-num">3.2s</span><span class="d bn-up">▼ 0.3s</span></div>
+      <div class="bn-tk"><span class="k">LLM 지연</span><span class="v bn-num">1,180ms</span><span class="d bn-dn">▲ 90ms</span></div>
+      <div class="bn-tk"><span class="k">토큰</span><span class="v bn-num bn-y">8.42M</span><span class="d bn-up">▲ 4.1%</span></div>
+      <div class="bn-tk"><span class="k">미조치</span><span class="v bn-num bn-dn">23</span><span class="d">담당자 배정 필요</span></div>
+    </div>
+
+    <div class="bn-body">
+      <!-- 좌: 메인 차트 + 실패 테이블 -->
+      <div class="bn-stack">
+        <div class="bn-card">
+          <div class="bn-ch">
+            <h3>Action Throughput</h3>
+            <span class="sub">일 단위 · 성공/실패 적층</span>
+            <span class="grow"></span>
+            <div class="bn-tabs">
+              <button class="on">처리량</button><button>응답지연</button><button>토큰</button>
+            </div>
+          </div>
+          <div id="bnChart"></div>
+        </div>
+
+        <div class="bn-card tight">
+          <div class="bn-ch" style="padding:16px 18px 0;margin-bottom:10px">
+            <h3>실패 요청 큐</h3>
+            <span class="sub">ACTION_TYP 미부여 = 라우팅 실패 · 최신순</span>
+            <span class="grow"></span>
+            <button class="bn-btn sec" style="height:28px;font-size:12px">전체 보기</button>
+          </div>
+          <table class="bn-tbl">
+            <thead><tr><th>시각</th><th>TRACE_ID</th><th>USER</th><th>FAB</th><th>에러</th><th>상태</th><th class="r">조치</th></tr></thead>
+            <tbody id="bnFail"></tbody>
+          </table>
+        </div>
+
+        <div class="bn-card">
+          <div class="bn-ch"><h3>FAC별 처리량</h3><span class="sub">MCP send 시점 확정</span></div>
+          <div class="bn-fabgrid" id="bnFab"></div>
+        </div>
+      </div>
+
+      <!-- 우: 사이드 레일 -->
+      <div class="bn-stack">
+        <div class="bn-alert">
+          <div class="top"><span>🔴</span><b>즉시 조치 필요</b></div>
+          <div class="cnt bn-num bn-dn">23</div>
+          <p>라우팅 실패 후 24시간 이상 미조치. 최다 사용자 <b style="color:#eaecef">K1029384</b> 5건.</p>
+          <button class="bn-btn" style="width:100%">Failure Tracker 열기</button>
+        </div>
+
+        <div class="bn-card">
+          <div class="bn-ch"><h3>상태 분포</h3><span class="sub">trace</span></div>
+          <div class="bn-donut">
+            <svg width="112" height="112" viewBox="0 0 42 42">
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#2b3139" stroke-width="6"/>
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#0ecb81" stroke-width="6"
+                      stroke-dasharray="92.1 7.9" stroke-dashoffset="25"/>
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#f6465d" stroke-width="6"
+                      stroke-dasharray="3.6 96.4" stroke-dashoffset="-67.1"/>
+              <text x="21" y="20.4" text-anchor="middle" font-size="7" font-weight="700" fill="#eaecef">96.4%</text>
+              <text x="21" y="25.6" text-anchor="middle" font-size="3.4" fill="#707a8a">SUCCESS</text>
+            </svg>
+            <div class="bn-legend" style="flex:1">
+              <div><i style="background:#0ecb81"></i>성공<span class="n">12,385</span></div>
+              <div><i style="background:#f6465d"></i>실패<span class="n">462</span></div>
+              <div><i style="background:#2b3139"></i>진행중<span class="n">— </span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bn-card">
+          <div class="bn-ch"><h3>주요 에러</h3><span class="sub">ERR_CD top 5</span></div>
+          <div id="bnErr"></div>
+        </div>
+
+        <div class="bn-card">
+          <div class="bn-ch"><h3>노드별 토큰</h3><span class="sub">TRX_TOKEN_DET</span></div>
+          <div id="bnNode"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     C · BMW — Corporate Precision
+     ═══════════════════════════════════════════════════════════════════ -->
+<section class="design d-bmw" data-v="bmw">
+
+  <aside class="bm-side">
+    <div class="bm-side-top"><span class="bm-badge">TX</span><b>TraceX</b></div>
+    <nav class="bm-nav">
+      <div class="grp">운영 현황</div>
+      <a href="#" class="cur">대시보드</a>
+      <a href="#">트레이스 조회</a>
+      <a href="#">LLM 토큰</a>
+
+      <div class="grp">개선 관리</div>
+      <a href="#">실패 요청 추적<span class="n warn">23</span></a>
+      <a href="#">Prompt Insights<span class="lk">예정</span></a>
+      <a href="#">Knowledge Gaps<span class="lk">예정</span></a>
+
+      <div class="grp">성과 · 보고</div>
+      <a href="#">주간 실적 리포트</a>
+      <a href="#">FTE 환산 성과</a>
+      <a href="#">에이전트 프로필</a>
+
+      <div class="grp">시스템 관리</div>
+      <a href="#">계정 관리<span class="lk">BR+</span></a>
+      <a href="#">이벤트-FAB 매핑<span class="lk">BR+</span></a>
+      <a href="#">프로필 편집<span class="lk">ADMIN</span></a>
+    </nav>
+    <div class="bm-side-foot">
+      <div class="who">이억수</div>
+      <div class="rl">BR · 상위권한</div>
+      <div class="dept">eWorks Agent TL</div>
+    </div>
+  </aside>
+
+  <div class="bm-main">
+    <div class="bm-top">
+      <div class="bm-crumb">TraceX <i>›</i> 운영 현황 <i>›</i> <b>대시보드</b></div>
+      <span class="grow"></span>
+      <div class="bm-sel">2026-07-01 → 2026-07-31 ▾</div>
+      <div class="bm-sel">ACTION_TYP · 전체 ▾</div>
+      <button class="bm-btn sec">초기화</button>
+      <button class="bm-btn">조회</button>
+    </div>
+
+    <section class="bm-hero">
+      <div class="bm-hero-in">
+        <div class="lead">
+          <div class="eyebrow">Action Agent · 2026년 7월</div>
+          <h1>운영 실적 요약</h1>
+          <p>CUBE → GAIA → MCP → ONEOIS 전 구간 집계. 기준 시각은 트레이스 최초 수신 시점.</p>
+        </div>
+        <div class="bm-specs">
+          <div class="bm-spec"><div class="v">12,847</div><div class="k">총 실행</div></div>
+          <div class="bm-spec"><div class="v">96.4<small>%</small></div><div class="k">성공률</div></div>
+          <div class="bm-spec"><div class="v">3.2<small>s</small></div><div class="k">평균 응답</div></div>
+          <div class="bm-spec"><div class="v">0.71<small>FTE</small></div><div class="k">인력 환산</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="bm-sec">
+      <div class="bm-in">
+        <div class="bm-sh">
+          <h2>처리 실적</h2>
+          <div class="desc">일 단위 · 성공 / 실패</div>
+          <span class="grow"></span>
+          <a href="#" class="bm-link">CSV 내려받기 ›</a>
+        </div>
+        <div class="bm-tabs">
+          <button class="on">처리량</button><button>응답 지연</button><button>토큰 사용</button><button>사용자</button>
+        </div>
+        <div class="bm-grid2">
+          <div class="bm-cell">
+            <h3>일별 처리량</h3>
+            <div class="cap">2026-07-20 — 07-31 · 최근 12일</div>
+            <div id="bmChart"></div>
+          </div>
+          <div class="bm-cell">
+            <h3>상태 구성</h3>
+            <div class="cap">TRACE 단위</div>
+            <table class="bm-table" style="font-size:14px">
+              <tbody>
+                <tr><td><b>성공</b></td><td class="r"><span class="bm-ok">12,385</span></td><td class="r" style="width:110px"><span class="bm-pct"><span class="b"><i style="width:96.4%"></i></span></span></td></tr>
+                <tr><td><b>실패</b></td><td class="r"><span class="bm-bad">462</span></td><td class="r"><span class="bm-pct"><span class="b"><i style="width:3.6%;background:#dc2626"></i></span></span></td></tr>
+                <tr><td><b>진행중</b></td><td class="r">0</td><td class="r"><span class="bm-pct"><span class="b"></span></span></td></tr>
+                <tr class="total"><td>합계</td><td class="r">12,847</td><td class="r">100.0%</td></tr>
+              </tbody>
+            </table>
+            <div style="margin-top:22px"><a href="#" class="bm-link">실패 요청 추적 ›</a></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="bm-sec soft">
+      <div class="bm-in">
+        <div class="bm-sh">
+          <h2>액션별 실적</h2>
+          <div class="desc">ACTION_TYP 기준 · FTE 환산 분 적용</div>
+        </div>
+        <table class="bm-table">
+          <thead>
+            <tr><th>액션 타입</th><th class="r">실행</th><th class="r">성공</th><th class="r">실패</th><th class="r">성공률</th><th class="r">환산(분)</th><th class="r">FTE 기여</th></tr>
+          </thead>
+          <tbody id="bmActions"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="bm-sec">
+      <div class="bm-in">
+        <div class="bm-sh">
+          <h2>주요 에러</h2>
+          <div class="desc">ERR_CD 빈도 · TRX_ERRMSG_COD 의미 조인</div>
+          <span class="grow"></span>
+          <a href="#" class="bm-link">전체 로그 ›</a>
+        </div>
+        <table class="bm-table">
+          <thead><tr><th style="width:180px">에러 코드</th><th>의미</th><th class="r" style="width:110px">건수</th><th class="r" style="width:200px">비중</th></tr></thead>
+          <tbody id="bmErrors"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="bm-sec soft">
+      <div class="bm-in">
+        <div class="bm-sh"><h2>바로가기</h2><div class="desc">권한에 따라 표시</div></div>
+        <div class="bm-cards">
+          <div class="bm-card">
+            <div class="plate">Improvement</div>
+            <div class="bd">
+              <h4><span class="bm-flag"></span>실패 요청 추적</h4>
+              <p>미조치 23건. 라우팅에서 튕긴 요청을 사용자 대화 흐름과 함께 확인합니다.</p>
+              <a href="#" class="bm-link">열기 ›</a>
+            </div>
+          </div>
+          <div class="bm-card">
+            <div class="plate">Report</div>
+            <div class="bd">
+              <h4>주간 실적 리포트</h4>
+              <p>월요일 기준 주간 실적을 한 번에 조립해 텍스트로 복사합니다.</p>
+              <a href="#" class="bm-link">열기 ›</a>
+            </div>
+          </div>
+          <div class="bm-card">
+            <div class="plate">Mapping</div>
+            <div class="bd">
+              <h4>이벤트-FAB 매핑</h4>
+              <p>이벤트별 허용 FAB 을 매트릭스로 편집합니다. MCP 가 직접 참조합니다.</p>
+              <a href="#" class="bm-link">열기 ›</a>
+            </div>
+          </div>
+          <div class="bm-card">
+            <div class="plate">Accounts</div>
+            <div class="bd">
+              <h4>계정 관리</h4>
+              <p>사번 기반 계정과 3단계 권한(ADMIN / BR / DEV)을 관리합니다.</p>
+              <a href="#" class="bm-link">열기 ›</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="bm-foot">
+      <div class="bm-foot-in">
+        <div><h4>운영 현황</h4><ul><li>대시보드</li><li>트레이스 조회</li><li>LLM 토큰</li></ul></div>
+        <div><h4>개선 관리</h4><ul><li>실패 요청 추적</li><li>Prompt Insights</li><li>Knowledge Gaps</li></ul></div>
+        <div><h4>성과 · 보고</h4><ul><li>주간 실적 리포트</li><li>FTE 환산 성과</li><li>에이전트 프로필</li></ul></div>
+        <div><h4>시스템 관리</h4><ul><li>계정 관리</li><li>이벤트-FAB 매핑</li><li>프로필 편집</li></ul></div>
+      </div>
+      <div class="legal"><span>© 2026 SK hynix · eWorks Agent</span><span>TraceX v2.0 · PRD</span></div>
+    </footer>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     D · VERCEL — Developer Platform
+     ═══════════════════════════════════════════════════════════════════ -->
+<section class="design d-vercel" data-v="vercel">
+
+  <nav class="vc-nav">
+    <span class="vc-tri"></span>
+    <span class="vc-slash">/</span>
+    <span class="vc-scope"><span class="av"></span>eWorks Agent <span class="cv">▾</span></span>
+    <span class="vc-slash">/</span>
+    <span class="vc-scope">Action Agent <span class="env">PRD</span> <span class="cv">▾</span></span>
+    <span class="grow"></span>
+    <span class="vc-k">Search… <kbd>⌘K</kbd></span>
+    <button class="vc-sq">Feedback</button>
+    <button class="vc-sq dark">Report</button>
+    <span class="vc-av"></span>
+  </nav>
+
+  <div class="vc-tabs">
+    <a href="#" class="cur">Overview</a>
+    <a href="#">Traces</a>
+    <a href="#">Tokens</a>
+    <a href="#">Failures <span class="cnt">23</span></a>
+    <a href="#">Report</a>
+    <a href="#">Agent</a>
+    <a href="#">Settings</a>
+  </div>
+
+  <header class="vc-hero">
+    <div class="vc-hero-in">
+      <div class="vc-eyebrow">Overview · last 30 days</div>
+      <h1 class="vc-h1">12,847 actions, 96.4% success.</h1>
+      <p class="vc-sub">CUBE → GAIA → MCP → ONEOIS · 218 users · 8.42M tokens</p>
+      <div class="vc-jump">
+        <div class="vc-input">TRACE_ID 붙여넣기 → 바로 이동<button class="go">Open</button></div>
+        <div class="vc-recent">
+          <span class="vc-eyebrow" style="font-size:11px">recent</span>
+          <span class="vc-tagpill">a41f0c9e…</span>
+          <span class="vc-tagpill bad">7bd2e110… fail</span>
+          <span class="vc-tagpill">K1029384</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="vc-wrap">
+
+    <div class="vc-band">
+      <div class="vc-kpis" id="vcKpis"></div>
+    </div>
+
+    <div class="vc-band">
+      <div class="vc-band-h">
+        <h2>Throughput</h2>
+        <span class="grow"></span>
+        <a href="#">View traces →</a>
+      </div>
+      <div class="vc-2col">
+        <div class="vc-card lg">
+          <div class="vc-ch">
+            <h3>Actions per day</h3>
+            <span class="grow"></span>
+            <div class="seg"><button class="on">24h</button><button>7d</button><button>30d</button></div>
+          </div>
+          <div id="vcChart"></div>
+        </div>
+        <div class="vc-card lg">
+          <div class="vc-ch"><h3>Failure queue</h3><span class="grow"></span><span class="vc-eyebrow">23 open</span></div>
+          <div class="vc-row"><span class="nm">미조치</span><span class="meter red"><i style="width:100%"></i></span><span class="n">23</span></div>
+          <div class="vc-row"><span class="nm">조치중</span><span class="meter blue"><i style="width:30%"></i></span><span class="n">7</span></div>
+          <div class="vc-row"><span class="nm">조치완료</span><span class="meter"><i style="width:100%"></i></span><span class="n">118</span></div>
+          <div style="margin-top:18px;display:flex;gap:8px">
+            <button class="vc-pill" style="flex:1">Open tracker</button>
+            <button class="vc-pill sec">Assign me</button>
+          </div>
+          <p style="margin:16px 0 0;font-size:12px;line-height:16px;color:var(--faint)">
+            ACTION_TYP 이 비어 있는 요청 = ACTION ROUTER 에서 실제 노드로 못 간 라우팅 실패.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="vc-band">
+      <div class="vc-band-h"><h2>Breakdown</h2></div>
+      <div class="vc-3col">
+        <div class="vc-card">
+          <div class="vc-ch"><h3>Errors</h3></div>
+          <div id="vcErr"></div>
+        </div>
+        <div class="vc-card">
+          <div class="vc-ch"><h3>By FAC</h3></div>
+          <div id="vcFac"></div>
+        </div>
+        <div class="vc-card">
+          <div class="vc-ch"><h3>Tokens by node</h3></div>
+          <div id="vcNode"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="vc-band">
+      <div class="vc-band-h">
+        <h2>Recent failures</h2>
+        <span class="grow"></span>
+        <a href="#">Open in tracker →</a>
+      </div>
+      <div class="vc-code">
+        <div class="bar"><span class="dots"><i></i><i></i><i></i></span><span>BIZ_AIACTIONTXN_HIS · ACTION_TYP IS NULL · ORDER BY TIMEKEY DESC</span></div>
+        <div id="vcCode"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer class="vc-foot">
+    <div class="vc-foot-in">
+      <div>
+        <span class="vc-tri" style="width:16px;height:14px;display:block;margin-bottom:12px"></span>
+        <p class="about">TraceX — AI Action Transaction 추적. SK hynix eWorks Agent 운영 콘솔.</p>
+      </div>
+      <div><h4>Analyze</h4><ul><li>Overview</li><li>Traces</li><li>Tokens</li></ul></div>
+      <div><h4>Improve</h4><ul><li>Failure Tracker</li><li>Prompt Insights</li><li>Knowledge Gaps</li></ul></div>
+      <div><h4>Manage</h4><ul><li>Accounts</li><li>Event-FAB Map</li><li>Agent Profile</li></ul></div>
+    </div>
+  </footer>
+</section>
+
+</div>
+
+<script>
+/* ─────────────────────────── 공유 목업 데이터 ─────────────────────────── */
+const DAYS   = ["07-20","07-21","07-22","07-23","07-24","07-25","07-26","07-27","07-28","07-29","07-30","07-31"];
+const TOTAL  = [780,920,1010,870,1180,1340,1120,1290,1410,1230,1090,607];
+const FAIL   = [28,35,41,30,44,52,39,47,58,45,38,5];
+const LATSEC = [3.1,2.9,3.4,3.0,3.3,3.6,3.2,3.1,3.5,3.4,3.0,2.8];
+const MAXT   = 1410;
+
+const ERRORS = [
+  {cd:"FAIL_SEASONING", msg:"시즈닝 실행 실패 (CUBE 응답 문구 기준)", n:181},
+  {cd:"GAIA-TIMEOUT",   msg:"GAIA LLM 응답 시간 초과",                n:96},
+  {cd:"MCP-401",        msg:"MCP 인증 토큰 만료",                     n:74},
+  {cd:"FAIL_AQ_RUN",    msg:"AutoQual 실행 실패",                     n:63},
+  {cd:"ONEOIS-500",     msg:"ONEOIS 내부 오류",                       n:48},
+];
+const FACS = [
+  {id:"M14",n:4210},{id:"M15",n:3880},{id:"M16",n:2102},
+  {id:"C2",n:1455},{id:"Y17",n:890},{id:"(none)",n:310},
+];
+const ACTIONS = [
+  {nm:"NEST_Seasoning",     total:6120, fail:181, min:5},
+  {nm:"AutoQual_JobCreate", total:4033, fail:118, min:5},
+  {nm:"AutoQual_Abort",     total:2232, fail:101, min:5},
+  {nm:"라우팅 실패",         total:462,  fail:462, min:0},
+];
+const NODES = [
+  {nm:"actionRouterNode", tok:3.41, calls:12940, ms:640},
+  {nm:"SeasoningNode",    tok:2.68, calls:9220,  ms:1820},
+  {nm:"judgeNode",        tok:1.42, calls:5140,  ms:1150},
+  {nm:"setupGuideNode",   tok:0.91, calls:3904,  ms:980},
+];
+const FAILROWS = [
+  {t:"07-31 14:22", id:"7bd2e110", u:"K1029384", fab:"M14", err:"GAIA-TIMEOUT", st:"open"},
+  {t:"07-31 13:58", id:"a41f0c9e", u:"K1029384", fab:"M14", err:"—",            st:"open"},
+  {t:"07-31 11:04", id:"3e88ba71", u:"K2210077", fab:"M15", err:"MCP-401",      st:"doing"},
+  {t:"07-31 09:41", id:"c0d5f832", u:"K1884201", fab:"M16", err:"—",            st:"open"},
+  {t:"07-30 17:12", id:"91ae4dd0", u:"K2210077", fab:"M15", err:"ONEOIS-500",   st:"done"},
+  {t:"07-30 15:30", id:"5f7c2ab9", u:"K3390112", fab:"C2",  err:"GAIA-TIMEOUT", st:"doing"},
+];
+const nf = (n) => n.toLocaleString("ko-KR");
+
+/* ─────────────────────────── 차트 헬퍼 ─────────────────────────── */
+function bars({okColor, failColor, xColor, height=170}){
+  const cols = TOTAL.map((t,i)=>{
+    const ok = t - FAIL[i];
+    const hOk = (ok/MAXT*100).toFixed(1), hFl = (FAIL[i]/MAXT*100).toFixed(1);
+    const partial = i === TOTAL.length-1 ? " partial" : "";
+    return `<div class="col${partial}" title="${DAYS[i]} · ${nf(t)}건 (실패 ${FAIL[i]})">
+      <div class="fl" style="height:${hFl}%;background:${failColor}"></div>
+      <div class="ok" style="height:${hOk}%;background:${okColor}"></div>
+    </div>`;
+  }).join("");
+  const xs = DAYS.map((d,i)=>`<span style="color:${xColor}">${i%2?"":d}</span>`).join("");
+  return `<div class="mk-bars" style="height:${height}px">${cols}</div><div class="mk-xaxis">${xs}</div>`;
+}
+function sparkline(color, w=180, h=36){
+  const min=Math.min(...LATSEC), max=Math.max(...LATSEC);
+  const pts = LATSEC.map((v,i)=>`${(i*(w/(LATSEC.length-1))).toFixed(1)},${(h-4-((v-min)/(max-min))*(h-10)).toFixed(1)}`).join(" ");
+  return `<svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
+/* ─────────────────────────── A · Apple 렌더 ─────────────────────────── */
+document.getElementById("apChart").innerHTML = bars({okColor:"#0066cc",failColor:"#1d1d1f",xColor:"#7a7a7a",height:220});
+document.getElementById("apNodes").innerHTML = NODES.map(n=>`
+  <li><span class="lbl">${n.nm.replace("Node","")}</span>
+      <span class="bar"><i style="width:${(n.tok/3.41*100).toFixed(0)}%"></i></span>
+      <span class="val">${n.tok}M</span>
+      <span class="pct">${(n.tok/8.42*100).toFixed(0)}%</span></li>`).join("");
+document.getElementById("apFac").innerHTML = FACS.map(f=>`
+  <li><span class="lbl">${f.id}</span>
+      <span class="bar"><i style="width:${(f.n/4210*100).toFixed(0)}%"></i></span>
+      <span class="val">${nf(f.n)}</span>
+      <span class="pct">${(f.n/12847*100).toFixed(0)}%</span></li>`).join("");
+document.getElementById("apAct").innerHTML = ACTIONS.map(a=>`
+  <li><span class="lbl" style="min-width:150px">${a.nm}</span>
+      <span class="bar"><i style="width:${(a.total/6120*100).toFixed(0)}%"></i></span>
+      <span class="val">${nf(a.total)}</span>
+      <span class="pct">${(a.total/12847*100).toFixed(0)}%</span></li>`).join("");
+
+/* ─────────────────────────── B · Binance 렌더 ─────────────────────────── */
+document.getElementById("bnChart").innerHTML = bars({okColor:"#0ecb81",failColor:"#f6465d",xColor:"#707a8a",height:200});
+document.getElementById("bnFail").innerHTML = FAILROWS.map(r=>`
+  <tr>
+    <td class="bn-num" style="color:#929aa5">${r.t}</td>
+    <td class="bn-num" style="color:#fcd535">${r.id}…</td>
+    <td class="bn-num">${r.u}</td>
+    <td>${r.fab}</td>
+    <td class="bn-num" style="color:${r.err==="—"?"#707a8a":"#f6465d"}">${r.err}</td>
+    <td><span class="bn-tag ${r.st}">${r.st==="open"?"미조치":r.st==="doing"?"조치중":"완료"}</span></td>
+    <td class="r"><button class="bn-mini">${r.st==="done"?"보기":"조치"}</button></td>
+  </tr>`).join("");
+document.getElementById("bnErr").innerHTML = ERRORS.map(e=>`
+  <div class="bn-err" title="${e.msg}">
+    <span class="cd">${e.cd}</span>
+    <span class="bar"><i style="width:${(e.n/181*100).toFixed(0)}%"></i></span>
+    <span class="n bn-num">${e.n}</span>
+  </div>`).join("");
+document.getElementById("bnNode").innerHTML = NODES.map(n=>`
+  <div class="bn-err">
+    <span class="cd" style="font-family:inherit;color:#eaecef">${n.nm.replace("Node","")}</span>
+    <span class="bar"><i style="width:${(n.tok/3.41*100).toFixed(0)}%;background:#fcd535"></i></span>
+    <span class="n bn-num">${n.tok}M</span>
+  </div>`).join("");
+document.getElementById("bnFab").innerHTML = FACS.map(f=>`
+  <div class="bn-fab">
+    <div class="id">${f.id}</div>
+    <div class="v bn-num">${nf(f.n)}</div>
+    <div class="p ${f.id==="(none)"?"bn-dn":"bn-up"}">${(f.n/12847*100).toFixed(1)}%</div>
+  </div>`).join("");
+
+/* ─────────────────────────── C · BMW 렌더 ─────────────────────────── */
+document.getElementById("bmChart").innerHTML = bars({okColor:"#1c69d4",failColor:"#dc2626",xColor:"#9a9a9a",height:200});
+document.getElementById("bmActions").innerHTML = ACTIONS.map(a=>{
+  const ok = a.total - a.fail, rate = (ok/a.total*100);
+  const mins = ok * a.min;
+  return `<tr>
+    <td><b>${a.nm}</b></td>
+    <td class="r">${nf(a.total)}</td>
+    <td class="r">${nf(ok)}</td>
+    <td class="r">${a.fail?`<span class="bm-bad">${nf(a.fail)}</span>`:"0"}</td>
+    <td class="r"><span class="bm-pct"><span class="b"><i style="width:${rate.toFixed(0)}%"></i></span>${rate.toFixed(1)}%</span></td>
+    <td class="r">${nf(mins)}</td>
+    <td class="r"><b>${(mins/65984).toFixed(3)}</b></td>
+  </tr>`;
+}).join("") + `<tr class="total">
+    <td>합계</td><td class="r">12,847</td><td class="r">12,385</td><td class="r">462</td>
+    <td class="r">96.4%</td><td class="r">61,925</td><td class="r">0.711</td></tr>`;
+document.getElementById("bmErrors").innerHTML = ERRORS.map(e=>`
+  <tr>
+    <td><b>${e.cd}</b></td>
+    <td>${e.msg}</td>
+    <td class="r"><b>${e.n}</b></td>
+    <td class="r"><span class="bm-pct"><span class="b"><i style="width:${(e.n/181*100).toFixed(0)}%;background:#dc2626"></i></span>${(e.n/462*100).toFixed(1)}%</span></td>
+  </tr>`).join("");
+
+/* ─────────────────────────── D · Vercel 렌더 ─────────────────────────── */
+const VKPI = [
+  {k:"actions",   v:"12,847", d:'<span class="up">↑ 6.2%</span><span class="fl">vs 이전 30일</span>', spark:true},
+  {k:"success",   v:"96.4",   u:"%", d:'<span class="up">↑ 1.8%p</span><span class="fl">462 failed</span>'},
+  {k:"p50 latency", v:"3.2",  u:"s", d:'<span class="up">↓ 0.3s</span><span class="fl">LLM 1.18s</span>'},
+  {k:"tokens",    v:"8.42",   u:"M", d:'<span class="dn">↑ 4.1%</span><span class="fl">31.2K calls</span>'},
+];
+document.getElementById("vcKpis").innerHTML = VKPI.map(x=>`
+  <div class="vc-card vc-kpi">
+    <div class="k">${x.k}</div>
+    <div class="v">${x.v}${x.u?`<small>${x.u}</small>`:""}</div>
+    <div class="d">${x.d}</div>
+    ${x.spark?`<div class="vc-spark">${sparkline("#171717")}</div>`:""}
+  </div>`).join("");
+document.getElementById("vcChart").innerHTML = bars({okColor:"#171717",failColor:"#ee0000",xColor:"#a1a1a1",height:200});
+document.getElementById("vcErr").innerHTML = ERRORS.map(e=>`
+  <div class="vc-row" title="${e.msg}">
+    <span class="nm mono">${e.cd}</span>
+    <span class="meter red"><i style="width:${(e.n/181*100).toFixed(0)}%"></i></span>
+    <span class="n">${e.n}</span>
+  </div>`).join("");
+document.getElementById("vcFac").innerHTML = FACS.map(f=>`
+  <div class="vc-row">
+    <span class="nm mono">${f.id}</span>
+    <span class="meter"><i style="width:${(f.n/4210*100).toFixed(0)}%"></i></span>
+    <span class="n">${nf(f.n)}</span>
+  </div>`).join("");
+document.getElementById("vcNode").innerHTML = NODES.map(n=>`
+  <div class="vc-row">
+    <span class="nm mono">${n.nm}</span>
+    <span class="meter blue"><i style="width:${(n.tok/3.41*100).toFixed(0)}%"></i></span>
+    <span class="n">${n.tok}M</span>
+  </div>`).join("");
+document.getElementById("vcCode").innerHTML = FAILROWS.map(r=>`
+  <div class="ln">
+    <span class="t">${r.t}</span>
+    <span class="id">${r.id}</span>
+    <span style="color:#8f8f8f">${r.u}</span>
+    <span style="color:#a1a1a1">${r.fab}</span>
+    <span style="color:${r.err==="—"?"#a1a1a1":"#c50000"}">${r.err}</span>
+    <span class="st ${r.st==="open"?"f":r.st==="doing"?"p":"o"}">${r.st}</span>
+  </div>`).join("");
+
+/* ─────────────────────────── 설계 노트 ─────────────────────────── */
+const NOTES = {
+  apple:{
+    title:"A · Apple — Executive Canvas",
+    lead:"전폭 밴드를 위에서 아래로 쌓아 '스크롤 = 한 편의 보고서'가 되게 한 구성. 밝은 밴드 ↔ 어두운 밴드의 색 전환 자체가 섹션 구분자이며, 카드·그림자·테두리 같은 UI 장식을 최대한 걷어냈다.",
+    cards:[
+      ["누구를 위한 화면","<u>임원·조직장 보고</u>가 1순위. 지표를 '나열'하지 않고 <u>서사 순서</u>로 배치했다 — ①얼마나 일했나(FTE·성공률·사용자) → ②꾸준한가(추이) → ③얼마 들었나(토큰) → ④어디서 막혔나(개선) → ⑤어느 현장인가(FAC)."],
+      ["비즈니스 장치","각 밴드의 헤드라인이 <u>문장</u>이다(\"막힌 곳은 23건입니다\"). 숫자를 읽고 해석하는 단계를 화면이 대신한다. 서브내비에 상시 <u>'리포트 복사'</u> 버튼을 붙여 지금 보는 기간이 곧 보고 단위가 되게 했다."],
+      ["내비게이션","최상단 44px 검은 바에 <u>전 기능을 평평하게</u> 노출(계층 없음), 그 아래 프로스티드 서브바가 현재 화면의 기간·구획을 잡는다. 기능이 늘어도 상단 바 한 줄에만 추가된다."],
+      ["트레이드오프","밀도가 가장 낮다. 트레이스 목록·타임라인 같은 <u>엔지니어용 고밀도 화면과는 궁합이 나쁘다</u> — 그 화면들은 별도 밀도 모드가 필요하다. 대신 공유·캡처·보고에는 가장 강하다."]
+    ]
+  },
+  binance:{
+    title:"B · Binance — Ops Console",
+    lead:"24/7 관제실을 상정한 다크 고밀도 콘솔. 좌측 아이콘 레일 + 실시간 티커 + 8/4 그리드로, 한 화면 안에서 '이상 감지 → 원인 확인 → 조치'가 끝나게 설계했다.",
+    cards:[
+      ["누구를 위한 화면","<u>운영 담당자</u>가 하루 종일 띄워 두는 화면. 스크롤 없이 상단 티커만 봐도 이상 여부를 알 수 있고, 실패 큐가 항상 시야에 있다."],
+      ["비즈니스 장치","성공=녹색 / 실패=적색 <u>시맨틱 컬러를 전역 규칙</u>으로 고정. 좌측 레일 아이콘에 <u>미조치 건수 배지</u>(빨강 23)를 띄워 어느 화면에 있든 밀린 일이 보인다. 우측 최상단 '즉시 조치 필요' 카드는 24시간 이상 방치된 건만 골라 <u>한 번의 클릭으로 Failure Tracker</u>로 보낸다."],
+      ["내비게이션","레일을 <u>관제 / 분석 / 개선 / 보고 / 관리</u> 5그룹으로 나눠, 기능이 늘어도 그룹 안으로 흡수된다. 상단 ⌘K 검색이 TRACE_ID·USER_ID·에러코드 공통 진입점."],
+      ["트레이드오프","가장 <u>기능적</u>이지만 가장 <u>보고에 부적합</u>하다. 다크 고밀도라 캡처해서 임원 보고에 붙이기 어렵고, 색약 사용자를 위해 적/녹 외 형태 구분(아이콘·배지)을 추가로 유지해야 한다."]
+    ]
+  },
+  bmw:{
+    title:"C · BMW — Corporate Precision",
+    lead:"라디우스 0px, 그림자 없음, 대문자 트래킹 라벨. 좌측 264px 사이드바가 조직의 책임 영역을 그대로 드러내고, 본문은 카드가 아니라 헤어라인으로 구획된 표 중심이다.",
+    cards:[
+      ["누구를 위한 화면","<u>정형 보고와 감사</u>. 숫자의 근거(환산 분, FTE 기여도)를 표로 끝까지 보여주고 합계 행으로 닫는다. '보기 좋은 요약'보다 <u>검산 가능한 표</u>가 우선."],
+      ["비즈니스 장치","사이드바가 <u>업무 그룹(운영/개선/성과/관리)</u> 으로 고정돼 있고 각 항목에 <u>권한 라벨(BR+ / ADMIN)</u>과 미조치 배지가 붙는다. 하단 고정 블록에 로그인 사용자·권한·소속을 항상 표시해 '내가 무엇을 할 수 있는 사람인지'를 화면이 말한다."],
+      ["내비게이션","좌측 사이드바 = 전 기능 상시 노출(2단 깊이). 상단은 <u>브레드크럼 + 전역 조회 조건</u>(기간·ACTION_TYP·조회 버튼)만 담당해서, 어느 화면으로 가도 조건이 유지된다."],
+      ["트레이드오프","가장 <u>보수적이고 안전</u>하지만 가장 <u>덜 인상적</u>이다. 사이드바가 264px를 상시 점유해 트레이스 타임라인 같은 좌우로 넓은 화면에서는 접기 모드가 필요하다."]
+    ]
+  },
+  vercel:{
+    title:"D · Vercel — Developer Platform",
+    lead:"근백색 캔버스에 1px 헤어라인 카드. 상단은 스코프 스위처(조직 / 에이전트 / 환경) + 얕고 넓은 탭 한 줄이고, 탐색보다 <u>검색과 딥링크</u>로 도달하게 만든 구조.",
+    cards:[
+      ["누구를 위한 화면","<u>개발자·분석가</u>. 트레이스 ID를 붙여넣어 바로 진입하는 게 기본 동선이고, 최근 조회 항목이 칩으로 남는다. ⌘K 팔레트가 메뉴를 대체한다."],
+      ["비즈니스 장치","상단 <u>스코프 스위처</u>가 핵심 — 지금은 에이전트가 하나지만 '에이전트 N개 × 환경(PRD/DEV)' 로 늘어날 때 화면 구조를 안 바꾸고 흡수한다. 탭의 <u>Failures 옆 카운트 배지</u>가 밀린 일을 상시 노출."],
+      ["내비게이션","탭 <u>한 줄에 7개</u>(Overview/Traces/Tokens/Failures/Report/Agent/Settings). 깊이를 늘리지 않고 넓게 펼쳐 클릭 1회로 어디든 간다. 기능이 더 늘면 Settings 하위로 접는다."],
+      ["트레이드오프","기능이 10개를 넘으면 <u>탭 한 줄이 깨진다</u> — 그때 좌측 레일을 추가해야 한다. 또 검은 잉크 위주라 성공/실패 같은 <u>상태 구분이 약해</u> 색 규칙을 별도로 세워야 한다."]
+    ]
+  }
+};
+
+/* ─────────────────────────── 시안 전환 ─────────────────────────── */
+const tabs = [...document.querySelectorAll(".vw-tab")];
+const note = document.getElementById("note");
+const noteBtn = document.getElementById("noteBtn");
+let current = "apple";
+
+function renderNote(){
+  const n = NOTES[current];
+  document.getElementById("noteTitle").textContent = n.title;
+  document.getElementById("noteLead").innerHTML = n.lead;
+  document.getElementById("noteGrid").innerHTML = n.cards
+    .map(([h,b])=>`<div class="vw-note-card"><b>${h}</b><p>${b}</p></div>`).join("");
+}
+function show(v){
+  current = v;
+  tabs.forEach(t=>t.classList.toggle("on", t.dataset.v===v));
+  document.querySelectorAll(".design").forEach(d=>d.classList.toggle("on", d.dataset.v===v));
+  renderNote();
+  window.scrollTo({top:0});
+}
+tabs.forEach(t=>t.addEventListener("click",()=>show(t.dataset.v)));
+noteBtn.addEventListener("click",()=>{
+  note.classList.toggle("open");
+  noteBtn.classList.toggle("on", note.classList.contains("open"));
+});
+document.addEventListener("keydown",(e)=>{
+  const order = ["apple","binance","bmw","vercel"];
+  if(e.key>="1" && e.key<="4"){ show(order[+e.key-1]); }
+  if(e.key.toLowerCase()==="n"){ noteBtn.click(); }
+});
+renderNote();
+</script>
+</body>
+</html>

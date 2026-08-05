@@ -256,7 +256,7 @@ export function QuestionsTable({
                         ) : sub.length === 0 ? (
                           <span className="muted">호출 내역 없음</span>
                         ) : (
-                          <CallsDetail calls={sub} originQuery={r.queryCtn} />
+                          <CallsDetail calls={sub} originQuery={r.queryCtn} rowCalls={r.calls} />
                         )}
                       </td>
                     </tr>
@@ -331,7 +331,18 @@ function QueryText({ text }: { text: string }) {
 // 펼침 상세 — 원본 질의 + 호출 타임라인.
 // 한 질문의 호출들은 QUERY_CTN 을 공유하는 게 보통이므로, 질의는 상단에 한 번만
 // 크게 보여주고 호출 카드에는 원본과 다른 쿼리가 들어간 호출에만 다시 표시한다.
-function CallsDetail({ calls, originQuery }: { calls: TokenRow[]; originQuery: string | null }) {
+// 상세는 TRACE_ID 로만 조회하므로(기간/노드/모델 필터 미적용) 표의 CALLS(기간 내 집계)보다
+// 많을 수 있다 — 그 차이는 요약 스트립에 명시해 숫자가 달라 보이는 혼란을 막는다.
+function CallsDetail({
+  calls,
+  originQuery,
+  rowCalls,
+}: {
+  calls: TokenRow[];
+  originQuery: string | null;
+  /** 표 행의 CALLS 값(= 현재 조회 조건 안에서 센 호출 수) */
+  rowCalls: number;
+}) {
   const ordered = useMemo(() => [...calls].reverse(), [calls]); // API 는 최신순 → 시간순으로
   const maxTok = Math.max(1, ...ordered.map((c) => c.totalTokens));
   const totalTok = ordered.reduce((a, c) => a + c.totalTokens, 0);
@@ -366,6 +377,11 @@ function CallsDetail({ calls, originQuery }: { calls: TokenRow[]; originQuery: s
 
       <div className="qcalls-summary">
         <span className="qcalls-count">호출 {ordered.length}건</span>
+        {ordered.length > rowCalls && (
+          <span className="qcalls-note" title="상세는 조회 조건과 무관하게 이 질문의 호출 전부를 보여줍니다">
+            조회 조건 밖 {ordered.length - rowCalls}건 포함
+          </span>
+        )}
         <span className="qcalls-flow">
           {flow.map((n, i) => (
             <Fragment key={`${n}-${i}`}>

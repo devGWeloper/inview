@@ -2128,6 +2128,16 @@ button.tbd-row:not(:disabled):hover {
 .qcalls-count { font-weight: 700; color: var(--text); }
 .qcalls-flow { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .qcalls-aux { font-size: 13px; color: var(--text-muted); }
+/* 상세는 TRACE_ID 로만 조회 → 표의 CALLS(기간 내)보다 많을 때 그 차이를 알린다 */
+.qcalls-note {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
 .qcall-arrow { color: var(--text-muted); font-size: 12px; }
 
 .qcall-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
@@ -3464,6 +3474,19 @@ button.tbd-row:not(:disabled):hover {
 
 /* 상단바 우측 그룹 (에이전트 칩 + 유저 메뉴) */
 .topbar-right { display: flex; align-items: center; gap: 10px; }
+
+/* 레이아웃 개편 시안 뷰어 진입 칩 — 검토 기간 한정 (AppChrome) */
+.design-peek {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 11px; border-radius: 8px;
+  border: 1px dashed var(--border-strong); background: var(--surface-2);
+  color: var(--text-2); font-size: 12.5px; white-space: nowrap;
+}
+.design-peek:hover {
+  text-decoration: none; color: var(--accent);
+  border-color: var(--accent); background: var(--accent-soft);
+}
+@media (max-width: 1180px) { .design-peek span:last-child { display: none; } }
 
 /* 권한 배지 색 (공용 CSS 변수) */
 .role-ADMIN { --role-c: #7c3aed; --role-bg: #f2ecfe; --role-bd: #e0d1fb; }

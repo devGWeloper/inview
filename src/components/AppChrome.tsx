@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { TabNav, AgentNavChip } from "@/components/TabNav";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { UserMenu } from "@/components/auth/UserMenu";
 
 /**
@@ -10,6 +11,7 @@ import { UserMenu } from "@/components/auth/UserMenu";
  */
 export function AppChrome({ version, children }: { version: string; children: React.ReactNode }) {
   const pathname = usePathname();
+  const { user } = useAuth();
   const bare = pathname === "/login";
 
   if (bare) return <>{children}</>;
@@ -31,6 +33,21 @@ export function AppChrome({ version, children }: { version: string; children: Re
         </div>
         <TabNav />
         <div className="topbar-right">
+          {/* 레이아웃 개편 시안 뷰어 (public/design-preview.html) — 검토용 임시 진입점.
+              ADMIN 전용: 여기서 감추는 건 표시 제어일 뿐이고, 실제 접근 차단은
+              ROUTE_RULES 의 /design-preview.html 규칙(ADMIN)을 미들웨어가 강제한다. */}
+          {user?.role === "ADMIN" && (
+            <a
+              className="design-peek"
+              href="/design-preview.html"
+              target="_blank"
+              rel="noreferrer"
+              title="레이아웃 개편 시안 4종 보기 (운영자 전용)"
+            >
+              <span aria-hidden>🎨</span>
+              <span>디자인 시안</span>
+            </a>
+          )}
           <AgentNavChip />
           <UserMenu />
         </div>

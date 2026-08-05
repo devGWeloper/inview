@@ -49,6 +49,8 @@ export interface RouteRule {
 export const ROUTE_RULES: RouteRule[] = [
   // 운영자 전용
   { prefix: "/admin", min: "ADMIN" }, // 프로필 편집
+  // public/ 정적 파일이지만 middleware matcher 가 .html 을 제외하지 않아 여기 규칙이 걸린다.
+  { prefix: "/design-preview.html", min: "ADMIN" }, // 레이아웃 개편 시안 뷰어 (검토용)
   // BR 이상
   { prefix: "/accounts", min: "BR" }, // 계정 관리 화면 (등록 권한 ADMIN/BR)
   { prefix: "/api/accounts", min: "BR" }, // 계정 CRUD API

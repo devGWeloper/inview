@@ -145,9 +145,13 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     const rowsOf = (r: { rows?: unknown }) => (r.rows ?? []) as Array<Record<string, unknown>>;
     // 쿼리별 격리 실행 — 한 집계가 SQL 에러(문법/버전 차 등)로 죽어도 응답 전체를 비우지 않고,
     // 어느 섹션이 무슨 에러로 실패했는지 로그에 남긴다. 실패 섹션만 빈 결과.
-    const run = async (name: string, sql: string): Promise<Array<Record<string, unknown>>> => {
+    const run = async (
+      name: string,
+      sql: string,
+      b: Record<string, unknown> = binds
+    ): Promise<Array<Record<string, unknown>>> => {
       try {
-        return rowsOf(await conn!.execute(sql, binds, opts));
+        return rowsOf(await conn!.execute(sql, b, opts));
       } catch (e) {
         logger.error(`fetchTokenStats [${name}] query failed`, { err: String(e), sql });
         return [];
@@ -298,14 +302,19 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     }));
 
     // 6) calls — 특정 질문(traceId) 으로 좁혔을 때만 호출별 행 채움 (행 펼침용)
+    //    ⚠️ 여기엔 조회 창(dateFrom/dateTo)·노드·모델 필터를 걸지 않고 TRACE_ID 로만 뽑는다.
+    //    질문을 펼치는 목적은 그 질문이 실제로 거친 호출 전부(라우터→실행 노드 흐름)를 보는 것이고,
+    //    나머지 필터는 "질문을 찾는" 조건일 뿐이다. 창을 그대로 적용하면 창 경계에 걸친 호출이
+    //    잘려 같은 질문이 1건/2건으로 오락가락한다(펼침 시점마다 창이 다시 계산돼 더 심해졌다).
     let calls: TokenRow[] = [];
     if (filter.traceId) {
       const callsSql =
         `SELECT TOKEN_ID, TRACE_ID, NODE_NM, MODEL_NM, USER_ID,` +
         ` INPUT_TOKENS, OUTPUT_TOKENS, TOTAL_TOKENS, LATENCY_MS, QUERY_CTN,` +
         ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS CALL_TM` +
-        ` FROM TRX_TOKEN_DET${where} ORDER BY CALL_TM DESC FETCH FIRST ${CALL_LIMIT} ROWS ONLY`;
-      calls = (await run("calls", callsSql)).map((r) => {
+        ` FROM TRX_TOKEN_DET WHERE TRACE_ID = :traceId` +
+        ` ORDER BY CALL_TM DESC FETCH FIRST ${CALL_LIMIT} ROWS ONLY`;
+      calls = (await run("calls", callsSql, { traceId: filter.traceId })).map((r) => {
         const lat = r.LATENCY_MS ?? r.latency_ms;
         return {
           tokenId: String(r.TOKEN_ID ?? r.token_id ?? ""),

@@ -55,7 +55,7 @@ function CustomTooltip({
       <div className="ts-tooltip-body">
         <div className="ts-tooltip-row">
           <span className="ts-tooltip-swatch" style={{ background: COLOR }} />
-          <span className="ts-tooltip-key">평균 지연</span>
+          <span className="ts-tooltip-key">평균 속도</span>
           <span className="ts-tooltip-val">{fmtDuration(row.avgLatencyMs)}</span>
         </div>
         <div className="ts-tooltip-row two-col">
@@ -96,7 +96,7 @@ export function TokenLatencyChart({ stats }: { stats: TokenStatsResponse }) {
   if (!hasData) {
     return (
       <div className="top-empty">
-        지연 데이터가 없습니다 · GAIA 가 LATENCY_MS 를 적재하면 표시됩니다
+        속도 데이터가 없습니다 · GAIA 가 LATENCY_MS 를 적재하면 표시됩니다
       </div>
     );
   }
@@ -106,7 +106,7 @@ export function TokenLatencyChart({ stats }: { stats: TokenStatsResponse }) {
       <div className="ts-legend">
         <span className="ts-legend-item" aria-hidden>
           <span className="legend-swatch" style={{ background: COLOR }} />
-          평균 LLM 호출 지연
+          평균 LLM 호출 속도
         </span>
         <span className="ts-legend-spacer" />
         <span className="ts-meta">{data.length} buckets · {granText(granularity)}</span>
@@ -159,7 +159,7 @@ export function TokenLatencyChart({ stats }: { stats: TokenStatsResponse }) {
             <Area
               type="monotone"
               dataKey="avgLatencyMs"
-              name="평균 지연"
+              name="평균 속도"
               stroke={COLOR}
               strokeWidth={1.8}
               fill="url(#lat-grad)"

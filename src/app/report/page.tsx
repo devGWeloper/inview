@@ -239,7 +239,7 @@ function buildReportText(opts: {
     L.push(`  · 총 호출        ${t.calls.toLocaleString()}회`);
     L.push(`  · 총 토큰        ${t.totalTokens.toLocaleString()} (IN ${t.inputTokens.toLocaleString()} / OUT ${t.outputTokens.toLocaleString()})`);
     L.push(`  · 호출당 평균    ${tok.avgTotalPerCall != null ? `${Math.round(tok.avgTotalPerCall).toLocaleString()} tok` : "—"}`);
-    L.push(`  · 평균 호출 지연 ${fmtDuration(tok.avgLatencyMs)}`);
+    L.push(`  · 평균 호출 속도 ${fmtDuration(tok.avgLatencyMs)}`);
 
     if (tok.byNode.length > 0) {
       L.push("");
@@ -248,7 +248,7 @@ function buildReportText(opts: {
         L.push(
           `  · ${n.key}: ${n.totalTokens.toLocaleString()} tok (${pct(n.totalTokens, t.totalTokens)})` +
             ` · 호출 ${n.calls.toLocaleString()}` +
-            ` · 지연 ${fmtDuration(n.avgLatencyMs)}`
+            ` · 속도 ${fmtDuration(n.avgLatencyMs)}`
         );
       }
     }
@@ -856,12 +856,12 @@ function ReportContent() {
           <section className="dash-card">
             <div className="dash-card-head">
               <div className="dash-card-title-group">
-                <span className="dash-card-title">LLM 호출 지연 추이</span>
+                <span className="dash-card-title">LLM 속도 추이</span>
                 <span className="dash-card-sub">호출당 평균 소요시간 · {granText(tok.granularity)} 단위</span>
               </div>
               <div className="dash-card-aux">
                 <span className="aux-pill">
-                  <span className="aux-pill-key">평균 지연</span>
+                  <span className="aux-pill-key">평균 속도</span>
                   <span className="aux-pill-val">{fmtDuration(tok.avgLatencyMs)}</span>
                 </span>
               </div>

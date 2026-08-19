@@ -15,7 +15,7 @@ const METRICS: { key: MetricKey; label: string; hint: string }[] = [
   { key: "tokens",  label: "토큰",      hint: "총 토큰" },
   { key: "calls",   label: "호출",      hint: "LLM 호출 수" },
   { key: "perCall", label: "토큰/호출", hint: "호출당 평균 토큰 — 어디가 비싼가" },
-  { key: "latency", label: "지연",      hint: "평균 호출 소요시간 — 어디가 느린가" },
+  { key: "latency", label: "속도",      hint: "평균 호출 소요시간 — 어디가 느린가" },
 ];
 
 const HUE = {
@@ -57,7 +57,7 @@ function rowTitle(d: TokenDimStat, subLabel: string): string {
     `호출 ${d.calls.toLocaleString()}\n` +
     `IN ${d.inputTokens.toLocaleString()} · OUT ${d.outputTokens.toLocaleString()}\n` +
     `총 토큰 ${d.totalTokens.toLocaleString()}\n` +
-    `평균 지연 ${d.avgLatencyMs == null ? "측정 없음" : fmtDuration(d.avgLatencyMs)}` +
+    `평균 속도 ${d.avgLatencyMs == null ? "측정 없음" : fmtDuration(d.avgLatencyMs)}` +
     subLine
   );
 }
@@ -137,7 +137,7 @@ function Board({
                 ["tokens", `${fmtCompact(d.totalTokens)} tok`],
                 ["calls", `${d.calls.toLocaleString()} 호출`],
                 ["perCall", per == null ? "—/호출" : `${fmtCompact(per)}/호출`],
-                ["latency", d.avgLatencyMs == null ? "지연 —" : `지연 ${fmtDuration(d.avgLatencyMs)}`],
+                ["latency", d.avgLatencyMs == null ? "속도 —" : `속도 ${fmtDuration(d.avgLatencyMs)}`],
               ] as [MetricKey, string][]
             )
               .filter(([k]) => k !== metric)

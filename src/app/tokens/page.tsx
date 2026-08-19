@@ -5,7 +5,6 @@ import { TokenChart } from "@/components/TokenChart";
 import { TokenLatencyChart, fmtDuration } from "@/components/TokenLatencyChart";
 import { TokenBreakdown } from "@/components/TokenBreakdown";
 import { TokenStatsCards } from "@/components/TokenStatsCards";
-import { TokenFailures } from "@/components/TokenFailures";
 import { QuestionsTable } from "@/components/QuestionsTable";
 import { TopList } from "@/components/TopList";
 import { TokenFilter, TokenRow, TokenStatsResponse } from "@/lib/types";
@@ -253,36 +252,6 @@ export default function TokensPage() {
             </div>
             <div className="dash-card-body">
               <TokenLatencyChart stats={stats} />
-            </div>
-          </section>
-
-          {/* 실패 호출 — 성공 호출만 적재하던 때 안 보이던 "끊긴 노드" 를 되살리는 섹션.
-              STAT_CD 미적재/실패 0건이면 컴포넌트가 안내 문구만 낸다. */}
-          <section className={"dash-card" + (stats.totals.errorCalls > 0 ? " dash-card-alert" : "")}>
-            <div className="dash-card-head">
-              <div className="dash-card-title-group">
-                <span className="dash-card-title">LLM 호출 실패</span>
-                <span className="dash-card-sub">타임아웃 포함 · 어느 노드에서 끊겼는지</span>
-              </div>
-              {stats.statusAvailable && (
-                <div className="dash-card-aux">
-                  <span className="aux-pill">
-                    <span className="aux-pill-key">실패</span>
-                    <span className="aux-pill-val">{stats.totals.errorCalls.toLocaleString()}</span>
-                  </span>
-                  <span className="aux-pill">
-                    <span className="aux-pill-key">실패율</span>
-                    <span className="aux-pill-val">
-                      {stats.totals.calls > 0
-                        ? ((stats.totals.errorCalls / stats.totals.calls) * 100).toFixed(1) + "%"
-                        : "—"}
-                    </span>
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="dash-card-body">
-              <TokenFailures stats={stats} onSelectNode={onSelectNode} />
             </div>
           </section>
 

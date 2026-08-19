@@ -40,7 +40,6 @@ async function getOracle(): Promise<typeof import("oracledb") | null> {
 const QUESTION_LIMIT = 500; // "질문별 토큰" 표에 로드할 질문 수 (마지막 호출 시각 desc — 최신 질문 우선)
 const CALL_LIMIT = 200;     // 단일 질문(traceId) 펼침 시 호출 행 수
 const TOP_USER_LIMIT = 8;
-const FAILURE_LIMIT = 50;   // "LLM 호출 실패" 목록에 내릴 최근 실패 호출 수
 
 const num = (v: unknown): number => {
   const n = Number(v ?? 0);
@@ -129,7 +128,6 @@ function emptyStats(filter: TokenFilter, g: Granularity, buckets: TokenBucket[])
     topUsers: [],
     questions: [],
     calls: [],
-    failures: [],
   };
 }
 
@@ -335,11 +333,8 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     //    질문을 펼치는 목적은 그 질문이 실제로 거친 호출 전부(라우터→실행 노드 흐름)를 보는 것이고,
     //    나머지 필터는 "질문을 찾는" 조건일 뿐이다. 창을 그대로 적용하면 창 경계에 걸친 호출이
     //    잘려 같은 질문이 1건/2건으로 오락가락한다(펼침 시점마다 창이 다시 계산돼 더 심해졌다).
-    const rowCols =
-      `SELECT TOKEN_ID, TRACE_ID, NODE_NM, MODEL_NM, USER_ID,` +
-      ` INPUT_TOKENS, OUTPUT_TOKENS, TOTAL_TOKENS, LATENCY_MS, QUERY_CTN${statCols},` +
-      ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS CALL_TM` +
-      ` FROM TRX_TOKEN_DET`;
+    //    STAT_CD/ERR_CTN 은 컬럼이 있을 때만 SELECT 한다(statCols) — 없으면 statCd=null 로
+    //    내려가고 callStatus() 가 'ok' 로 해석하므로 실패로 오인되지 않는다.
     const rowFrom = (r: Record<string, unknown>): TokenRow => {
       const lat = r.LATENCY_MS ?? r.latency_ms;
       return {
@@ -362,19 +357,12 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     let calls: TokenRow[] = [];
     if (filter.traceId) {
       const callsSql =
-        `${rowCols} WHERE TRACE_ID = :traceId` +
+        `SELECT TOKEN_ID, TRACE_ID, NODE_NM, MODEL_NM, USER_ID,` +
+        ` INPUT_TOKENS, OUTPUT_TOKENS, TOTAL_TOKENS, LATENCY_MS, QUERY_CTN${statCols},` +
+        ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS CALL_TM` +
+        ` FROM TRX_TOKEN_DET WHERE TRACE_ID = :traceId` +
         ` ORDER BY CALL_TM DESC FETCH FIRST ${CALL_LIMIT} ROWS ONLY`;
       calls = (await run("calls", callsSql, { traceId: filter.traceId })).map(rowFrom);
-    }
-
-    // 7) failures — 기간 내 실패(타임아웃 포함) 호출 최근순. "어느 노드가 언제 왜 끊겼나".
-    //    행 펼침(traceId 지정) 호출에는 불필요하므로 건너뛴다.
-    let failures: TokenRow[] = [];
-    if (hasStatus && !filter.traceId) {
-      const failSql =
-        `${rowCols}${where}${where ? " AND" : " WHERE"} ${SQL_ERR_PRED}` +
-        ` ORDER BY CALL_TM DESC FETCH FIRST ${FAILURE_LIMIT} ROWS ONLY`;
-      failures = (await run("failures", failSql)).map(rowFrom);
     }
 
     logger.info("fetchTokenStats ok", {
@@ -397,7 +385,6 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       topUsers,
       questions,
       calls,
-      failures,
     };
   } catch (e) {
     logger.error("fetchTokenStats failed", { ms: Date.now() - t0, err: String(e) });

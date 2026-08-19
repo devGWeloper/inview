@@ -465,11 +465,6 @@ export interface TokenStatsResponse {
   questions: TokenQuestion[];
   /** filter.traceId 가 지정됐을 때 그 질문의 호출별 행(callTm desc). 그 외엔 빈 배열 (행 펼침용) */
   calls: TokenRow[];
-  /**
-   * 기간 내 실패(타임아웃 포함) 호출 목록 — 최근순 상위 N건.
-   * "어느 노드가 언제 무슨 사유로 끊겼나" 를 바로 읽는 용도. 미적재면 빈 배열.
-   */
-  failures: TokenRow[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -80,7 +80,8 @@
       "Bash(npx --yes shadcn@latest init -d --yes)",
       "Bash(npx --yes shadcn@latest add card badge select tabs table separator skeleton chart tooltip dropdown-menu progress input scroll-area --yes --overwrite)",
       "Read(//c/Users/10333/.claude/plugins/cache/claude-plugins-official/**)",
-      "Bash(grep -n \"TRX_TOKEN_DET\\\\`\\\\*\\\\* — GAIA\\\\|LATENCY_MS\\\\` \\(LLM\\\\|fetchTokenStats\\\\` 도 latency\" CLAUDE.md)"
+      "Bash(grep -n \"TRX_TOKEN_DET\\\\`\\\\*\\\\* — GAIA\\\\|LATENCY_MS\\\\` \\(LLM\\\\|fetchTokenStats\\\\` 도 latency\" CLAUDE.md)",
+      "Bash(python -m http.server 8931 --bind 127.0.0.1)"
     ]
   }
 }

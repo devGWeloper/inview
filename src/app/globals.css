@@ -3922,9 +3922,6 @@ button.tbd-row:not(:disabled):hover {
   .kpi-grid-6 { grid-template-columns: 1fr; }
 }
 
-/* 실패가 있는 카드 헤드 강조 */
-.dash-card.dash-card-alert { border-color: color-mix(in srgb, var(--err) 32%, var(--border)); }
-
 /* 노드/모델 칩의 실패 변형 — 흐름(A → B ✕)에서 끊긴 지점을 집어준다 */
 .qnode.is-err {
   background: color-mix(in srgb, var(--err) 12%, transparent);
@@ -4029,82 +4026,3 @@ button.tbd-row:not(:disabled):hover {
   text-transform: uppercase;
 }
 .qcall-reason-text { color: var(--text-2); font-family: var(--mono); }
-
-/* ── "LLM 호출 실패" 섹션 ── */
-.tfail { display: flex; flex-direction: column; gap: 12px; }
-.tfail-nodes { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.tfail-nodes-label {
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  color: var(--text-3);
-  text-transform: uppercase;
-  margin-right: 2px;
-}
-.tfail-nodechip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 600;
-  font-family: var(--mono);
-  color: var(--err);
-  background: var(--err-soft);
-  border: 1px solid color-mix(in srgb, var(--err) 22%, transparent);
-  cursor: pointer;
-}
-.tfail-nodechip:disabled { cursor: default; }
-.tfail-nodechip:not(:disabled):hover { border-color: var(--err); }
-.tfail-nodechip em {
-  font-style: normal;
-  font-weight: 800;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--err) 14%, transparent);
-}
-
-.tfail-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.tfail-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--err);
-  border-radius: 9px;
-  background: var(--surface);
-}
-.tfail-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.tfail-time { font-size: 13px; color: var(--text-3); }
-.tfail-user { margin-left: auto; font-size: 12.5px; color: var(--text-muted); }
-.tfail-reason {
-  font-size: 13.5px;
-  font-family: var(--mono);
-  color: var(--text-2);
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-}
-.tfail-foot { display: flex; align-items: center; gap: 10px; }
-.tfail-trace { font-size: 12px; color: var(--text-muted); }
-.tfail-qbtn {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--accent);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-}
-.tfail-query {
-  font-size: 14px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  padding: 9px 11px;
-  border-radius: 8px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-}
-.tfail-more { font-size: 12.5px; color: var(--text-3); }

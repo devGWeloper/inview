@@ -21,7 +21,6 @@ import { TokenBreakdown } from "@/components/TokenBreakdown";
 import { TokenChart } from "@/components/TokenChart";
 import { TokenLatencyChart, fmtDuration } from "@/components/TokenLatencyChart";
 import { TokenStatsCards } from "@/components/TokenStatsCards";
-import { TokenFailures } from "@/components/TokenFailures";
 import { TopList } from "@/components/TopList";
 import { AgentProfile, DailyActionStat, StatsResponse, TokenStatsResponse } from "@/lib/types";
 import { apiJson, errMessage } from "@/lib/apiClient";
@@ -879,27 +878,6 @@ function ReportContent() {
               <TokenLatencyChart stats={tok} />
             </div>
           </section>
-
-          {/* 실패 호출 — 있을 때만. 실적 리포트에 "이번 주 몇 번 끊겼나"를 남긴다 */}
-          {tok.totals.errorCalls > 0 && (
-            <section className="dash-card dash-card-alert">
-              <div className="dash-card-head">
-                <div className="dash-card-title-group">
-                  <span className="dash-card-title">LLM 호출 실패</span>
-                  <span className="dash-card-sub">타임아웃 포함 · 어느 노드에서 끊겼는지</span>
-                </div>
-                <div className="dash-card-aux">
-                  <span className="aux-pill">
-                    <span className="aux-pill-key">실패</span>
-                    <span className="aux-pill-val">{tok.totals.errorCalls.toLocaleString()}</span>
-                  </span>
-                </div>
-              </div>
-              <div className="dash-card-body">
-                <TokenFailures stats={tok} />
-              </div>
-            </section>
-          )}
 
           {/* 노드별(action/judge/setup_guide) · 모델별 리더보드 — 리포트에선 필터 없이 조회 전용 */}
           <TokenBreakdown stats={tok} emptyText="데이터 없음" />

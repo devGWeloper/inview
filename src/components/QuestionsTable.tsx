@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { TokenQuestion, TokenRow } from "@/lib/types";
 import { fmtDuration } from "@/components/TokenLatencyChart";
+import { CallStatus, STATUS_LABEL, callStatus } from "@/lib/tokenStatus";
 
 const PAGE_SIZE = 20; // 한 페이지에 보여줄 질문 수
 
@@ -46,6 +47,7 @@ export function QuestionsTable({
   const [fUser, setFUser] = useState("");
   const [fNode, setFNode] = useState("");
   const [fModel, setFModel] = useState("");
+  const [fFailOnly, setFFailOnly] = useState(false);
   const [page, setPage] = useState(0);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [cache, setCache] = useState<Record<string, TokenRow[] | "loading">>({});
@@ -60,16 +62,21 @@ export function QuestionsTable({
     [questions]
   );
 
-  const hasFilter = !!(fTrace.trim() || fUser.trim() || fNode || fModel);
+  const hasFilter = !!(fTrace.trim() || fUser.trim() || fNode || fModel || fFailOnly);
   const clearFilters = () => {
     setFTrace("");
     setFUser("");
     setFNode("");
     setFModel("");
+    setFFailOnly(false);
   };
+
+  /** 실패 호출이 하나라도 있는 질문 수 — "실패만" 토글 노출 여부 */
+  const failQuestions = useMemo(() => questions.filter((x) => x.errorCalls > 0).length, [questions]);
 
   const rows = useMemo(() => {
     let list = questions;
+    if (fFailOnly) list = list.filter((x) => x.errorCalls > 0);
     const t = fTrace.trim().toLowerCase();
     const u = fUser.trim().toLowerCase();
     if (t)
@@ -86,10 +93,10 @@ export function QuestionsTable({
       const c = typeof va === "string" ? va.localeCompare(vb as string) : (va as number) - (vb as number);
       return c * mul;
     });
-  }, [questions, fTrace, fUser, fNode, fModel, sort]);
+  }, [questions, fTrace, fUser, fNode, fModel, fFailOnly, sort]);
 
   // 필터/정렬/데이터가 바뀌면 첫 페이지로
-  useEffect(() => { setPage(0); }, [fTrace, fUser, fNode, fModel, sort, questions]);
+  useEffect(() => { setPage(0); }, [fTrace, fUser, fNode, fModel, fFailOnly, sort, questions]);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const curPage = Math.min(page, pageCount - 1);
@@ -140,6 +147,16 @@ export function QuestionsTable({
           {rows.length.toLocaleString()}
           {hasFilter && ` / ${questions.length.toLocaleString()}`} 질문
         </span>
+        {failQuestions > 0 && (
+          <button
+            type="button"
+            className={"qfail-toggle" + (fFailOnly ? " active" : "")}
+            onClick={() => setFFailOnly((v) => !v)}
+            title="LLM 호출이 실패(타임아웃 포함)한 질문만 보기"
+          >
+            ⚠ 실패 포함 {failQuestions.toLocaleString()}
+          </button>
+        )}
         {hasFilter && (
           <button type="button" className="qfilter-clear" onClick={clearFilters}>
             컬럼 필터 초기화 ✕
@@ -209,7 +226,12 @@ export function QuestionsTable({
               return (
                 <Fragment key={r.qKey}>
                   <tr
-                    className={"qrow" + (expandable ? " expandable" : "") + (isOpen ? " open" : "")}
+                    className={
+                      "qrow" +
+                      (expandable ? " expandable" : "") +
+                      (isOpen ? " open" : "") +
+                      (r.errorCalls > 0 ? " has-err" : "")
+                    }
                     onClick={expandable ? () => toggle(r) : undefined}
                   >
                     <td className="qcell-exp">{expandable ? (isOpen ? "▾" : "▸") : ""}</td>
@@ -245,7 +267,17 @@ export function QuestionsTable({
                       <span className="qtotal-bar" style={{ width: `${w}%` }} aria-hidden />
                       <span className="qtotal-val">{fmtInt(r.totalTokens)}</span>
                     </td>
-                    <td className="num mono">{r.calls.toLocaleString()}</td>
+                    <td className="num mono">
+                      {r.calls.toLocaleString()}
+                      {r.errorCalls > 0 && (
+                        <span
+                          className="qcall-errbadge"
+                          title={`이 질문의 LLM 호출 중 ${r.errorCalls}건 실패(타임아웃 포함) — 펼치면 어느 노드인지 보입니다`}
+                        >
+                          ⚠ {r.errorCalls}
+                        </span>
+                      )}
+                    </td>
                   </tr>
                   {isOpen && (
                     <tr className="qsubrow">
@@ -351,6 +383,13 @@ function CallsDetail({
   const origin = originQuery ?? ordered.find((c) => c.queryCtn)?.queryCtn ?? null;
   const originNorm = normQ(origin);
 
+  // 호출별 상태 — 실패한 노드를 흐름/요약에서도 바로 집어준다.
+  // ("actionRouter 통과 → Seasoning 타임아웃" 을 카드를 열지 않고도 한 줄에서 읽게)
+  const statusOf = (c: TokenRow): CallStatus => callStatus(c.statCd, c.errCtn);
+  const failed = ordered.filter((c) => statusOf(c) !== "ok");
+  const failedNodes = new Set(failed.map((c) => c.nodeNm ?? "—"));
+  const timeouts = failed.filter((c) => statusOf(c) === "timeout").length;
+
   // 노드 흐름 (연속 중복만 접음: action → action → judge ⇒ action → judge)
   const flow: string[] = [];
   for (const c of ordered) {
@@ -375,8 +414,19 @@ function CallsDetail({
         </div>
       )}
 
-      <div className="qcalls-summary">
+      <div className={"qcalls-summary" + (failed.length > 0 ? " has-err" : "")}>
         <span className="qcalls-count">호출 {ordered.length}건</span>
+        {failed.length > 0 && (
+          <span
+            className="qcalls-fail"
+            title={failed
+              .map((c) => `${c.nodeNm ?? "—"}: ${STATUS_LABEL[statusOf(c)]}${c.errCtn ? ` — ${c.errCtn}` : ""}`)
+              .join("\n")}
+          >
+            ⚠ 실패 {failed.length}건{timeouts > 0 && ` (타임아웃 ${timeouts})`} ·{" "}
+            {Array.from(failedNodes).join(", ")}
+          </span>
+        )}
         {ordered.length > rowCalls && (
           <span className="qcalls-note" title="상세는 조회 조건과 무관하게 이 질문의 호출 전부를 보여줍니다">
             조회 조건 밖 {ordered.length - rowCalls}건 포함
@@ -386,7 +436,10 @@ function CallsDetail({
           {flow.map((n, i) => (
             <Fragment key={`${n}-${i}`}>
               {i > 0 && <span className="qcall-arrow" aria-hidden>→</span>}
-              <span className="qnode">{n}</span>
+              <span className={"qnode" + (failedNodes.has(n) ? " is-err" : "")}>
+                {n}
+                {failedNodes.has(n) && <span aria-hidden> ✕</span>}
+              </span>
             </Fragment>
           ))}
         </span>
@@ -401,32 +454,53 @@ function CallsDetail({
           const gap = prevMs != null && curMs != null && curMs >= prevMs ? curMs - prevMs : null;
           // 원본과 다른 쿼리가 들어간 호출만 카드 안에 쿼리를 다시 보여준다
           const differs = !!c.queryCtn && normQ(c.queryCtn) !== originNorm;
+          const st = statusOf(c);
+          const isFail = st !== "ok";
           return (
-            <li className="qcall" key={c.tokenId}>
+            <li className={"qcall" + (isFail ? " is-err" : "")} key={c.tokenId}>
               <span className="qcall-rail" aria-hidden>
-                <span className="qcall-dot">{i + 1}</span>
+                <span className={"qcall-dot" + (isFail ? " is-err" : "")}>{isFail ? "✕" : i + 1}</span>
               </span>
-              <div className="qcall-body">
+              <div className={"qcall-body" + (isFail ? " is-err" : "")}>
                 <div className="qcall-head">
-                  <span className="qnode">{c.nodeNm ?? "—"}</span>
+                  <span className={"qnode" + (isFail ? " is-err" : "")}>{c.nodeNm ?? "—"}</span>
                   <span className="qcall-arrow" aria-hidden>→</span>
                   <span className="qmodel">{c.modelNm ?? "—"}</span>
+                  {isFail && (
+                    <span className={"qcall-status is-" + st}>
+                      {st === "timeout" ? "⏱ TIMEOUT" : "⚠ ERROR"}
+                    </span>
+                  )}
                   {c.latencyMs != null && (
-                    <span className="qcall-lat mono" title="LLM 요청→응답 소요시간">⏱ {fmtDuration(c.latencyMs)}</span>
+                    <span
+                      className={"qcall-lat mono" + (isFail ? " is-err" : "")}
+                      title={isFail ? "호출 시작 → 예외 발생까지 기다린 시간" : "LLM 요청→응답 소요시간"}
+                    >
+                      ⏱ {fmtDuration(c.latencyMs)}
+                      {isFail && <span className="qcall-lat-note"> 대기 후 실패</span>}
+                    </span>
                   )}
                   <span className="qcall-time mono">
                     {fmtTs(c.callTm)}
                     {gap != null && gap > 0 && <span className="qcall-gap" title="직전 호출과의 간격"> (+{fmtDuration(gap)})</span>}
                   </span>
                 </div>
-                <div className="qcall-tok">
-                  <span className="qcall-tokbar" aria-hidden>
-                    <span style={{ width: `${(c.totalTokens / maxTok) * 100}%` }} />
-                  </span>
-                  <span className="qcall-toknum mono">
-                    IN {fmtInt(c.inputTokens)} · OUT {fmtInt(c.outputTokens)} · <b>{fmtInt(c.totalTokens)} tok</b>
-                  </span>
-                </div>
+                {isFail ? (
+                  // 실패 호출은 토큰이 0 이라 토큰 바가 의미 없다 — 사유를 그 자리에 놓는다
+                  <div className="qcall-reason">
+                    <span className="qcall-reason-label">실패 사유</span>
+                    <span className="qcall-reason-text">{c.errCtn || "사유 미기록"}</span>
+                  </div>
+                ) : (
+                  <div className="qcall-tok">
+                    <span className="qcall-tokbar" aria-hidden>
+                      <span style={{ width: `${(c.totalTokens / maxTok) * 100}%` }} />
+                    </span>
+                    <span className="qcall-toknum mono">
+                      IN {fmtInt(c.inputTokens)} · OUT {fmtInt(c.outputTokens)} · <b>{fmtInt(c.totalTokens)} tok</b>
+                    </span>
+                  </div>
+                )}
                 {differs && (
                   <div className="qcall-qdiff">
                     <span className="qcall-qdiff-label">이 호출의 쿼리 (원본과 다름)</span>

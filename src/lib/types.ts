@@ -333,10 +333,17 @@ export interface TokenRow {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
-  /** LLM 요청→응답 소요시간(ms). GAIA 가 측정 못 했으면 null */
+  /** LLM 요청→응답 소요시간(ms). 실패 호출이면 예외까지의 경과시간. 측정 없으면 null */
   latencyMs: number | null;
   /** LLM 에 실제로 들어간 쿼리/프롬프트 (디버깅용, 없으면 null) */
   queryCtn: string | null;
+  /**
+   * 호출 결과 코드 — 'OK' | 'ERROR' (타임아웃도 ERROR). 컬럼 미적재/미생성이면 null.
+   * 해석은 lib/tokenStatus.ts 의 callStatus() 로 통일한다(문구로 TIMEOUT 을 갈라냄).
+   */
+  statCd: string | null;
+  /** 실패 사유 (STAT_CD='ERROR' 일 때. 성공/미적재면 null) */
+  errCtn: string | null;
   /** ISO 형태 호출 시각 (TZ 없음) */
   callTm: string | null;
 }
@@ -360,8 +367,10 @@ export interface TokenQuestion {
    */
   queryCtn: string | null;
   userId: string | null;
-  /** 이 질문에서 발생한 LLM 호출 수 */
+  /** 이 질문에서 발생한 LLM 호출 수 (실패 호출 포함) */
   calls: number;
+  /** 그중 실패(타임아웃 포함)한 호출 수. STAT_CD 미적재면 항상 0 */
+  errorCalls: number;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
@@ -377,6 +386,8 @@ export interface TokenFilter {
   modelNm?: string;
   /** 특정 질문(TRACE_ID) 으로 좁히기. 설정 시 응답 calls 에 그 질문의 호출별 행이 채워진다. */
   traceId?: string;
+  /** 호출 결과로 좁히기 — 'error' = 실패(타임아웃 포함) 호출만, 'ok' = 성공만 */
+  status?: "ok" | "error";
 }
 
 export interface TokenBucket {
@@ -385,10 +396,16 @@ export interface TokenBucket {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
-  /** 해당 버킷의 LLM 호출 수 */
+  /** 해당 버킷의 LLM 호출 수 (실패 호출 포함) */
   calls: number;
-  /** 해당 버킷의 평균 LLM 호출 소요시간(ms). LATENCY_MS 가 기록된 호출이 없으면 null */
+  /**
+   * 해당 버킷의 평균 LLM 호출 소요시간(ms). **성공 호출만** 대상 —
+   * 타임아웃(예: 90s 한도)이 섞이면 평균이 한도값 쪽으로 끌려가 "느려졌다" 로 오독된다.
+   * LATENCY_MS 가 기록된 성공 호출이 없으면 null.
+   */
   avgLatencyMs: number | null;
+  /** 해당 버킷의 실패(타임아웃 포함) 호출 수. STAT_CD 미적재면 항상 0 */
+  errorCalls: number;
 }
 
 /** 교차 차원 구성 항목 — 노드별 카드에선 그 노드가 쓴 모델들, 모델별 카드에선 그 모델을 쓴 노드들 */
@@ -402,11 +419,14 @@ export interface TokenDimSub {
 export interface TokenDimStat {
   /** node 명 또는 model 명. null/empty 는 '(none)' 로 정규화 */
   key: string;
+  /** 호출 수 (실패 호출 포함) */
   calls: number;
+  /** 그중 실패(타임아웃 포함) 호출 수 — "어느 노드가 제일 많이 터지나". 미적재면 0 */
+  errorCalls: number;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
-  /** 차원 값별 평균 LLM 호출 소요시간(ms). LATENCY_MS 기록이 없으면 null */
+  /** 차원 값별 평균 LLM 호출 소요시간(ms). **성공 호출만**. 기록이 없으면 null */
   avgLatencyMs: number | null;
   /** 교차 구성 (totalTokens desc). byNode 행 = 모델 구성, byModel 행 = 노드 구성 */
   sub: TokenDimSub[];
@@ -414,10 +434,24 @@ export interface TokenDimStat {
 
 export interface TokenStatsResponse {
   range: { from: string | null; to: string | null };
-  totals: { calls: number; inputTokens: number; outputTokens: number; totalTokens: number };
+  totals: {
+    /** 전체 호출 수 (실패 포함) */
+    calls: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    /** 실패(타임아웃 포함) 호출 수. STAT_CD 미적재면 0 */
+    errorCalls: number;
+  };
+  /**
+   * TRX_TOKEN_DET 에 STAT_CD/ERR_CTN 컬럼이 있는지.
+   * false = 아직 ALTER 전(또는 조회 불가) → 실패 관련 수치는 전부 0 이며
+   * 화면은 "0건 실패" 가 아니라 "미적재" 로 안내해야 한다.
+   */
+  statusAvailable: boolean;
   /** 호출당 평균 총 토큰. 호출이 없으면 null */
   avgTotalPerCall: number | null;
-  /** 전체 평균 LLM 호출 소요시간(ms). LATENCY_MS 가 기록된 호출이 없으면 null */
+  /** 전체 평균 LLM 호출 소요시간(ms). **성공 호출만**. 기록이 없으면 null */
   avgLatencyMs: number | null;
   granularity: "5m" | "1h" | "1d";
   buckets: TokenBucket[];
@@ -431,6 +465,11 @@ export interface TokenStatsResponse {
   questions: TokenQuestion[];
   /** filter.traceId 가 지정됐을 때 그 질문의 호출별 행(callTm desc). 그 외엔 빈 배열 (행 펼침용) */
   calls: TokenRow[];
+  /**
+   * 기간 내 실패(타임아웃 포함) 호출 목록 — 최근순 상위 N건.
+   * "어느 노드가 언제 무슨 사유로 끊겼나" 를 바로 읽는 용도. 미적재면 빈 배열.
+   */
+  failures: TokenRow[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

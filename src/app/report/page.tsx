@@ -21,6 +21,7 @@ import { TokenBreakdown } from "@/components/TokenBreakdown";
 import { TokenChart } from "@/components/TokenChart";
 import { TokenLatencyChart, fmtDuration } from "@/components/TokenLatencyChart";
 import { TokenStatsCards } from "@/components/TokenStatsCards";
+import { TokenFailures } from "@/components/TokenFailures";
 import { TopList } from "@/components/TopList";
 import { AgentProfile, DailyActionStat, StatsResponse, TokenStatsResponse } from "@/lib/types";
 import { apiJson, errMessage } from "@/lib/apiClient";
@@ -239,7 +240,14 @@ function buildReportText(opts: {
     L.push(`  · 총 호출        ${t.calls.toLocaleString()}회`);
     L.push(`  · 총 토큰        ${t.totalTokens.toLocaleString()} (IN ${t.inputTokens.toLocaleString()} / OUT ${t.outputTokens.toLocaleString()})`);
     L.push(`  · 호출당 평균    ${tok.avgTotalPerCall != null ? `${Math.round(tok.avgTotalPerCall).toLocaleString()} tok` : "—"}`);
-    L.push(`  · 평균 호출 지연 ${fmtDuration(tok.avgLatencyMs)}`);
+    L.push(`  · 평균 호출 지연 ${fmtDuration(tok.avgLatencyMs)}${tok.statusAvailable ? " (성공 호출 기준)" : ""}`);
+    // 실패 호출(타임아웃 포함) — 성공만 적재하던 때는 리포트에 아예 안 잡히던 값
+    if (tok.statusAvailable) {
+      L.push(
+        `  · 실패 호출      ${t.errorCalls.toLocaleString()}회` +
+          (t.calls > 0 ? ` (${pct(t.errorCalls, t.calls)})` : "")
+      );
+    }
 
     if (tok.byNode.length > 0) {
       L.push("");
@@ -248,6 +256,7 @@ function buildReportText(opts: {
         L.push(
           `  · ${n.key}: ${n.totalTokens.toLocaleString()} tok (${pct(n.totalTokens, t.totalTokens)})` +
             ` · 호출 ${n.calls.toLocaleString()}` +
+            (n.errorCalls > 0 ? ` · 실패 ${n.errorCalls.toLocaleString()}` : "") +
             ` · 지연 ${fmtDuration(n.avgLatencyMs)}`
         );
       }
@@ -870,6 +879,27 @@ function ReportContent() {
               <TokenLatencyChart stats={tok} />
             </div>
           </section>
+
+          {/* 실패 호출 — 있을 때만. 실적 리포트에 "이번 주 몇 번 끊겼나"를 남긴다 */}
+          {tok.totals.errorCalls > 0 && (
+            <section className="dash-card dash-card-alert">
+              <div className="dash-card-head">
+                <div className="dash-card-title-group">
+                  <span className="dash-card-title">LLM 호출 실패</span>
+                  <span className="dash-card-sub">타임아웃 포함 · 어느 노드에서 끊겼는지</span>
+                </div>
+                <div className="dash-card-aux">
+                  <span className="aux-pill">
+                    <span className="aux-pill-key">실패</span>
+                    <span className="aux-pill-val">{tok.totals.errorCalls.toLocaleString()}</span>
+                  </span>
+                </div>
+              </div>
+              <div className="dash-card-body">
+                <TokenFailures stats={tok} />
+              </div>
+            </section>
+          )}
 
           {/* 노드별(action/judge/setup_guide) · 모델별 리더보드 — 리포트에선 필터 없이 조회 전용 */}
           <TokenBreakdown stats={tok} emptyText="데이터 없음" />

@@ -3903,3 +3903,208 @@ button.tbd-row:not(:disabled):hover {
   .acct-role-pick { flex-direction: column; }
   .acct-work { max-width: 140px; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LLM 호출 실패 (TRX_TOKEN_DET.STAT_CD='ERROR' / 타임아웃)
+   성공 호출만 적재하던 시절엔 끊긴 노드가 화면에서 사라졌다. 실패는 "조용히 빠지는"
+   대신 눈에 띄어야 하므로 err 색(빨강)으로 통일하고, 지연 배지와 구분되게 라벨을 붙인다.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* KPI 6-card 변형 (토큰 페이지: +실패 호출) */
+.kpi-grid-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+@media (max-width: 1440px) {
+  .kpi-grid-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .kpi-grid-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .kpi-grid-6 { grid-template-columns: 1fr; }
+}
+
+/* 실패가 있는 카드 헤드 강조 */
+.dash-card.dash-card-alert { border-color: color-mix(in srgb, var(--err) 32%, var(--border)); }
+
+/* 노드/모델 칩의 실패 변형 — 흐름(A → B ✕)에서 끊긴 지점을 집어준다 */
+.qnode.is-err {
+  background: color-mix(in srgb, var(--err) 12%, transparent);
+  color: var(--err);
+}
+
+/* 리더보드 행의 실패 배지 (메트릭 선택과 무관하게 항상 노출) */
+.tbd-line1 .tbd-val { margin-left: auto; }
+.tbd-errbadge {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--err);
+  background: var(--err-soft);
+  border: 1px solid color-mix(in srgb, var(--err) 25%, transparent);
+}
+
+/* 질문 표: 실패 포함 행 / 필터 토글 */
+.qtable .qrow.has-err td:first-child { box-shadow: inset 2px 0 0 var(--err); }
+.qcall-errbadge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--err);
+  background: var(--err-soft);
+}
+.qfail-toggle {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--err);
+  background: var(--err-soft);
+  border: 1px solid color-mix(in srgb, var(--err) 28%, transparent);
+}
+.qfail-toggle.active {
+  color: #fff;
+  background: var(--err);
+  border-color: var(--err);
+}
+
+/* 펼침 상세 요약 스트립 — 실패가 있으면 테두리부터 빨강 */
+.qcalls-summary.has-err { border-color: color-mix(in srgb, var(--err) 35%, transparent); }
+.qcalls-fail {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  color: var(--err);
+  background: var(--err-soft);
+  border: 1px solid color-mix(in srgb, var(--err) 25%, transparent);
+}
+
+/* 실패한 호출 카드 */
+.qcall-dot.is-err {
+  background: var(--err-soft);
+  border-color: color-mix(in srgb, var(--err) 45%, transparent);
+  color: var(--err);
+}
+.qcall-body.is-err {
+  border-color: color-mix(in srgb, var(--err) 35%, transparent);
+  background: color-mix(in srgb, var(--err) 3%, var(--surface));
+}
+.qcall-status {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  font-family: var(--mono);
+  color: #fff;
+}
+.qcall-status.is-timeout { background: var(--err); }
+.qcall-status.is-error   { background: var(--fail); }
+/* 실패 호출의 소요시간은 "응답까지" 가 아니라 "예외까지 기다린 시간" 이라 라벨을 붙인다 */
+.qcall-lat.is-err {
+  background: var(--err-soft);
+  border: 1px solid color-mix(in srgb, var(--err) 25%, transparent);
+  color: var(--err);
+}
+.qcall-lat-note { font-weight: 600; opacity: 0.75; }
+.qcall-reason {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 13.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.qcall-reason-label {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--err);
+  text-transform: uppercase;
+}
+.qcall-reason-text { color: var(--text-2); font-family: var(--mono); }
+
+/* ── "LLM 호출 실패" 섹션 ── */
+.tfail { display: flex; flex-direction: column; gap: 12px; }
+.tfail-nodes { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.tfail-nodes-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  margin-right: 2px;
+}
+.tfail-nodechip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--mono);
+  color: var(--err);
+  background: var(--err-soft);
+  border: 1px solid color-mix(in srgb, var(--err) 22%, transparent);
+  cursor: pointer;
+}
+.tfail-nodechip:disabled { cursor: default; }
+.tfail-nodechip:not(:disabled):hover { border-color: var(--err); }
+.tfail-nodechip em {
+  font-style: normal;
+  font-weight: 800;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--err) 14%, transparent);
+}
+
+.tfail-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tfail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--err);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.tfail-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.tfail-time { font-size: 13px; color: var(--text-3); }
+.tfail-user { margin-left: auto; font-size: 12.5px; color: var(--text-muted); }
+.tfail-reason {
+  font-size: 13.5px;
+  font-family: var(--mono);
+  color: var(--text-2);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.tfail-foot { display: flex; align-items: center; gap: 10px; }
+.tfail-trace { font-size: 12px; color: var(--text-muted); }
+.tfail-qbtn {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.tfail-query {
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.tfail-more { font-size: 12.5px; color: var(--text-3); }

@@ -3,8 +3,9 @@
 import { useMemo } from "react";
 import {
   Area,
-  AreaChart,
+  Bar,
   Brush,
+  ComposedChart,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -13,7 +14,8 @@ import {
 } from "recharts";
 import { TokenBucket, TokenStatsResponse } from "@/lib/types";
 
-const COLOR = "#f59e0b"; // latency 전용 색 (토큰 차트와 구분)
+const COLOR = "#f59e0b";     // latency 전용 색 (토큰 차트와 구분)
+const ERR_COLOR = "#dc2626"; // 실패 호출 막대
 
 type Gran = TokenStatsResponse["granularity"];
 
@@ -38,14 +40,21 @@ export function fmtDuration(ms: number | null): string {
   return `${m}m ${Math.round(s % 60)}s`;
 }
 
-type Row = { ts: string; tick: string; avgLatencyMs: number | null; calls: number };
+type Row = {
+  ts: string;
+  tick: string;
+  avgLatencyMs: number | null;
+  calls: number;
+  errorCalls: number;
+};
 
 function CustomTooltip({
-  active, payload, granularity,
+  active, payload, granularity, showErrors,
 }: {
   active?: boolean;
   payload?: Array<{ payload: Row }>;
   granularity: Gran;
+  showErrors: boolean;
 }) {
   if (!active || !payload || payload.length === 0) return null;
   const row = payload[0].payload;
@@ -58,6 +67,13 @@ function CustomTooltip({
           <span className="ts-tooltip-key">평균 지연</span>
           <span className="ts-tooltip-val">{fmtDuration(row.avgLatencyMs)}</span>
         </div>
+        {showErrors && (
+          <div className="ts-tooltip-row">
+            <span className="ts-tooltip-swatch" style={{ background: ERR_COLOR }} />
+            <span className="ts-tooltip-key">실패 호출</span>
+            <span className="ts-tooltip-val">{row.errorCalls.toLocaleString()}</span>
+          </div>
+        )}
         <div className="ts-tooltip-row two-col">
           <span className="ts-tooltip-key">CALLS</span>
           <span className="ts-tooltip-val">{row.calls.toLocaleString()}</span>
@@ -77,9 +93,14 @@ export function TokenLatencyChart({ stats }: { stats: TokenStatsResponse }) {
         tick: fmtTick(b.ts, granularity),
         avgLatencyMs: b.avgLatencyMs,
         calls: b.calls,
+        errorCalls: b.errorCalls,
       })),
     [stats.buckets, granularity]
   );
+
+  // 실패 호출 막대는 실제로 실패가 있을 때만 (0 뿐인 축을 늘 그리지 않는다)
+  const totalErrors = stats.totals.errorCalls;
+  const showErrors = stats.statusAvailable && totalErrors > 0;
 
   const { peakIdx, peakVal, peakTs, hasData } = useMemo(() => {
     let pIdx = -1, pVal = 0;
@@ -93,7 +114,7 @@ export function TokenLatencyChart({ stats }: { stats: TokenStatsResponse }) {
     return { peakIdx: pIdx, peakVal: pVal, peakTs: pIdx >= 0 ? data[pIdx].ts : null, hasData: any };
   }, [data]);
 
-  if (!hasData) {
+  if (!hasData && !showErrors) {
     return (
       <div className="top-empty">
         지연 데이터가 없습니다 · GAIA 가 LATENCY_MS 를 적재하면 표시됩니다
@@ -106,15 +127,21 @@ export function TokenLatencyChart({ stats }: { stats: TokenStatsResponse }) {
       <div className="ts-legend">
         <span className="ts-legend-item" aria-hidden>
           <span className="legend-swatch" style={{ background: COLOR }} />
-          평균 LLM 호출 지연
+          평균 LLM 호출 지연{showErrors ? " (성공 호출만)" : ""}
         </span>
+        {showErrors && (
+          <span className="ts-legend-item" aria-hidden>
+            <span className="legend-swatch" style={{ background: ERR_COLOR }} />
+            실패 호출 수
+          </span>
+        )}
         <span className="ts-legend-spacer" />
         <span className="ts-meta">{data.length} buckets · {granText(granularity)}</span>
       </div>
 
       <div className="ts-chart">
         <ResponsiveContainer width="100%" height={320}>
-          <AreaChart data={data} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
+          <ComposedChart data={data} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
             <defs>
               <linearGradient id="lat-grad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={COLOR} stopOpacity={0.45} />
@@ -131,18 +158,31 @@ export function TokenLatencyChart({ stats }: { stats: TokenStatsResponse }) {
               minTickGap={28}
             />
             <YAxis
+              yAxisId="lat"
               tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}
               tickLine={{ stroke: "var(--border-strong)" }}
               axisLine={{ stroke: "var(--border-strong)" }}
               width={56}
               tickFormatter={(v) => fmtDuration(Number(v))}
             />
+            {showErrors && (
+              <YAxis
+                yAxisId="err"
+                orientation="right"
+                allowDecimals={false}
+                tick={{ fill: ERR_COLOR, fontSize: 12.5, fontWeight: 600, fontFamily: "var(--mono)" }}
+                tickLine={{ stroke: "var(--border-strong)" }}
+                axisLine={{ stroke: "var(--border-strong)" }}
+                width={38}
+              />
+            )}
             <Tooltip
-              content={<CustomTooltip granularity={granularity} />}
+              content={<CustomTooltip granularity={granularity} showErrors={showErrors} />}
               cursor={{ stroke: "var(--accent)", strokeDasharray: "3 3", strokeOpacity: 0.4 }}
             />
             {peakIdx >= 0 && peakVal > 0 && (
               <ReferenceLine
+                yAxisId="lat"
                 x={data[peakIdx].tick}
                 stroke="var(--text-muted)"
                 strokeDasharray="3 4"
@@ -156,7 +196,20 @@ export function TokenLatencyChart({ stats }: { stats: TokenStatsResponse }) {
                 }}
               />
             )}
+            {showErrors && (
+              <Bar
+                yAxisId="err"
+                dataKey="errorCalls"
+                name="실패 호출"
+                fill={ERR_COLOR}
+                fillOpacity={0.5}
+                barSize={10}
+                radius={[2, 2, 0, 0]}
+                isAnimationActive={false}
+              />
+            )}
             <Area
+              yAxisId="lat"
               type="monotone"
               dataKey="avgLatencyMs"
               name="평균 지연"
@@ -178,7 +231,7 @@ export function TokenLatencyChart({ stats }: { stats: TokenStatsResponse }) {
                 tickFormatter={() => ""}
               />
             )}
-          </AreaChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>

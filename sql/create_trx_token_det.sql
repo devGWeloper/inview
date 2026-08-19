@@ -13,6 +13,12 @@
 --          NODE_NM / MODEL_NM / USER_ID 기준으로 SQL GROUP BY 집계한다.
 --
 --   적재 : GAIA 소스코드가 LLM CALL 마다 sql/dml_insert_token_det.sql 로 INSERT.
+--          ⚠️ 성공한 호출만이 아니라 실패(타임아웃 포함)한 호출도 1행 적재한다.
+--          call_llm 을 try/except 로 감싸 except 에서도 INSERT — 토큰 0,
+--          LATENCY_MS = 예외까지의 경과시간, STAT_CD='ERROR', ERR_CTN=실패 사유.
+--          이렇게 해야 "actionRouter 27초 통과 → Seasoning 90초 타임아웃" 처럼
+--          어느 노드에서 끊겼는지가 TraceX 에 남는다. (성공만 적재하면 실패 노드는
+--          행 자체가 없어 화면에서 사라지고, 지연 평균도 생존자 편향으로 낮아진다.)
 -- ============================================================================
 
 CREATE TABLE TRX_TOKEN_DET (
@@ -24,8 +30,10 @@ CREATE TABLE TRX_TOKEN_DET (
     INPUT_TOKENS       NUMBER         DEFAULT 0,                 -- 입력 토큰 (LLM usage 의 prompt_tokens/input_tokens)
     OUTPUT_TOKENS      NUMBER         DEFAULT 0,                 -- 출력 토큰 (LLM usage 의 completion_tokens/output_tokens)
     TOTAL_TOKENS       NUMBER         DEFAULT 0,                 -- 합계 (응답값 그대로; 없으면 input+output)
-    LATENCY_MS         NUMBER,                                  -- LLM 호출 소요시간(ms): 요청→응답. GAIA 가 측정해 적재(없으면 NULL)
+    LATENCY_MS         NUMBER,                                  -- LLM 호출 소요시간(ms): 요청→응답(실패면 예외까지의 경과시간). GAIA 가 측정해 적재(없으면 NULL)
     QUERY_CTN          VARCHAR2(4000),                          -- LLM 에 실제로 들어간 쿼리/프롬프트 (디버깅용, 없으면 NULL)
+    STAT_CD            VARCHAR2(10)   DEFAULT 'OK',             -- 호출 결과: 'OK' | 'ERROR' (타임아웃도 ERROR, 사유는 ERR_CTN)
+    ERR_CTN            VARCHAR2(1000),                          -- 실패 사유 (STAT_CD='ERROR' 일 때. 예: "ReadTimeout: 90s exceeded")
     CALL_TM            TIMESTAMP      DEFAULT SYSTIMESTAMP,      -- LLM 호출 시각 (시계열 버킷 기준)
     REG_DT             TIMESTAMP      DEFAULT SYSTIMESTAMP,      -- 적재 시각
     CONSTRAINT PK_TRX_TOKEN_DET PRIMARY KEY (TOKEN_ID)
@@ -36,6 +44,7 @@ CREATE INDEX IX_TRX_TOKEN_DET_01 ON TRX_TOKEN_DET (CALL_TM);
 CREATE INDEX IX_TRX_TOKEN_DET_02 ON TRX_TOKEN_DET (NODE_NM, CALL_TM);
 CREATE INDEX IX_TRX_TOKEN_DET_03 ON TRX_TOKEN_DET (MODEL_NM, CALL_TM);
 CREATE INDEX IX_TRX_TOKEN_DET_04 ON TRX_TOKEN_DET (TRACE_ID);
+CREATE INDEX IX_TRX_TOKEN_DET_05 ON TRX_TOKEN_DET (STAT_CD, CALL_TM);  -- 실패 호출 조회/집계용
 
 -- 컬럼 코멘트 ---------------------------------------------------------------
 COMMENT ON TABLE  TRX_TOKEN_DET                   IS 'GAIA LLM 호출별 토큰 사용량 상세 (앱 자체 DB 전용)';
@@ -49,6 +58,8 @@ COMMENT ON COLUMN TRX_TOKEN_DET.OUTPUT_TOKENS     IS '출력 토큰 수 (complet
 COMMENT ON COLUMN TRX_TOKEN_DET.TOTAL_TOKENS      IS '합계 토큰 수';
 COMMENT ON COLUMN TRX_TOKEN_DET.LATENCY_MS        IS 'LLM 호출 소요시간(ms): 요청→응답. 없으면 NULL';
 COMMENT ON COLUMN TRX_TOKEN_DET.QUERY_CTN         IS 'LLM 에 실제로 들어간 쿼리/프롬프트 (디버깅용, 최대 4000자)';
+COMMENT ON COLUMN TRX_TOKEN_DET.STAT_CD           IS '호출 결과: OK / ERROR (타임아웃 포함, 사유는 ERR_CTN)';
+COMMENT ON COLUMN TRX_TOKEN_DET.ERR_CTN           IS '실패 사유 (STAT_CD=ERROR 일 때)';
 COMMENT ON COLUMN TRX_TOKEN_DET.CALL_TM           IS 'LLM 호출 시각';
 COMMENT ON COLUMN TRX_TOKEN_DET.REG_DT            IS '적재 일시';
 
@@ -72,6 +83,17 @@ COMMIT;
 -- QUERY_CTN 를 사후 추가할 때:
 -- ALTER TABLE TRX_TOKEN_DET ADD (QUERY_CTN VARCHAR2(4000));
 -- COMMENT ON COLUMN TRX_TOKEN_DET.QUERY_CTN IS 'LLM 에 실제로 들어간 쿼리/프롬프트 (디버깅용, 최대 4000자)';
+-- COMMIT;
+--
+-- ── STAT_CD / ERR_CTN 를 사후 추가할 때 (실패 호출 적재용, 앱 자체 DB 에서 1회) ──
+--    이미 쌓인 행은 전부 성공 호출이므로 'OK' 로 backfill 한다.
+--    TraceX 는 이 컬럼이 없어도(ORA-00904) 죽지 않고 "실패 집계 미제공" 으로 동작하므로
+--    ALTER 와 GAIA 배포 순서는 자유다. 다만 ALTER 를 먼저 하는 편이 안전하다.
+-- ALTER TABLE TRX_TOKEN_DET ADD (STAT_CD VARCHAR2(10) DEFAULT 'OK', ERR_CTN VARCHAR2(1000));
+-- UPDATE TRX_TOKEN_DET SET STAT_CD = 'OK' WHERE STAT_CD IS NULL;
+-- CREATE INDEX IX_TRX_TOKEN_DET_05 ON TRX_TOKEN_DET (STAT_CD, CALL_TM);
+-- COMMENT ON COLUMN TRX_TOKEN_DET.STAT_CD IS '호출 결과: OK / ERROR (타임아웃 포함, 사유는 ERR_CTN)';
+-- COMMENT ON COLUMN TRX_TOKEN_DET.ERR_CTN IS '실패 사유 (STAT_CD=ERROR 일 때)';
 -- COMMIT;
 
 -- ============================================================================

@@ -17,6 +17,7 @@ import {
   parseTs,
   pickGranularity,
 } from "./timeBuckets";
+import { SQL_ERR_PRED, SQL_OK_PRED } from "./tokenStatus";
 
 // GAIA LLM 호출별 토큰 사용량(TRX_TOKEN_DET) 집계.
 // 앱 자체 DB(= GAIA, config.ts APP_DB_LAYER)에서만 조회한다(BIZ 테이블처럼 fan-out 안 함).
@@ -39,6 +40,7 @@ async function getOracle(): Promise<typeof import("oracledb") | null> {
 const QUESTION_LIMIT = 500; // "질문별 토큰" 표에 로드할 질문 수 (마지막 호출 시각 desc — 최신 질문 우선)
 const CALL_LIMIT = 200;     // 단일 질문(traceId) 펼침 시 호출 행 수
 const TOP_USER_LIMIT = 8;
+const FAILURE_LIMIT = 50;   // "LLM 호출 실패" 목록에 내릴 최근 실패 호출 수
 
 const num = (v: unknown): number => {
   const n = Number(v ?? 0);
@@ -68,8 +70,14 @@ function bucketExpr(g: Granularity): string {
   return `TRUNC(CALL_TM, 'HH24') + FLOOR(TO_NUMBER(TO_CHAR(CALL_TM, 'MI')) / 5) * 5 / 1440`;
 }
 
-/** TokenFilter → WHERE 절 + 바인드. 시간 컬럼은 CALL_TM 기준. */
-function buildWhere(filter: TokenFilter): { where: string; binds: Record<string, unknown> } {
+/**
+ * TokenFilter → WHERE 절 + 바인드. 시간 컬럼은 CALL_TM 기준.
+ * status 필터는 STAT_CD 컬럼이 있을 때만 붙인다(hasStatus).
+ */
+function buildWhere(
+  filter: TokenFilter,
+  hasStatus = false
+): { where: string; binds: Record<string, unknown> } {
   const where: string[] = [];
   const binds: Record<string, unknown> = {};
   if (filter.dateFrom) {
@@ -96,13 +104,22 @@ function buildWhere(filter: TokenFilter): { where: string; binds: Record<string,
     where.push(`TRACE_ID = :traceId`);
     binds.traceId = filter.traceId;
   }
+  if (hasStatus && filter.status) {
+    where.push(filter.status === "error" ? SQL_ERR_PRED : SQL_OK_PRED);
+  }
   return { where: where.length ? " WHERE " + where.join(" AND ") : "", binds };
+}
+
+/** 빈 버킷 리터럴 — 데이터 없음/미구성일 때도 차트가 균일하게 그려지도록 */
+function emptyBucket(ts: string): TokenBucket {
+  return { ts, inputTokens: 0, outputTokens: 0, totalTokens: 0, calls: 0, avgLatencyMs: null, errorCalls: 0 };
 }
 
 function emptyStats(filter: TokenFilter, g: Granularity, buckets: TokenBucket[]): TokenStatsResponse {
   return {
     range: { from: filter.dateFrom ?? null, to: filter.dateTo ?? null },
-    totals: { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    totals: { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, errorCalls: 0 },
+    statusAvailable: false,
     avgTotalPerCall: null,
     avgLatencyMs: null,
     granularity: g,
@@ -112,6 +129,7 @@ function emptyStats(filter: TokenFilter, g: Granularity, buckets: TokenBucket[])
     topUsers: [],
     questions: [],
     calls: [],
+    failures: [],
   };
 }
 
@@ -121,21 +139,14 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
   const toMs = filter.dateTo ? Date.parse(filter.dateTo) : now;
   const g = pickGranularity(fromMs, toMs);
   // 빈 버킷(시계열 차트가 균일하게 보이도록) — 데이터 없거나 미구성이어도 그대로 노출
-  const emptyBuckets: TokenBucket[] = enumerateBucketStarts(fromMs, toMs, g).map((k) => ({
-    ts: isoNoTz(k),
-    inputTokens: 0,
-    outputTokens: 0,
-    totalTokens: 0,
-    calls: 0,
-    avgLatencyMs: null,
-  }));
+  const emptyBuckets: TokenBucket[] = enumerateBucketStarts(fromMs, toMs, g).map((k) =>
+    emptyBucket(isoNoTz(k))
+  );
 
   const cfg = getAppDbConfig();
   if (!cfg) return emptyStats(filter, g, emptyBuckets);
   const oracle = await getOracle();
   if (!oracle) return emptyStats(filter, g, emptyBuckets);
-
-  const { where, binds } = buildWhere(filter);
 
   let conn: Awaited<ReturnType<typeof oracle.getConnection>> | undefined;
   const t0 = Date.now();
@@ -143,6 +154,20 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     conn = await oracle.getConnection(cfg);
     const opts = { outFormat: oracle.OBJECT } as const;
     const rowsOf = (r: { rows?: unknown }) => (r.rows ?? []) as Array<Record<string, unknown>>;
+
+    // 0) STAT_CD/ERR_CTN 컬럼 존재 확인 (GAIA 의 ALTER 전에도 화면이 죽지 않도록).
+    //    없으면(ORA-00904) 실패 관련 집계를 전부 빼고 예전과 동일하게 동작한다.
+    //    WHERE 1=0 이라 행을 읽지 않고 파싱만 태우는 비용뿐이다.
+    let hasStatus = true;
+    try {
+      await conn.execute("SELECT STAT_CD, ERR_CTN FROM TRX_TOKEN_DET WHERE 1 = 0", {}, opts);
+    } catch (e) {
+      hasStatus = false;
+      logger.warn("fetchTokenStats: STAT_CD/ERR_CTN 미존재 — 실패 호출 집계 생략", { err: String(e) });
+    }
+
+    const { where, binds } = buildWhere(filter, hasStatus);
+
     // 쿼리별 격리 실행 — 한 집계가 SQL 에러(문법/버전 차 등)로 죽어도 응답 전체를 비우지 않고,
     // 어느 섹션이 무슨 에러로 실패했는지 로그에 남긴다. 실패 섹션만 빈 결과.
     const run = async (
@@ -158,13 +183,20 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       }
     };
 
+    // 실패 호출 수 / 성공 호출만의 LATENCY 표현식 — 컬럼이 없으면 상수로 대체한다.
+    const errCntExpr = hasStatus ? `SUM(CASE WHEN ${SQL_ERR_PRED} THEN 1 ELSE 0 END)` : "0";
+    // ⚠️ 지연 평균은 성공 호출만: 타임아웃(90s 한도)이 섞이면 평균이 한도값 쪽으로 끌려가
+    //    "모델이 느려졌다" 로 오독된다. 실패 건의 소요시간은 실패 목록/호출 카드에서 따로 본다.
+    const latExpr = hasStatus ? `CASE WHEN ${SQL_OK_PRED} THEN LATENCY_MS END` : "LATENCY_MS";
+    const statCols = hasStatus ? ", STAT_CD, ERR_CTN" : "";
+
     // 1) 시계열 버킷 (+ totals 는 버킷 합으로 도출)
-    //   LATENCY_MS 는 NULL 가능 → SUM/COUNT(LATENCY_MS) 로 NULL 제외 평균을 도출하고,
+    //   LATENCY_MS 는 NULL 가능 → SUM/COUNT(latExpr) 로 NULL 제외 평균을 도출하고,
     //   전체 평균(latSum/latCnt)도 같은 행들에서 누적한다.
     const bucketSql =
       `SELECT TO_CHAR(${bucketExpr(g)}, 'YYYY-MM-DD"T"HH24:MI:SS') AS BKT,` +
       ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T, COUNT(*) AS N,` +
-      ` SUM(LATENCY_MS) AS LSUM, COUNT(LATENCY_MS) AS LCNT` +
+      ` SUM(${latExpr}) AS LSUM, COUNT(${latExpr}) AS LCNT, ${errCntExpr} AS ERRN` +
       ` FROM TRX_TOKEN_DET${where} GROUP BY ${bucketExpr(g)} ORDER BY 1`;
     const bucketMap = new Map<number, TokenBucket>();
     let latSum = 0;
@@ -184,18 +216,11 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
         totalTokens: num(r.T ?? r.t),
         calls: num(r.N ?? r.n),
         avgLatencyMs: lcnt > 0 ? lsum / lcnt : null,
+        errorCalls: num(r.ERRN ?? r.errn),
       });
     }
     const buckets = enumerateBucketStarts(fromMs, toMs, g).map(
-      (k) =>
-        bucketMap.get(k) ?? {
-          ts: isoNoTz(k),
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-          calls: 0,
-          avgLatencyMs: null,
-        }
+      (k) => bucketMap.get(k) ?? emptyBucket(isoNoTz(k))
     );
     const totals = buckets.reduce(
       (acc, b) => {
@@ -203,9 +228,10 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
         acc.inputTokens += b.inputTokens;
         acc.outputTokens += b.outputTokens;
         acc.totalTokens += b.totalTokens;
+        acc.errorCalls += b.errorCalls;
         return acc;
       },
-      { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+      { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, errorCalls: 0 }
     );
 
     // 2) byNode / 3) byModel — 동일 패턴 (차원 컬럼만 다름)
@@ -213,7 +239,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     const dimSql = (col: string) =>
       `SELECT NVL(${col}, '(none)') AS K, COUNT(*) AS N,` +
       ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T,` +
-      ` AVG(LATENCY_MS) AS L` +
+      ` AVG(${latExpr}) AS L, ${errCntExpr} AS ERRN` +
       ` FROM TRX_TOKEN_DET${where} GROUP BY NVL(${col}, '(none)') ORDER BY T DESC`;
     const dimFrom = (rows: Array<Record<string, unknown>>): TokenDimStat[] =>
       rows.map((r) => {
@@ -221,6 +247,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
         return {
           key: String(r.K ?? r.k ?? "(none)"),
           calls: num(r.N ?? r.n),
+          errorCalls: num(r.ERRN ?? r.errn),
           inputTokens: num(r.P ?? r.p),
           outputTokens: num(r.C ?? r.c),
           totalTokens: num(r.T ?? r.t),
@@ -271,11 +298,11 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     const agg = (col: string) =>
       `LISTAGG(${col}, ',' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY CALL_TM)`;
     const questionsSql =
-      `SELECT QKEY, TRACE_ID, NODES, MODELS, QCTN, USR, CALLS, P, C, T, LAST_TM FROM (` +
+      `SELECT QKEY, TRACE_ID, NODES, MODELS, QCTN, USR, CALLS, ERRN, P, C, T, LAST_TM FROM (` +
         `SELECT TRACE_ID AS QKEY, TRACE_ID,` +
         ` ${agg("NODE_NM")} AS NODES, ${agg("MODEL_NM")} AS MODELS,` +
         ` MIN(QUERY_CTN) KEEP (DENSE_RANK FIRST ORDER BY NVL2(QUERY_CTN, 0, 1), CALL_TM) AS QCTN,` +
-        ` MAX(USER_ID) AS USR, COUNT(*) AS CALLS,` +
+        ` MAX(USER_ID) AS USR, COUNT(*) AS CALLS, ${errCntExpr} AS ERRN,` +
         ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T,` +
         ` TO_CHAR(MAX(CALL_TM), 'YYYY-MM-DD"T"HH24:MI:SS') AS LAST_TM` +
         ` FROM TRX_TOKEN_DET${grpWhere("TRACE_ID IS NOT NULL")} GROUP BY TRACE_ID` +
@@ -283,6 +310,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
         `SELECT 'token:' || TOKEN_ID AS QKEY, NULL AS TRACE_ID, NODE_NM AS NODES, MODEL_NM AS MODELS,` +
         ` QUERY_CTN AS QCTN,` +
         ` USER_ID AS USR, 1 AS CALLS,` +
+        ` ${hasStatus ? `CASE WHEN ${SQL_ERR_PRED} THEN 1 ELSE 0 END` : "0"} AS ERRN,` +
         ` INPUT_TOKENS AS P, OUTPUT_TOKENS AS C, TOTAL_TOKENS AS T,` +
         ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS') AS LAST_TM` +
         ` FROM TRX_TOKEN_DET${grpWhere("TRACE_ID IS NULL")}` +
@@ -295,6 +323,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       queryCtn: str(r.QCTN ?? r.qctn),
       userId: str(r.USR ?? r.usr),
       calls: num(r.CALLS ?? r.calls),
+      errorCalls: num(r.ERRN ?? r.errn),
       inputTokens: num(r.P ?? r.p),
       outputTokens: num(r.C ?? r.c),
       totalTokens: num(r.T ?? r.t),
@@ -306,37 +335,59 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     //    질문을 펼치는 목적은 그 질문이 실제로 거친 호출 전부(라우터→실행 노드 흐름)를 보는 것이고,
     //    나머지 필터는 "질문을 찾는" 조건일 뿐이다. 창을 그대로 적용하면 창 경계에 걸친 호출이
     //    잘려 같은 질문이 1건/2건으로 오락가락한다(펼침 시점마다 창이 다시 계산돼 더 심해졌다).
+    const rowCols =
+      `SELECT TOKEN_ID, TRACE_ID, NODE_NM, MODEL_NM, USER_ID,` +
+      ` INPUT_TOKENS, OUTPUT_TOKENS, TOTAL_TOKENS, LATENCY_MS, QUERY_CTN${statCols},` +
+      ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS CALL_TM` +
+      ` FROM TRX_TOKEN_DET`;
+    const rowFrom = (r: Record<string, unknown>): TokenRow => {
+      const lat = r.LATENCY_MS ?? r.latency_ms;
+      return {
+        tokenId: String(r.TOKEN_ID ?? r.token_id ?? ""),
+        traceId: str(r.TRACE_ID ?? r.trace_id),
+        nodeNm: str(r.NODE_NM ?? r.node_nm),
+        modelNm: str(r.MODEL_NM ?? r.model_nm),
+        userId: str(r.USER_ID ?? r.user_id),
+        inputTokens: num(r.INPUT_TOKENS ?? r.input_tokens),
+        outputTokens: num(r.OUTPUT_TOKENS ?? r.output_tokens),
+        totalTokens: num(r.TOTAL_TOKENS ?? r.total_tokens),
+        latencyMs: lat == null ? null : num(lat),
+        queryCtn: str(r.QUERY_CTN ?? r.query_ctn),
+        statCd: str(r.STAT_CD ?? r.stat_cd),
+        errCtn: str(r.ERR_CTN ?? r.err_ctn),
+        callTm: str(r.CALL_TM ?? r.call_tm),
+      };
+    };
+
     let calls: TokenRow[] = [];
     if (filter.traceId) {
       const callsSql =
-        `SELECT TOKEN_ID, TRACE_ID, NODE_NM, MODEL_NM, USER_ID,` +
-        ` INPUT_TOKENS, OUTPUT_TOKENS, TOTAL_TOKENS, LATENCY_MS, QUERY_CTN,` +
-        ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS CALL_TM` +
-        ` FROM TRX_TOKEN_DET WHERE TRACE_ID = :traceId` +
+        `${rowCols} WHERE TRACE_ID = :traceId` +
         ` ORDER BY CALL_TM DESC FETCH FIRST ${CALL_LIMIT} ROWS ONLY`;
-      calls = (await run("calls", callsSql, { traceId: filter.traceId })).map((r) => {
-        const lat = r.LATENCY_MS ?? r.latency_ms;
-        return {
-          tokenId: String(r.TOKEN_ID ?? r.token_id ?? ""),
-          traceId: str(r.TRACE_ID ?? r.trace_id),
-          nodeNm: str(r.NODE_NM ?? r.node_nm),
-          modelNm: str(r.MODEL_NM ?? r.model_nm),
-          userId: str(r.USER_ID ?? r.user_id),
-          inputTokens: num(r.INPUT_TOKENS ?? r.input_tokens),
-          outputTokens: num(r.OUTPUT_TOKENS ?? r.output_tokens),
-          totalTokens: num(r.TOTAL_TOKENS ?? r.total_tokens),
-          latencyMs: lat == null ? null : num(lat),
-          queryCtn: str(r.QUERY_CTN ?? r.query_ctn),
-          callTm: str(r.CALL_TM ?? r.call_tm),
-        };
-      });
+      calls = (await run("calls", callsSql, { traceId: filter.traceId })).map(rowFrom);
     }
 
-    logger.info("fetchTokenStats ok", { calls: totals.calls, questions: questions.length, ms: Date.now() - t0 });
+    // 7) failures — 기간 내 실패(타임아웃 포함) 호출 최근순. "어느 노드가 언제 왜 끊겼나".
+    //    행 펼침(traceId 지정) 호출에는 불필요하므로 건너뛴다.
+    let failures: TokenRow[] = [];
+    if (hasStatus && !filter.traceId) {
+      const failSql =
+        `${rowCols}${where}${where ? " AND" : " WHERE"} ${SQL_ERR_PRED}` +
+        ` ORDER BY CALL_TM DESC FETCH FIRST ${FAILURE_LIMIT} ROWS ONLY`;
+      failures = (await run("failures", failSql)).map(rowFrom);
+    }
+
+    logger.info("fetchTokenStats ok", {
+      calls: totals.calls,
+      errorCalls: totals.errorCalls,
+      questions: questions.length,
+      ms: Date.now() - t0,
+    });
 
     return {
       range: { from: filter.dateFrom ?? null, to: filter.dateTo ?? null },
       totals,
+      statusAvailable: hasStatus,
       avgTotalPerCall: totals.calls > 0 ? totals.totalTokens / totals.calls : null,
       avgLatencyMs: latCnt > 0 ? latSum / latCnt : null,
       granularity: g,
@@ -346,6 +397,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       topUsers,
       questions,
       calls,
+      failures,
     };
   } catch (e) {
     logger.error("fetchTokenStats failed", { ms: Date.now() - t0, err: String(e) });

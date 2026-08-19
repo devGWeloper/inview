@@ -83,7 +83,8 @@
       "Bash(grep -n \"TRX_TOKEN_DET\\\\`\\\\*\\\\* — GAIA\\\\|LATENCY_MS\\\\` \\(LLM\\\\|fetchTokenStats\\\\` 도 latency\" CLAUDE.md)",
       "Bash(python -m http.server 8931 --bind 127.0.0.1)",
       "Bash(python -)",
-      "PowerShell(Stop-Process *)"
+      "PowerShell(Stop-Process *)",
+      "PowerShell(npx tsc --noEmit -p tsconfig.json; if \\($?\\) { \"TYPECHECK OK\" })"
     ]
   }
 }

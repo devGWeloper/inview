@@ -80,26 +80,28 @@ The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTI
   - **타임아웃 추적은 Tokens 탭이 아니라 `/timeouts` 탭이 담당한다** (아래 "Timeout 탭" 참고).
   - The Tokens 탭 has two halves: **현황**(KPI/추이 — `TokenStatsCards`/`TokenChart`, LLM 호출 지연 추이 차트 `TokenLatencyChart`, 노드별/모델별 리더보드 카드 `TokenBreakdown` — `byNode`/`byModel` 를 각각 별도 카드(노드=파랑, 모델=보라)로 렌더, 순위 배지 + 큰 값 + 1위 대비 상대 바 + 비중%, 토큰/호출/토큰·호출/지연 공유 메트릭 토글, 행 클릭 = 노드/모델 필터. **노드×모델 교차 집계**(`TokenDimStat.sub`, 별도 `GROUP BY NODE_NM, MODEL_NM` 쿼리)로 각 노드가 실제 쓴 모델 구성(역방향도)을 행 안에 칩+비중% 로 노출 — 한 질문이 여러 노드/모델을 거치므로(예: actionRouterNode=qwen3.6 → SeasoningNode=qwen3.5) "노드=모델 1개" 로 오해하지 않게 하는 장치) and **질문별 토큰**(`QuestionsTable`). A "질문" = one `TRACE_ID`; 한 질문의 호출은 라우터→실행 노드처럼 **여러 노드/모델을 거칠 수 있어** `questions` 는 대표값(MAX) 대신 거쳐간 노드/모델 **전부**를 내린다(`nodes[]`/`models[]`, `LISTAGG ... ON OVERFLOW TRUNCATE` 후 JS 중복 제거, 첫 호출 순) — 표에는 칩으로 나열. `fetchTokenStats` returns `questions` (grouped by `TRACE_ID`, null-trace rows treated as one-call-per-question, **최신 LAST_TM desc 상위 500건** — 토큰순 로드였을 때 최근 질문이 잘려 보이는 착시가 있어 최신순으로 변경). 집계 쿼리들은 `run()` 헬퍼로 **쿼리별 격리 실행**되어 한 쿼리가 SQL 에러여도 그 섹션만 비고 나머지는 정상, 로그에 `fetchTokenStats [섹션명] query failed` + ORA 코드가 남는다. **질의 = 질문의 대표 정보** 관점: 한 질문의 호출들은 같은 `QUERY_CTN` 을 공유하는 게 보통이라, `questions` 가 **원본 질의**(`queryCtn` — 가장 이른 non-null 호출의 QUERY_CTN, `MIN ... KEEP (DENSE_RANK FIRST ORDER BY NVL2(QUERY_CTN,0,1), CALL_TM)`)를 질문 단위로 내리고 표의 질문 셀은 **질의(크게) + TRACE_ID(작게) 2줄**로 그린다. `QuestionsTable` 은 **컬럼별 필터**(질문(질의+TRACE_ID)/USER 텍스트, NODE/MODEL 셀렉트 — 로드된 상위 질문 범위 내 클라이언트 필터) + **헤더 클릭 정렬**(LAST_TM/IN/OUT/TOTAL/CALLS, 재클릭 = 방향 토글, 기본 = LAST_TM desc) 구조. Passing `?traceId=` narrows everything and fills `calls` (per-call rows, incl. `queryCtn`/`latencyMs`) used to expand a question inline. ⚠️ **`calls` 쿼리만은 `TRACE_ID` 단독 조회**다 — 기간/노드/모델 필터를 걸지 않는다. 질문을 펼치는 목적은 그 질문이 실제로 거친 호출 **전부**(라우터→실행 노드)를 보는 것이고, 나머지 필터는 "질문을 찾는" 조건일 뿐이다. 예전엔 창을 그대로 적용한 데다 클라이언트가 **펼침 시점의 `Date.now()`로 창을 다시 계산**해서, 화면을 띄워두고 시간이 흐르면 같은 질문의 호출이 1건/2건으로 잘려 보였다(프리셋 창이 앞으로 밀림). 그래서 `fetchCalls` 도 `traceId` 만 보낸다. 대신 표의 `CALLS`(기간 내 집계)보다 상세가 많을 수 있어 `CallsDetail` 이 "조회 조건 밖 N건 포함" 배지로 차이를 밝힌다 — 펼침(`CallsDetail`)은 **원본 질의 블록**(액센트 보더, 전체 노출 — 280자 초과 시만 3줄 접힘+더 보기 `QueryText`)을 헤드라인으로 두고, 아래에 **호출 타임라인**: 요약 스트립(호출 수 · 노드 흐름 · 총 토큰 · 첫→마지막 구간) + 시간순 `#N` 레일 + 호출 카드(노드→모델 · ⏱응답시간 · 직전 호출과의 간격 · 토큰 바). 호출 카드의 쿼리는 **원본과 다를 때만**(공백 정규화 비교) "이 호출의 쿼리" 로 다시 표시. **any** trace-linked question 에서 가능(호출 1건이어도). `QUERY_CTN` 은 `calls` 쿼리와 `questions` 의 원본 질의 집계에서만 SELECT 한다.
 
-### Timeout 탭 — `/timeouts` (⚠️ 기존 BIZ 데이터 `ERR_CD` 기준)
+### Timeout 탭 — `/timeouts` (ADMIN 전용)
 
-LLM 타임아웃이 잦아 추적이 필요한데, 기존 대시보드에선 이게 "에러 코드 한 줄" 로 뭉뚱그려져
-**얼마나 심한지·어디서 나는지가 안 보였다**(누가 보면 문제없어 보임). 그래서 타임아웃 전용 화면을 뒀다.
+LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에러 한 줄" 로 뭉뚱그려져
+얼마나 심한지·어디서 나는지가 안 보였다. 그래서 타임아웃 전용 화면을 뒀다.
 
-- **판정은 새 컬럼이 아니라 기존 데이터로 한다.** `BIZ_AIACTIONTXN_HIS.ERR_CD` 가 대상이며 기본값은
-  `TIMEOUT_DEFAULT_ERR_CD = "ERROR_LLM"`(`types.ts`) — GAIA 가 LLM 호출에서 튕기면 남는 코드이고
-  실무상 대부분이 타임아웃(= 외부 LLM 인프라 문제)이다. `TRX_TOKEN_DET.STAT_CD` 적재 여부와 무관하게 지금 당장 동작한다.
-  코드명이 다를 수 있으므로 화면에 **기간 내 전체 ERR_CD 분포**를 함께 띄우고 클릭으로 대상 코드를 바꿀 수 있게 했다(검증 겸 전환).
+- **출처는 `TRX_TOKEN_DET` 한 곳.** GAIA 가 `call_llm` 을 try/except 로 감싸 실패 호출도 1행 적재하므로
+  (`STAT_CD='ERROR'` + `ERR_CTN` + 토큰 0 + `LATENCY_MS`=예외까지 기다린 시간),
+  **끊긴 그 호출의 노드/모델/질의/대기시간을 그대로 읽는다. 추정하지 않는다.**
+  (BIZ 의 `ERR_CD` 를 보거나 "마지막 성공 호출" 로 노드를 되짚는 방식은 **틀린 답**을 준다 —
+  성공 호출만 남던 시절엔 항상 actionRouter 가 잡혀 "라우터에서만 타임아웃" 처럼 보였다. 그 방식은 폐기했다.)
+- **타임아웃 vs 그 외 오류**는 `ERR_CTN` 문구로 가른다 — 판정은 `src/lib/tokenStatus.ts` 한 곳
+  (`callStatus()` = 화면용, `SQL_ERR_PRED`/`SQL_TIMEOUT_PRED` = 집계 SQL용. 하나를 고치면 다른 쪽도 같이).
 - **집계** `src/lib/timeouts.ts` `fetchTimeoutStats()` → `GET /api/timeouts` → `src/app/timeouts/page.tsx`.
-  `fetchAllRows`(stats route 와 동일하게 limit 없이 기간 전체)로 BIZ 행을 받아 TRACE_ID 로 묶고,
-  대상 코드를 가진 트레이스만 골라 발생 추이·액션 타입별·사용자별을 센다. 대표 사용자/트레이스 시작 시각 기준은
-  stats route(`traceUserId`, 첫 recv)와 동일. 사용자 질문은 **CUBE(진입 레이어)의 SEND_MSG_CTN** 에서
-  `humanText()`(`src/lib/humanText.ts`, Improvement Center 와 공용)로 뽑는다.
-- **노드/모델만 `TRX_TOKEN_DET` 조인**(TRACE_ID IN, 500개 청크). `STAT_CD` 가 있으면 **실패한 호출**의 노드를 정확히 집고
-  (`nodeExact=true`), 없으면 그 트레이스에서 **마지막으로 기록된 호출**의 노드를 쓴다(= 타임아웃 직전 노드, `nodeExact=false`).
-  이 차이는 화면에 문구로 밝힌다("타임아웃 직전 마지막 호출 기준"). 앱 DB 미구성/조회 실패면 노드·모델만 비고 나머지는 정상(`nodeLinked=false`).
-- **화면**: KPI 4(타임아웃 수+전체 대비 비율 / 영향 사용자 / 최근 발생 / 최다 노드) · 발생 추이 막대 ·
-  노드별·모델별·액션타입별·사용자별 `TopList` · 기간 내 에러 코드(클릭 = 대상 전환) · 타임아웃 요청 목록(시각·노드→모델·액션·사용자·질문·에러·TRACE_ID).
-  접근 권한은 기본값(로그인만) — `ROUTE_RULES` 미등록.
+  전부 `TRX_TOKEN_DET` 대상의 SQL `GROUP BY` 이며 BIZ 조회/조인이 없어 가볍다. 쿼리별 격리 실행(`run()`).
+  `STAT_CD`/`ERR_CTN` 컬럼이 없으면(적재 전) `available=false` 로 내려 화면이 "적재 전" 안내만 띄운다
+  (0 건으로 보이면 "문제 없음" 으로 오독되므로 구분한다).
+- **화면**: KPI 4(타임아웃 수+전체 호출 대비 비율 / 실패 호출 / 평균 대기 / 영향 사용자) ·
+  발생 추이 스택 막대(타임아웃 vs 기타 오류) · 노드별·모델별·사용자별 분포(`DimCard` — 실패 수 막대 +
+  그 값의 전체 호출 대비 실패율, 노드 행 클릭 = 노드 필터) · **실패한 호출 표**
+  (호출 시각·결과·노드·모델·대기·사용자·질의·사유·TRACE_ID — `token-recent` 표 스타일 재사용).
+- **접근 권한 = ADMIN 전용** — `ROUTE_RULES` 에 `/timeouts`, `/api/timeouts` 등록. `TabNav` 도 `minRole` 로
+  ADMIN 에게만 탭을 노출한다.
 
 ### Oracle integration notes
 
@@ -131,7 +133,7 @@ LLM 타임아웃이 잦아 추적이 필요한데, 기존 대시보드에선 이
 - **기간**: 기본 주 단위 — **월요일 00:00 ~ 다음주 월요일 00:00** (`weekRange()`). **일간 모드**(`dayRange()`, 자정~다음날 자정)도 지원: 오늘/어제/이번 주/지난주 프리셋 + ◀▶ 로 현재 단위(일/주) 기준 기간 이동(미래는 비활성). "직접 설정" 모드에서 `datetime-local` 로 시각까지 자유 지정.
 - **데이터**: 적용 기간으로 `GET /api/stats` + `GET /api/tokens` 를 병렬 호출 (필터 없음 = FullScope). 보조로 `/api/profile`(리포트 제목의 에이전트 이름)과 `/api/error-codes`(에러 의미)도 로드하며 실패해도 무해.
 - **일별 브레이크다운**: 주간/기간 조회에서도 하루 단위 실적이 바로 보이도록 `/api/stats` 가 `daily: DailyStat[]` 을 항상 내린다 — buckets 와 별개로 **항상 "일" 단위**(귀속 기준은 buckets 와 동일한 트레이스 시작 시각), 빈 날은 0, `to` 상한 경계는 `-1ms` 로 마지막 빈 날 방지. `DailyStat` = date/total/ok/fail/pending/**users**(그날의 대표 사용자 distinct — Set 이 필요해 서버에서만 집계 가능)/avgCubeLatencyMs. 리포트의 `mergeDailyRows()` 가 여기에 토큰(`tok.buckets` 를 날짜별 합산)을 붙여, **"일별 현황" 표**(`DailyTable` — 실행 상대 바 + peak 배지 + 토/일 색 + 합계 행, KPI 바로 아래)와 복사 텍스트의 **`[일별 현황]`** 섹션이 같은 행을 공유한다. 둘 다 **2일 이상 조회일 때만** 노출(하루짜리는 KPI 와 동어반복).
-- **화면 구성**: ① Action Agent 실적 — KPI 5칸(총 실행/성공률/실패/평균 응답시간/**사용자 수**), 일별 현황 표(위 참고), 사용 추이(`TimeSeriesChart`), 평균 응답 지연(`CubeLatencyChart`), 상태 분포+주요 에러, 액션 타입별+주간 사용자(`TopList`), FAC별/AREA별 ② LLM 토큰 — `TokenStatsCards`/`TokenChart`/`TokenLatencyChart` + **노드별 구분**(`TokenBreakdown`, action 외 judge/setup_guide 노드 실적 분리 — 리포트에선 필터 없이 조회 전용) ③ 리포트 텍스트 미리보기(`<pre>`) — 복사될 내용 그대로 노출. 기존 대시보드/Tokens 탭 컴포넌트를 그대로 재사용한다.
+- **화면 구성**: ① Action Agent 실적 — KPI 5칸(총 실행/성공률/실패/평균 응답시간/**사용자 수**), 일별 현황 표(위 참고), 사용 추이(`TimeSeriesChart`), 평균 응답 속도(`CubeLatencyChart`), 상태 분포+주요 에러, 액션 타입별+주간 사용자(`TopList`), FAC별/AREA별 ② LLM 토큰 — `TokenStatsCards`/`TokenChart`/`TokenLatencyChart` + **노드별 구분**(`TokenBreakdown`, action 외 judge/setup_guide 노드 실적 분리 — 리포트에선 필터 없이 조회 전용) ③ 리포트 텍스트 미리보기(`<pre>`) — 복사될 내용 그대로 노출. 기존 대시보드/Tokens 탭 컴포넌트를 그대로 재사용한다.
 - **전체 복사**: `buildReportText()` 가 두 응답을 보고용 플레인 텍스트로 조립(일별 현황, 액션별 성공/실패, 주요 에러+의미, Top 사용자, FAC/AREA top5, 노드별/모델별 토큰) → `navigator.clipboard.writeText` (실패 시 textarea+`execCommand` 폴백) → 버튼이 2초간 "✓ 복사됨" 으로 바뀜.
 - **사용자 수**: `/api/stats` 가 `uniqueUsers`(optional 필드) 를 함께 내린다 — "기간 내 몇 명이 사용했나". 정의: 트레이스별 **대표 사용자의 distinct 수** (한 사용자가 100번 요청해도 1명). 대표 사용자는 `traceUserId()` 가 **진입 레이어(CUBE) 우선**으로 첫 non-null `USER_ID` 를 고르고 공백을 trim 한다 — USER_ID 는 전 레이어가 INSERT 시 기록하므로 행 순서대로 집으면 하위 레이어의 시스템 계정 값이 섞여 부풀 수 있어서다. `topUsers` 도 같은 대표 사용자 기준.
 
@@ -217,23 +219,55 @@ DB 마이그레이션은 불필요(컬럼 유지). 되살릴 땐 남아 있는 `
 
 | 지표 | 위치 | 재는 대상 | 단위 | 소스 |
 |------|------|-----------|------|------|
-| **평균 응답 지연** | 대시보드 | **Action 1건의 end-to-end 응답시간** (LLM 포함 전 구간 왕복) | 트레이스 | `BIZ_AIACTIONTXN_HIS` CUBE 행 |
+| **평균 응답 속도** (UI 라벨; 내부 필드명은 latency 계열 유지) | 대시보드 | **Action 1건의 end-to-end 응답시간** (LLM 포함 전 구간 왕복) | 트레이스 | `BIZ_AIACTIONTXN_HIS` CUBE 행 |
 | **LLM 호출 지연 추이** | Tokens 탭 | **LLM 호출 1건**의 순수 소요시간, **전 노드**(action/judge/setup_guide…) | LLM 콜 | `TRX_TOKEN_DET.LATENCY_MS` |
 
-**① 대시보드 "평균 응답 지연"** — 트레이스별 **CUBE 행의 `SEND_TM`(min) → `RESP_TM`(max)**. CUBE 가 진입 레이어라
+**① 대시보드 "평균 응답 속도"** — 트레이스별 **CUBE 행의 `SEND_TM`(min) → `RESP_TM`(max)**. CUBE 가 진입 레이어라
 이 왕복은 하위(GAIA/MCP/ONEOIS) + LLM 을 모두 거친 **전체 응답시간**이 된다. 버킷 귀속은 사용 추이 차트와 동일하게
 트레이스 시작 시각(첫 recv) 기준. 24h 이상/음수 이상치는 제외.
 - `src/app/api/stats/route.ts` — `cubeLat` 버킷 집계 + `cubeAvgLatencyMs` 응답 필드
 - `src/lib/types.ts` — `TimeBucket.avgCubeLatencyMs`/`cubeLatencyTraces`, `StatsResponse.cubeAvgLatencyMs` (모두 optional)
 - `src/components/CubeLatencyChart.tsx` — 차트 (`TokenLatencyChart` 의 `fmtDuration` 재사용)
-- `src/app/dashboard/page.tsx` — "평균 응답 지연" 섹션 (사용 추이 카드 바로 아래)
+- `src/app/dashboard/page.tsx` — "평균 응답 속도" 섹션 (사용 추이 카드 바로 아래)
 
 **② Tokens 탭 "LLM 호출 지연 추이"** — `TRX_TOKEN_DET.LATENCY_MS`(GAIA 가 LLM 요청→응답 시각차 측정) 의 버킷별 평균.
 Action 에 한정되지 않고 GAIA 의 모든 노드 LLM 호출을 포괄한다. 노드별/모델별 `avgLatencyMs` 로도 분해된다.
-**평균은 성공 호출만** 쓰고, 실패(타임아웃) 호출은 같은 차트에 **빨간 막대(건수)** 로 따로 그린다 —
-"느려졌다" 와 "끊겼다" 는 다른 사건이라 한 평균에 섞지 않는다. (위 "App-owned DB" 의 `TRX_TOKEN_DET` 참고.)
+**평균은 성공 호출만** 쓴다(타임아웃이 섞이면 한도값으로 끌려가 오독된다). 차트에 실패 지표를 얹지는 않는다 —
+타임아웃 추적은 `/timeouts` 탭이 담당한다. (위 "App-owned DB" 의 `TRX_TOKEN_DET` 참고.)
 
 > 두 지표는 **상호 보완**이다: ①은 "사용자가 체감한 총 응답시간이 느려졌나", ②는 "그중 LLM 호출 자체가 느린가/어느 노드가 느린가"를 답한다.
+
+### ①의 레이어별 분해 — "레이어별 소요 비중" (대시보드 최하단)
+
+①(전체 응답시간)을 **레이어별로 쪼개** "어느 레이어가 시간을 썼나 / 어디서 실패가 시작되나"를 답하는 카드.
+
+⚠️ **행의 `SEND_TM→RESP_TM`(=`LayerStats.avgRespMs`)로 레이어를 비교하면 안 된다.** 이건 하위 레이어
+대기를 통째로 품는 **포함(inclusive) 시간**이라 `CUBE ⊃ GAIA ⊃ MCP ⊃ ONEOIS` 로 중첩되고, 언제나
+진입 레이어가 1등으로 나와 아무 정보가 없다. `avgRespMs` 는 진단용 참고값으로만 남겨 뒀다.
+
+대신 `stats/route.ts` 가 트레이스별로 **self time** 을 분해한다 (`selfMs`/`selfTimeTraces`):
+
+```
+wait_i    = Σ(RESP_TM − SEND_TM)   i 가 하위를 기다린 시간 (멀티콜은 호출별 합)
+outer_0   = 진입 레이어 RECV→RESP   트레이스 전체 관측 구간
+outer_i   = wait_(i−1)              부모가 i 에게 내준 구간
+self_i    = outer_i − wait_i        i 자신의 처리 + 전송 지연
+self_최하위 = outer_최하위           그 아래(외부 시스템/미연결 레이어)는 미기록이라 제 몫으로 흡수
+```
+
+텔레스코핑되어 **Σ self_i = outer_0** 이므로 그대로 "시간 비중 100%" 로 읽힌다. GAIA 의 LLM 호출은
+MCP `send→resp` 창 **밖**(주로 앞)에서 일어나므로 자연히 `self_GAIA` 로 잡힌다 — 실제로 GAIA 가 1등이 된다.
+
+- ⚠️ **체인은 그 트레이스에 행이 있는 레이어만** 돈다(`present`). 행 없는 레이어를 체인에 두면 그 레이어의
+  `wait` 가 0 이라 부모가 기다린 시간이 통째로 **존재하지도 않는 레이어**의 몫으로 잡힌다(MCP 미도달
+  트레이스인데 MCP 가 2.7s 쓴 것처럼 보이는 버그).
+- 분모(`selfTimeTraces`)는 **진입 레이어의 recv·resp 가 모두 기록된 완료 트레이스**만. 미완료는 제외.
+- 시계 편차로 `wait > outer` 인 경우 `Math.max(0, …)` 로 clamp.
+- **실패 발생 레이어**(`LayerStats.failOriginTraces`) = `errCd` 를 가진 **가장 깊은** 레이어로 트레이스 1건 귀속.
+  에러가 상위로 전파돼 여러 레이어에 `errCd` 가 찍혀도 최초 발생지 1곳만 센다. (행 단위 `failCount` 는 그대로 유지)
+- 화면 `src/components/LayerBudget.tsx` (`lb-*`): 평균 응답 히어로 + **100% 스택 스트립 2개**(시간 비중 /
+  실패 발생 비중, 레이어 색 = `LAYER_COLOR`) + 레이어별 표(자체 소요 평균·비중·실패·행 수, 최다 행 강조).
+  막대 길이 비교가 아니라 **비중**으로 읽는 구성. (구 `LayerBars.tsx` 는 삭제됨)
 
 ## ⚠️ TEMPORARY WORKAROUND — ONEOIS 미연결 status 보정 (제거 예정)
 

@@ -33,9 +33,22 @@ export function isFailedCall(statCd: string | null | undefined, errCtn?: string 
 }
 
 /**
- * SQL 에서 "실패 호출" 을 판정하는 술어. tokens.ts 의 집계 쿼리들이 공유한다.
+ * SQL 에서 "실패 호출" 을 판정하는 술어. tokens.ts / timeouts.ts 의 집계 쿼리들이 공유한다.
  * NULL 은 성공(컬럼 추가 전 행)으로 취급 — callStatus() 의 OK_CODES 와 규칙을 맞춘다.
  */
 export const SQL_ERR_PRED = "UPPER(NVL(STAT_CD, 'OK')) NOT IN ('OK', 'SUCCESS', 'S', 'Y')";
 /** 위 술어의 부정 — 성공 호출만 대상으로 삼는 집계(지연 평균 등)에 쓴다. */
 export const SQL_OK_PRED = "UPPER(NVL(STAT_CD, 'OK')) IN ('OK', 'SUCCESS', 'S', 'Y')";
+/**
+ * 실패 중에서도 "타임아웃" 을 골라내는 SQL 술어 — 위 TIMEOUT_RE 의 SQL 판.
+ * (STAT_CD 가 'TIMEOUT' 인 구현이 나중에 생겨도 잡히도록 코드 자체도 본다.)
+ * 두 판정이 갈리지 않게 TIMEOUT_RE 를 고치면 여기도 같이 고친다.
+ */
+export const SQL_TIMEOUT_PRED =
+  "(UPPER(NVL(STAT_CD, '')) = 'TIMEOUT'" +
+  " OR UPPER(NVL(ERR_CTN, '')) LIKE '%TIMEOUT%'" +
+  " OR UPPER(NVL(ERR_CTN, '')) LIKE '%TIMED OUT%'" +
+  " OR UPPER(NVL(ERR_CTN, '')) LIKE '%ETIMEDOUT%'" +
+  " OR UPPER(NVL(ERR_CTN, '')) LIKE '%DEADLINE EXCEEDED%'" +
+  " OR NVL(ERR_CTN, '') LIKE '%타임아웃%'" +
+  " OR NVL(ERR_CTN, '') LIKE '%시간 초과%')";

@@ -5,7 +5,7 @@ import { CubeLatencyChart } from "@/components/CubeLatencyChart"; // Action end-
 import { fmtDuration } from "@/components/TokenLatencyChart";
 import { DimensionBreakdown } from "@/components/DimensionBreakdown";
 import { ProfileStrip } from "@/components/ProfileStrip";
-import { LayerBars } from "@/components/LayerBars";
+import { LayerBudget } from "@/components/LayerBudget";
 import { StatsCards } from "@/components/StatsCards";
 import { StatusDonut } from "@/components/StatusDonut";
 import { TimeSeriesChart } from "@/components/TimeSeriesChart";
@@ -285,12 +285,12 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          {/* 평균 응답 지연 추이 — Action end-to-end 응답시간(CUBE send→resp, LLM 포함 전 구간).
+          {/* 평균 응답 속도 추이 — Action end-to-end 응답시간(CUBE send→resp, LLM 포함 전 구간).
               Tokens 탭의 LLM 호출 지연(1콜 단위, 전 노드)과는 재는 대상이 다른 정규 지표다. */}
           <section className="dash-card">
             <div className="dash-card-head">
               <div className="dash-card-title-group">
-                <span className="dash-card-title">평균 응답 지연</span>
+                <span className="dash-card-title">평균 응답 속도</span>
                 <span className="dash-card-sub">
                   Action 전체 응답시간 · CUBE 수신→응답(LLM 포함 전 구간) · {granText(stats.granularity)} 단위
                 </span>
@@ -432,12 +432,14 @@ export default function DashboardPage() {
           <section className="dash-card dash-card-muted">
             <div className="dash-card-head">
               <div className="dash-card-title-group">
-                <span className="dash-card-title">레이어별 호출</span>
-                <span className="dash-card-sub">행 단위 호출량 · 평균 응답시간 (engineering view)</span>
+                <span className="dash-card-title">레이어별 소요 비중</span>
+                <span className="dash-card-sub">
+                  어느 레이어가 시간을 쓰고 어디서 실패가 시작되나 · 하위 대기를 뺀 자체 소요 기준
+                </span>
               </div>
             </div>
             <div className="dash-card-body">
-              <LayerBars stats={stats} />
+              <LayerBudget stats={stats} />
             </div>
           </section>
         </>

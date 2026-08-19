@@ -606,7 +606,6 @@ export function TraceTimeline({ traceId, rows, loading }: {
     .filter((g) => g.rows.length > 0);
 
   const seq = buildSeqMap(rows);
-  const seqTotal = seq.size;
 
   return (
     <>
@@ -625,19 +624,6 @@ export function TraceTimeline({ traceId, rows, loading }: {
       </div>
 
       <div className="timeline">
-        {seqTotal > 0 && (
-          <div className="tl-legend">
-            <span className="tl-legend-title">송수신 순서</span>
-            <span className="tl-legend-item">
-              <span className="seq down">1</span>요청 · 상위 → 하위
-            </span>
-            <span className="tl-legend-arrow">…</span>
-            <span className="tl-legend-item">
-              <span className="seq up">{seqTotal}</span>응답 · 하위 → 상위
-            </span>
-            <span className="tl-legend-note">칼럼의 숫자는 이 트레이스에서 실제 기록된 순번입니다</span>
-          </div>
-        )}
         {groups.map((g) =>
           g.rows.length === 1
             ? <SingleCallCard key={g.layer} row={g.rows[0]} seq={seq} frac3={frac3} setFrac3={setFrac3} startResize={startResize} />

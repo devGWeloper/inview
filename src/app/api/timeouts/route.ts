@@ -4,8 +4,8 @@ import { logger, reqContext } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
-// 타임아웃 추적 집계. 기존 BIZ 데이터(ERR_CD, 기본 ERROR_LLM)만으로 계산하며,
-// 노드/모델만 TRX_TOKEN_DET 조인으로 덧붙인다(없어도 무해).
+// 타임아웃 추적 집계. TRX_TOKEN_DET 의 실패 적재(STAT_CD/ERR_CTN)만 본다.
+// 컬럼이 없으면 available=false 로 내려가고 화면이 "적재 전" 안내를 띄운다.
 function isoNoTz(ms: number): string {
   const d = new Date(ms);
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const filter = {
     dateFrom: sp.get("dateFrom") || isoNoTz(now - 24 * 3_600_000),
     dateTo: sp.get("dateTo") || isoNoTz(now),
-    errCd: sp.get("errCd") || undefined,
+    nodeNm: sp.get("nodeNm") || undefined,
   };
 
   logger.info("GET /api/timeouts", { ...ctx, filter });
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     const stats = await fetchTimeoutStats(filter);
     logger.info("GET /api/timeouts done", {
       ...ctx,
-      timeouts: stats.timeoutTraces,
+      timeouts: stats.timeoutCalls,
       ms: Date.now() - t0,
       status: 200,
     });

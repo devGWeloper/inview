@@ -160,11 +160,32 @@ export async function GET(req: NextRequest) {
     let latencySum = 0;
     let latencyN = 0;
 
-    // Action 전체 응답 지연: CUBE(진입 레이어) send→resp 를 버킷별 집계 — 대시보드 "평균 응답 지연" 차트용.
+    // Action 전체 응답 지연: CUBE(진입 레이어) send→resp 를 버킷별 집계 — 대시보드 "평균 응답 속도" 차트용.
     // Tokens 탭의 LLM 호출 지연(1콜 단위, LATENCY_MS)과는 별개의 정규 지표(전 구간 왕복시간).
     const cubeLat = new Map<number, { sum: number; n: number }>();
     let cubeLatSum = 0;
     let cubeLatN = 0;
+
+    // ── 레이어별 자체 소요시간(self time) 분해 ────────────────────────────────
+    // 행의 SEND_TM→RESP_TM 은 "하위 레이어를 기다린 시간" 이라 위로 갈수록 아래 것을 통째로 품는다
+    // (CUBE ⊃ GAIA ⊃ MCP ⊃ ONEOIS). 그대로 비교하면 언제나 진입 레이어가 1등이라 의미가 없다.
+    // 그래서 각 레이어의 몫에서 바로 아래 레이어의 대기시간을 빼 self time 으로 분해한다:
+    //
+    //   wait_i    = Σ(RESP_TM − SEND_TM)   i 가 하위를 기다린 시간 (멀티콜은 호출별 합)
+    //   outer_0   = 진입 레이어 RECV→RESP   트레이스 전체 관측 구간
+    //   outer_i   = wait_(i−1)              부모가 i 에게 내준 구간
+    //   self_i    = outer_i − wait_i        i 자신의 처리 + 전송 지연
+    //   self_last = outer_last              최하위는 외부 시스템 호출까지가 제 몫(그 아래는 미기록)
+    //
+    // 텔레스코핑되어 Σ self_i = outer_0 이므로 그대로 "시간 비중 100%" 로 읽을 수 있다.
+    // GAIA 의 LLM 호출처럼 실제로 시간을 쓴 레이어가 드러난다.
+    const selfMs = new Map<LayerKey, number>();
+    for (const l of LAYER_ORDER) selfMs.set(l, 0);
+    let selfTimeTraces = 0;
+    // 실패 발생 레이어: errCd 를 가진 "가장 깊은" 레이어로 귀속.
+    // 에러가 상위로 전파돼 여러 레이어에 errCd 가 찍혀도 최초 발생지 1곳만 센다.
+    const failOrigin = new Map<LayerKey, number>();
+    for (const l of LAYER_ORDER) failOrigin.set(l, 0);
 
     // 일별 브레이크다운 (리포트 "일별 현황"): buckets 와 별개로 항상 "일" 단위로 집계.
     // 사용자 수는 하루 안에서 distinct 라 Set 이 필요해 buckets 에 얹지 않고 따로 둔다.
@@ -216,6 +237,53 @@ export async function GET(req: NextRequest) {
       // TEMP(ONEOIS 미연결): 액션 실패(시즈닝/AutoQual 취소·실행)는 실제 errCd 가 없으므로 가상 코드로 topErrors 에 반영
       for (const code of matchedActionFailCodes(list)) {
         errCount.set(code, (errCount.get(code) ?? 0) + 1);
+      }
+
+      // 실패 발생 레이어 = errCd 를 가진 가장 깊은 레이어 (전파돼 올라온 상위 errCd 는 세지 않음)
+      let deepestErr = -1;
+      for (const r of list) {
+        if (!r.errCd) continue;
+        const li = LAYER_ORDER.indexOf(r.layer);
+        if (li > deepestErr) deepestErr = li;
+      }
+      if (deepestErr >= 0) {
+        const l = LAYER_ORDER[deepestErr];
+        failOrigin.set(l, (failOrigin.get(l) ?? 0) + 1);
+      }
+
+      // 레이어별 self time 분해 (위 주석의 wait/outer/self 정의 참고)
+      const entryRows = list.filter((r) => r.layer === LAYER_ORDER[0]);
+      const entryRecv = entryRows.map((r) => parseTs(r.recvTm)).filter((v): v is number => v !== null);
+      const entryResp = entryRows.map((r) => parseTs(r.respTm)).filter((v): v is number => v !== null);
+      if (entryRecv.length > 0 && entryResp.length > 0) {
+        const outer0 = Math.max(...entryResp) - Math.min(...entryRecv);
+        if (outer0 >= 0 && outer0 < 24 * 3_600_000) {
+          // wait_i: 레이어별 (resp − send) 합. 멀티콜은 호출별로 더한다.
+          const waitOf = (l: LayerKey) => {
+            let sum = 0;
+            for (const r of list) {
+              if (r.layer !== l) continue;
+              const s = parseTs(r.sendTm);
+              const e = parseTs(r.respTm);
+              if (s !== null && e !== null && e >= s) sum += e - s;
+            }
+            return sum;
+          };
+          // ⚠️ 행이 없는 레이어는 체인에서 통째로 빼야 한다. 넣어두면 그 레이어의 wait 가 0 이라
+          // 부모가 기다린 시간이 통째로 "존재하지도 않는 레이어" 의 몫으로 잡힌다
+          // (예: MCP 미도달 트레이스인데 MCP 가 2.7s 를 쓴 것처럼 보임).
+          const present = LAYER_ORDER.filter((l) => list.some((r) => r.layer === l));
+          let outer = outer0;
+          present.forEach((l, k) => {
+            // 가장 깊은 레이어는 자신의 하위(미기록 외부 시스템 / 미연결 레이어) 대기까지 제 몫으로 본다.
+            // clamp: 레이어 간 시계 편차로 wait > outer 가 되는 경우의 안전장치.
+            const w = waitOf(l);
+            const self = k === present.length - 1 ? outer : Math.max(0, outer - w);
+            selfMs.set(l, (selfMs.get(l) ?? 0) + self);
+            outer = w;
+          });
+          selfTimeTraces += 1;
+        }
       }
 
       // 트레이스 시작 시각 → 버킷
@@ -352,12 +420,16 @@ export async function GET(req: NextRequest) {
     const layers = LAYER_ORDER.map((l) => {
       const a = layerAcc.get(l)!;
       const avg = a.rt.length > 0 ? a.rt.reduce((x, y) => x + y, 0) / a.rt.length : null;
+      const st = selfMs.get(l) ?? 0;
       return {
         layer: l,
         total: a.total,
         failCount: a.fail,
         okRows: a.ok,
         avgRespMs: avg,
+        avgSelfMs: selfTimeTraces > 0 ? st / selfTimeTraces : null,
+        selfMsTotal: st,
+        failOriginTraces: failOrigin.get(l) ?? 0,
       };
     });
 
@@ -370,6 +442,7 @@ export async function GET(req: NextRequest) {
       granularity: g,
       buckets: bucketArr,
       layers,
+      selfTimeTraces,
       topUsers: topN(userCount, 8),
       uniqueUsers: userCount.size,
       daily,

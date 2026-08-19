@@ -4,23 +4,36 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AgentProfile } from "@/lib/types";
+import { Role, roleAtLeast } from "@/lib/roles";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { apiJson } from "@/lib/apiClient";
 
-/** 분석 성격의 탭 묶음 (세그먼트 컨트롤). Agent 는 성격이 달라 별도 칩으로 분리. */
-const ANALYSIS_TABS = [
+/**
+ * 분석 성격의 탭 묶음 (세그먼트 컨트롤). Agent 는 성격이 달라 별도 칩으로 분리.
+ * minRole 이 있는 탭은 그 권한 이상일 때만 노출한다 (미들웨어가 실제 접근을 막지만,
+ * 못 들어갈 탭을 띄워두면 403 만 보게 되므로 메뉴에서도 감춘다).
+ */
+const ANALYSIS_TABS: ReadonlyArray<{
+  href: string;
+  label: string;
+  icon: () => JSX.Element;
+  minRole?: Role;
+}> = [
   { href: "/", label: "Traces", icon: TracesIcon },
   { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
   { href: "/tokens", label: "Tokens", icon: TokensIcon },
-  { href: "/timeouts", label: "Timeout", icon: TimeoutIcon },
-] as const;
+  { href: "/timeouts", label: "Timeout", icon: TimeoutIcon, minRole: "ADMIN" },
+];
 
-/** 분석 탭 세그먼트 그룹 (Traces / Dashboard / Tokens). 상단바 가운데. */
+/** 분석 탭 세그먼트 그룹 (Traces / Dashboard / Tokens / Timeout). 상단바 가운데. */
 export function TabNav() {
   const path = usePathname();
+  const { user } = useAuth();
+  const tabs = ANALYSIS_TABS.filter((t) => !t.minRole || (user && roleAtLeast(user.role, t.minRole)));
   return (
     <nav className="tabnav" aria-label="primary">
       <div className="tabnav-group" role="tablist">
-        {ANALYSIS_TABS.map((t) => {
+        {tabs.map((t) => {
           const active = t.href === "/" ? path === "/" : (path?.startsWith(t.href) ?? false);
           const Icon = t.icon;
           return (

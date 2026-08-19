@@ -725,7 +725,7 @@ function ReportContent() {
           <section className="dash-card">
             <div className="dash-card-head">
               <div className="dash-card-title-group">
-                <span className="dash-card-title">평균 응답 지연</span>
+                <span className="dash-card-title">평균 응답 속도</span>
                 <span className="dash-card-sub">Action 전체 응답시간 · CUBE 수신→응답(LLM 포함 전 구간)</span>
               </div>
               <div className="dash-card-aux">

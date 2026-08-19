@@ -1,6 +1,6 @@
 "use client";
 
-// 대시보드 "평균 응답 지연" 차트: Action 1건의 end-to-end 응답시간 추이.
+// 대시보드 "평균 응답 속도" 차트: Action 1건의 end-to-end 응답시간 추이.
 // CUBE(진입 레이어) send→resp 를 기준으로 재므로 LLM 을 포함한 전 구간 왕복시간이다.
 // Tokens 탭의 TokenLatencyChart(LLM 호출 1콜 단위, 전 노드)와는 재는 대상이 다른
 // 상호 보완 지표다 — 둘 다 정규.
@@ -50,7 +50,7 @@ function CustomTooltip({
       <div className="ts-tooltip-body">
         <div className="ts-tooltip-row">
           <span className="ts-tooltip-swatch" style={{ background: COLOR }} />
-          <span className="ts-tooltip-key">평균 지연</span>
+          <span className="ts-tooltip-key">평균 응답 속도</span>
           <span className="ts-tooltip-val">{fmtDuration(row.avgLatencyMs)}</span>
         </div>
         <div className="ts-tooltip-row two-col">
@@ -91,7 +91,7 @@ export function CubeLatencyChart({ stats }: { stats: StatsResponse }) {
   if (!hasData) {
     return (
       <div className="top-empty">
-        지연 데이터가 없습니다 · CUBE 의 SEND_TM/RESP_TM 이 기록된 트레이스가 필요합니다
+        응답 속도 데이터가 없습니다 · CUBE 의 SEND_TM/RESP_TM 이 기록된 트레이스가 필요합니다
       </div>
     );
   }
@@ -101,7 +101,7 @@ export function CubeLatencyChart({ stats }: { stats: StatsResponse }) {
       <div className="ts-legend">
         <span className="ts-legend-item" aria-hidden>
           <span className="legend-swatch" style={{ background: COLOR }} />
-          평균 응답 지연 (CUBE 요청→응답)
+          평균 응답 속도 (CUBE 요청→응답)
         </span>
         <span className="ts-legend-spacer" />
         <span className="ts-meta">{data.length} buckets · {granText(granularity)}</span>
@@ -154,7 +154,7 @@ export function CubeLatencyChart({ stats }: { stats: StatsResponse }) {
             <Area
               type="monotone"
               dataKey="avgLatencyMs"
-              name="평균 지연"
+              name="평균 응답 속도"
               stroke={COLOR}
               strokeWidth={1.8}
               fill="url(#cube-lat-grad)"

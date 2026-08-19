@@ -11,7 +11,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 export const LAYERS = [
   { key: "CUBE",   label: "Cube / Cube Bot", color: "#4b6bfb" },
-  { key: "GAIA",   label: "Gaia Agent",      color: "#7c3aed" },
+  // GAIA 는 CUBE(#4b6bfb) 바로 옆에 놓이는 자리라(스테퍼·소요 비중 스트립) 파랑과 충분히 갈라져야 한다.
+  // 기존 #7c3aed(보라)는 정상 시야에서도 파랑과 ΔE 11 수준이라 구분이 어려워 마젠타 쪽으로 옮겼다.
+  { key: "GAIA",   label: "Gaia Agent",      color: "#a21caf" },
   { key: "MCP",    label: "MCP Server",      color: "#059669" },
   { key: "ONEOIS", label: "OneOIS",          color: "#d97706" },
 ] as const;
@@ -148,7 +150,15 @@ export interface LayerStats {
   total: number;
   failCount: number;
   okRows: number;
+  /** ⚠️ 포함(inclusive) 시간 — 행의 SEND_TM→RESP_TM 평균이라 하위 레이어 대기시간을 전부 포함한다.
+      CUBE ⊃ GAIA ⊃ MCP ⊃ ONEOIS 로 중첩되므로 "어느 레이어가 느린가" 에는 쓸 수 없다. 진단용 참고값. */
   avgRespMs: number | null;
+  /** 자체 소요시간(self time) 평균 ms — 하위 대기를 뺀 이 레이어 자신의 몫. 아래 selfMsTotal 참고 */
+  avgSelfMs: number | null;
+  /** 자체 소요시간 합 ms — 레이어 간 "시간 비중" 의 분자. Σ(전 레이어) = 전체 응답시간 합 */
+  selfMsTotal: number;
+  /** 이 레이어에서 처음 실패가 발생한 트레이스 수 (errCd 를 가진 가장 깊은 레이어로 귀속) */
+  failOriginTraces: number;
 }
 
 export interface TimeBucket {
@@ -183,7 +193,7 @@ export interface DailyStat {
   pending: number;
   /** 해당 일의 고유 사용자 수 (트레이스 대표 사용자 distinct — uniqueUsers 와 같은 기준) */
   users: number;
-  /** 해당 일 Action 평균 응답 지연(ms) — CUBE send→resp. 측정 가능한 트레이스가 없으면 null */
+  /** 해당 일 Action 평균 응답 속도(ms) — CUBE send→resp. 측정 가능한 트레이스가 없으면 null */
   avgCubeLatencyMs: number | null;
   /** 해당 일 기능(ACTION_TYP)별 실행 세부 — total desc 정렬, 없으면 빈 배열. '(none)' 포함 가능 */
   byAction: DailyActionStat[];
@@ -597,8 +607,10 @@ export interface StatsResponse {
   /** 시간대별 버킷 (오름차순). granularity 는 자동: <=2h → 5분, <=48h → 1시간, 그 이상 → 1일 */
   granularity: "5m" | "1h" | "1d";
   buckets: TimeBucket[];
-  /** 레이어별 행 단위 통계 */
+  /** 레이어별 행 단위 통계 + 자체 소요시간(self time) 분해 */
   layers: LayerStats[];
+  /** 자체 소요시간 분해에 사용된 트레이스 수 (진입 레이어의 recv/resp 가 모두 기록된 완료 트레이스) */
+  selfTimeTraces?: number;
   /** 상위 사용자 (트레이스 수 기준) */
   topUsers: TopItem[];
   /** 기간 내 고유 사용자 수 (USER_ID distinct, 트레이스 단위) — 실적 리포트의 "몇 명이 사용했나" */
@@ -624,75 +636,77 @@ export interface StatsResponse {
 // ─────────────────────────────────────────────────────────────────────────────
 // 타임아웃 추적 (Timeout 탭)
 //
-// ⚠️ 이 집계는 **기존 데이터만** 쓴다 — BIZ_AIACTIONTXN_HIS 의 ERR_CD 다.
-// GAIA 가 LLM 호출 타임아웃으로 실패하면 그 트레이스에 ERR_CD='ERROR_LLM' 이 남는데,
-// 이게 사실상 대부분 타임아웃(외부 LLM 인프라 문제)이다. 기존 대시보드에선 그냥
-// "에러 1건" 으로 뭉뚱그려져 얼마나 심한지·어디서 나는지가 안 보였다.
-// 노드/모델은 TRX_TOKEN_DET 를 TRACE_ID 로 조인해 붙인다(있으면).
+// 출처는 **TRX_TOKEN_DET 한 곳**이다. GAIA 가 call_llm 을 try/except 로 감싸
+// 실패한 호출도 1행 적재하므로(STAT_CD='ERROR' + ERR_CTN + LATENCY_MS = 예외까지 기다린 시간),
+// "어느 노드/모델에서, 어떤 질의가, 얼마나 기다리다 끊겼는지" 를 추정 없이 그대로 읽는다.
+// 타임아웃/일반 오류 구분은 ERR_CTN 문구 (lib/tokenStatus.ts 의 callStatus/SQL_TIMEOUT_PRED).
 // ─────────────────────────────────────────────────────────────────────────────
-
-/** 타임아웃으로 간주하는 기본 ERR_CD. 화면에서 다른 코드로 바꿔 볼 수 있다. */
-export const TIMEOUT_DEFAULT_ERR_CD = "ERROR_LLM";
 
 export interface TimeoutBucket {
   /** ISO 버킷 시작 시각 (TZ 없음) */
   ts: string;
-  /** 해당 버킷의 타임아웃 트레이스 수 */
-  count: number;
+  /** 해당 버킷의 실패 호출 수 */
+  failed: number;
+  /** 그중 타임아웃 */
+  timeout: number;
 }
 
-/** 타임아웃 1건 = 트레이스 1건 */
+/** 실패한 LLM 호출 1건 */
 export interface TimeoutItem {
-  traceId: string;
-  /** 발생 시각 (트레이스 첫 recv 시각) */
-  tm: string | null;
-  userId: string | null;
-  actionTyp: string | null;
-  /** 사용자 질문 — 진입 레이어(CUBE)의 SEND_MSG_CTN 에서 추출 */
-  question: string | null;
-  errCd: string | null;
-  errDescCtn: string | null;
-  /** ERR_CD 를 기록한 레이어 */
-  errLayer: string | null;
-  /**
-   * 끊긴 LLM 호출의 노드/모델 (TRX_TOKEN_DET).
-   * STAT_CD 가 적재돼 있으면 실패한 호출의 값, 없으면 **마지막으로 기록된 호출**의 값
-   * (= 타임아웃 직전 노드). exact=false 면 후자라는 뜻이다.
-   */
+  tokenId: string;
+  /** 호출 시각 */
+  callTm: string | null;
+  traceId: string | null;
   nodeNm: string | null;
   modelNm: string | null;
-  /** 위 노드/모델이 실패 호출에서 직접 온 값인지(true) 마지막 기록 호출 추정인지(false) */
-  nodeExact: boolean;
+  userId: string | null;
+  /** LLM 에 들어간 질의 (QUERY_CTN) */
+  queryCtn: string | null;
+  /** 예외까지 기다린 시간 (ms) */
+  latencyMs: number | null;
+  statCd: string | null;
+  /** 실패 사유 */
+  errCtn: string | null;
+}
+
+/** 노드별/모델별/사용자별 실패 집계 행 */
+export interface TimeoutDimStat {
+  key: string;
+  /** 실패 호출 수 */
+  failed: number;
+  /** 그중 타임아웃 */
+  timeout: number;
+  /** 그 노드/모델/사용자의 기간 내 전체 호출 수 (실패율 계산용) */
+  calls: number;
 }
 
 export interface TimeoutStatsResponse {
   range: { from: string | null; to: string | null };
   granularity: "5m" | "1h" | "1d";
-  /** 적용된 대상 에러 코드 */
-  errCd: string;
-  /** 기간 내 전체 트레이스 수 (비율 계산용) */
-  totalTraces: number;
-  /** 그중 타임아웃(대상 ERR_CD) 트레이스 수 */
-  timeoutTraces: number;
+  /**
+   * TRX_TOKEN_DET 에 STAT_CD/ERR_CTN 이 있는지.
+   * false = GAIA 적재 전(또는 조회 불가) → 모든 수치 0, 화면은 "적재 전" 안내만 띄운다.
+   */
+  available: boolean;
+  /** 기간 내 전체 LLM 호출 수 */
+  totalCalls: number;
+  /** 실패 호출 수 */
+  failedCalls: number;
+  /** 그중 타임아웃 호출 수 */
+  timeoutCalls: number;
   /** 타임아웃을 겪은 고유 사용자 수 */
   affectedUsers: number;
-  /** 마지막 발생 시각 */
+  /** 타임아웃까지 기다린 시간 평균(ms) — 실패 호출의 LATENCY_MS 평균. 없으면 null */
+  avgWaitMs: number | null;
+  /** 마지막 실패 발생 시각 */
   lastAt: string | null;
   buckets: TimeoutBucket[];
-  /** 기간 내 **모든** 에러 코드 분포 — 대상 코드 선택 + "정말 ERROR_LLM 이 맞나" 검증용 */
-  byErrCd: TopItem[];
-  /** 타임아웃의 액션 유형 분포 */
-  byAction: TopItem[];
-  /** 타임아웃이 난 노드 분포 (TRX_TOKEN_DET 조인) */
-  byNode: TopItem[];
-  /** 타임아웃이 난 모델 분포 (TRX_TOKEN_DET 조인) */
-  byModel: TopItem[];
-  /** 타임아웃을 겪은 사용자 분포 */
-  byUser: TopItem[];
-  /** 최근 타임아웃 요청 목록 (발생 시각 desc) */
+  /** 실패가 난 노드 (failed desc) — 적재된 그 호출의 NODE_NM 이라 추정이 아니다 */
+  byNode: TimeoutDimStat[];
+  /** 실패가 난 모델 (failed desc) */
+  byModel: TimeoutDimStat[];
+  /** 실패를 겪은 사용자 (failed desc) */
+  byUser: TimeoutDimStat[];
+  /** 최근 실패 호출 목록 (callTm desc) */
   items: TimeoutItem[];
-  /** 노드/모델을 하나라도 붙였는지 — false 면 화면이 "TRX_TOKEN_DET 연계 없음" 안내 */
-  nodeLinked: boolean;
-  /** TRX_TOKEN_DET 에 STAT_CD 가 있어 실패 호출을 정확히 집었는지 */
-  nodeExact: boolean;
 }

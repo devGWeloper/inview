@@ -3963,3 +3963,46 @@ button.tbd-row:not(:disabled):hover {
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
+
+/* ── Timeout 탭 ──
+   기존 BIZ 데이터(ERR_CD)만으로 타임아웃을 추적하는 화면. 대시보드/토큰 탭의
+   dash-*, kpi-*, top-* 스타일을 그대로 쓰고 목록/그리드만 여기서 정의한다. */
+.to-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+@media (max-width: 900px) {
+  .to-grid { grid-template-columns: 1fr; }
+}
+/* 노드명·시각처럼 긴 값은 KPI 큰 글씨로는 넘쳐서 한 단계 줄인다 */
+.to-kpi-sm { font-size: 20px; letter-spacing: -0.2px; overflow-wrap: anywhere; }
+
+.to-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.to-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--err);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.to-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.to-time { font-size: 13px; color: var(--text-3); }
+.to-action {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--surface-3);
+}
+.to-user { margin-left: auto; font-size: 12.5px; color: var(--text-muted); }
+.to-q { font-size: 14.5px; color: var(--text); line-height: 1.5; overflow-wrap: anywhere; }
+.to-foot { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.to-err { font-size: 12.5px; color: var(--err); overflow-wrap: anywhere; }
+.to-trace { margin-left: auto; font-size: 12px; color: var(--text-muted); }
+.to-note { font-size: 12.5px; color: var(--text-3); line-height: 1.6; }
+.to-note b { color: var(--text-2); font-weight: 700; }

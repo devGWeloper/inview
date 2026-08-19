@@ -32,19 +32,6 @@ export function isFailedCall(statCd: string | null | undefined, errCtn?: string 
   return callStatus(statCd, errCtn) !== "ok";
 }
 
-export const STATUS_LABEL: Record<CallStatus, string> = {
-  ok: "성공",
-  timeout: "TIMEOUT",
-  error: "ERROR",
-};
-
-/** 배지/카드 색 클래스 접미사 (globals.css 의 .call-badge.is-* 와 짝) */
-export const STATUS_CLASS: Record<CallStatus, string> = {
-  ok: "ok",
-  timeout: "timeout",
-  error: "error",
-};
-
 /**
  * SQL 에서 "실패 호출" 을 판정하는 술어. tokens.ts 의 집계 쿼리들이 공유한다.
  * NULL 은 성공(컬럼 추가 전 행)으로 취급 — callStatus() 의 OK_CODES 와 규칙을 맞춘다.

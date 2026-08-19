@@ -11,6 +11,7 @@ const ANALYSIS_TABS = [
   { href: "/", label: "Traces", icon: TracesIcon },
   { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
   { href: "/tokens", label: "Tokens", icon: TokensIcon },
+  { href: "/timeouts", label: "Timeout", icon: TimeoutIcon },
 ] as const;
 
 /** 분석 탭 세그먼트 그룹 (Traces / Dashboard / Tokens). 상단바 가운데. */
@@ -101,6 +102,14 @@ function DashboardIcon() {
       <rect x="2" y="10.5" width="5" height="3.5" rx="1.2" stroke="currentColor" strokeWidth="1.5" />
       <rect x="9" y="2" width="5" height="3.5" rx="1.2" stroke="currentColor" strokeWidth="1.5" />
       <rect x="9" y="7.5" width="5" height="6.5" rx="1.2" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+function TimeoutIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <circle cx="8" cy="9" r="5.4" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M8 6.2V9l2 1.4M6 2h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
 }

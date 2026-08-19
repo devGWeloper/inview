@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TraceX · 레이아웃 개편 시안 4종</title>
+<title>TraceX · 레이아웃 개편 시안 6종</title>
 <style>
 /* ═══════════════════════════════════════════════════════════════════════
    시안 뷰어 크롬 (어느 시안에도 속하지 않는 중립 셸)
@@ -69,7 +69,8 @@ body{
 .design.on{display:block}
 /* 레일/사이드바를 쓰는 시안은 grid 로 (.design.on 의 block 을 덮어씀) */
 .design.on.d-binance,
-.design.on.d-bmw{display:grid}
+.design.on.d-bmw,
+.design.on.d-sc-rail{display:grid}
 .mock-nolink{cursor:default}
 
 /* 시안 공통: 목업 안의 클릭 안 되는 요소 표시 억제 */
@@ -560,6 +561,198 @@ body{
 .vc-foot li{font-size:14px;line-height:28px;color:var(--body)}
 .vc-foot .about{font-size:14px;line-height:22px;color:var(--mute);max-width:280px}
 
+/* C · BMW 사이드바 접기 — 264px 상시 점유가 타임라인 같은 넓은 화면과 충돌해서 */
+.bm-fold{
+  position:absolute; top:19px; right:14px; z-index:5;
+  width:26px; height:26px; border:1px solid var(--hair); background:var(--cv);
+  color:var(--ink); border-radius:0; font-size:12px; line-height:1;
+  display:grid; place-items:center; transition:.14s;
+}
+.bm-fold:hover{background:var(--plate)}
+.d-bmw.folded{grid-template-columns:56px 1fr}
+.d-bmw.folded .bm-side > *:not(.bm-fold){display:none}
+.d-bmw.folded .bm-fold{right:auto; left:15px}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   시안 E — shadcn/ui : "Design System"
+   토큰 계약. 색·반경·밀도를 컴포넌트가 아니라 변수가 정한다.
+   → 같은 마크업이 라이트/다크 · 편안/조밀 4가지 상태로 산다.
+   ═══════════════════════════════════════════════════════════════════════ */
+.d-sc{
+  /* 뉴트럴 = OKLCH chroma 0. 라이트 기본값 */
+  --bg:oklch(1 0 0); --fg:oklch(.145 0 0);
+  --card:oklch(1 0 0); --card-fg:oklch(.145 0 0);
+  --pri:oklch(.205 0 0); --pri-fg:oklch(.985 0 0);
+  --muted:oklch(.97 0 0); --muted-fg:oklch(.556 0 0);
+  --border:oklch(.922 0 0); --input:oklch(.922 0 0); --ring:oklch(.708 0 0);
+  --ringline:oklch(.145 0 0 / .10);
+  /* 시맨틱 — shadcn 기본엔 없어 제품이 채워야 하는 자리 */
+  --ok:oklch(.596 .145 163.2); --warn:oklch(.706 .153 70.1);
+  --err:oklch(.577 .245 27.325); --info:oklch(.588 .196 258.3);
+  --violet:oklch(.556 .152 300.5);
+  /* 반경 스칼라 1개에서 전부 파생 */
+  --r:10px;
+  --r-sm:calc(var(--r)*.6); --r-md:calc(var(--r)*.8);
+  --r-lg:var(--r); --r-xl:calc(var(--r)*1.4); --r-pill:9999px;
+  /* 밀도 — 컨트롤 높이와 카드 패딩만 바꾸면 전체가 따라온다 */
+  --h:32px; --pad:16px; --gap:16px; --fs:14px; --fs-sm:12px;
+
+  background:var(--bg); color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Roboto,sans-serif;
+  font-size:var(--fs); line-height:1.5;
+  font-feature-settings:"tnum" 1;
+}
+.d-sc[data-theme="dark"]{
+  --bg:oklch(.145 0 0); --fg:oklch(.985 0 0);
+  --card:oklch(.205 0 0); --card-fg:oklch(.985 0 0);
+  --pri:oklch(.922 0 0); --pri-fg:oklch(.205 0 0);
+  --muted:oklch(.269 0 0); --muted-fg:oklch(.708 0 0);
+  --border:oklch(1 0 0 / .10); --input:oklch(1 0 0 / .15); --ring:oklch(.556 0 0);
+  --ringline:oklch(1 0 0 / .12);
+  --ok:oklch(.696 .148 163.2); --warn:oklch(.79 .152 74.5);
+  --err:oklch(.704 .191 22.216); --info:oklch(.685 .169 253.4);
+  --violet:oklch(.671 .158 301.7);
+}
+.d-sc[data-density="compact"]{ --h:28px; --pad:12px; --gap:12px; --fs:13px; --fs-sm:11px; }
+
+/* ── 앱 바 ── */
+.sc-bar{
+  position:sticky; top:56px; z-index:40;
+  height:56px; padding:0 24px; display:flex; align-items:center; gap:12px;
+  background:color-mix(in oklch, var(--bg), transparent 20%);
+  backdrop-filter:blur(12px); border-bottom:1px solid var(--border);
+}
+.sc-mark{width:28px;height:28px;border-radius:var(--r-md);background:var(--pri);color:var(--pri-fg);
+  display:grid;place-items:center;font-size:14px}
+.sc-name{font-size:15px;font-weight:600;letter-spacing:-.2px}
+.sc-env{height:20px;padding:0 8px;border:1px solid var(--border);border-radius:var(--r-pill);
+  display:inline-flex;align-items:center;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:10px;letter-spacing:.3px;color:var(--muted-fg)}
+.sc-sep{width:1px;height:20px;background:var(--border);margin:0 4px}
+.sc-tabs{display:flex;gap:0;background:var(--muted);border-radius:var(--r-lg);padding:3px;height:var(--h)}
+.sc-tabs button{border:0;background:transparent;color:color-mix(in oklch,var(--fg),transparent 40%);
+  font-size:var(--fs-sm);font-weight:500;padding:0 10px;border-radius:var(--r-md);transition:.14s}
+.sc-tabs button.on{background:var(--bg);color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.sc-grow{flex:1}
+.sc-ctl{height:var(--h);padding:0 10px;border:1px solid var(--input);background:transparent;color:var(--fg);
+  border-radius:var(--r-lg);font-size:var(--fs-sm);display:inline-flex;align-items:center;gap:6px;transition:.14s}
+.sc-ctl:hover{background:var(--muted)}
+.sc-ctl.icon{width:var(--h);padding:0;justify-content:center}
+.sc-ctl .cv{color:var(--muted-fg);font-size:10px}
+
+/* ── 페이지 ── */
+.sc-wrap{max-width:1400px;margin:0 auto;padding:24px;display:flex;flex-direction:column;gap:var(--gap)}
+.sc-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sc-h1{margin:0;font-size:20px;font-weight:600;letter-spacing:-.4px}
+.sc-sub{margin:2px 0 0;font-size:var(--fs-sm);color:var(--muted-fg)}
+.sc-tokenchip{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--muted-fg)}
+
+/* ── 카드: 그림자 없음. ring 1px 이 전부 ── */
+.sc-card{background:var(--card);color:var(--card-fg);border-radius:var(--r-xl);
+  box-shadow:0 0 0 1px var(--ringline);overflow:hidden}
+.sc-ch{padding:var(--pad);display:flex;align-items:flex-start;gap:8px}
+.sc-ch.div{border-bottom:1px solid var(--border)}
+.sc-ch h3{margin:0;font-size:15px;font-weight:500;letter-spacing:-.1px}
+.sc-ch p{margin:2px 0 0;font-size:var(--fs-sm);color:var(--muted-fg)}
+.sc-cb{padding:var(--pad)}
+.sc-cb.flush{padding:0}
+
+/* ── KPI ── */
+.sc-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:var(--gap)}
+.sc-kpi .k{font-size:11px;font-weight:500;letter-spacing:.66px;text-transform:uppercase;color:var(--muted-fg)}
+.sc-kpi .v{margin-top:6px;font-size:28px;font-weight:600;letter-spacing:-.6px;line-height:1.1}
+.sc-kpi .v small{font-size:16px;font-weight:500;color:var(--muted-fg);margin-left:2px}
+.sc-kpi .d{margin-top:8px;font-size:var(--fs-sm);color:var(--muted-fg)}
+.sc-badge{height:20px;padding:0 8px;border-radius:var(--r-pill);display:inline-flex;align-items:center;gap:3px;
+  font-size:12px;font-weight:500;border:1px solid transparent}
+.sc-badge.good{background:color-mix(in oklch,var(--ok),transparent 90%);color:var(--ok);border-color:color-mix(in oklch,var(--ok),transparent 70%)}
+.sc-badge.bad {background:color-mix(in oklch,var(--err),transparent 90%);color:var(--err);border-color:color-mix(in oklch,var(--err),transparent 70%)}
+.sc-badge.hold{background:color-mix(in oklch,var(--warn),transparent 90%);color:var(--warn);border-color:color-mix(in oklch,var(--warn),transparent 70%)}
+.sc-badge.mute{border-color:var(--border);color:var(--muted-fg)}
+
+/* ── 레이어 경로 ── */
+.sc-flow{display:flex;gap:8px;align-items:stretch}
+.sc-lay{flex:1;position:relative;padding:12px 12px 12px 15px;border-radius:var(--r-lg);
+  box-shadow:0 0 0 1px var(--ringline)}
+.sc-lay::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--c);
+  border-radius:var(--r-lg) 0 0 var(--r-lg)}
+.sc-lay .t{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.sc-lay .nm{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;font-weight:600}
+.sc-lay .n{margin-top:6px;font-size:18px;font-weight:600;letter-spacing:-.3px}
+.sc-lay .n em{font-style:normal;font-size:11px;font-weight:400;color:var(--muted-fg);margin-left:3px}
+.sc-lay .track{margin-top:8px;height:6px;border-radius:var(--r-pill);background:var(--muted);display:flex;overflow:hidden}
+.sc-lay .cap{margin-top:6px;font-size:11px;color:var(--muted-fg)}
+.sc-lay.off{opacity:.6}
+.sc-arrow{align-self:center;color:color-mix(in oklch,var(--fg),transparent 60%);font-size:12px}
+
+/* ── 리스트 행 + 미터 ── */
+.sc-row{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:var(--r-md);transition:.12s}
+.sc-row:hover{background:color-mix(in oklch,var(--muted),transparent 40%)}
+.sc-row .rk{width:14px;text-align:right;font-size:11px;color:var(--muted-fg)}
+.sc-row .nm{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-row .nm.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.sc-row .n{font-size:13px;font-weight:600}
+.sc-meter{height:4px;border-radius:var(--r-pill);background:var(--muted);overflow:hidden;margin-top:6px}
+.sc-meter i{display:block;height:100%;border-radius:var(--r-pill);background:color-mix(in oklch,var(--pri),transparent 30%);transition:width .7s}
+.sc-meter.red i{background:color-mix(in oklch,var(--err),transparent 30%)}
+.sc-meter.info i{background:color-mix(in oklch,var(--info),transparent 25%)}
+
+/* ── 표 ── */
+.sc-table{width:100%;border-collapse:collapse;font-size:13px}
+.sc-table th{height:40px;padding:0 8px;text-align:left;font-weight:500;color:var(--fg);
+  border-bottom:1px solid var(--border);font-size:var(--fs-sm)}
+.sc-table td{padding:9px 8px;border-bottom:1px solid var(--border)}
+.sc-table tr:last-child td{border-bottom:0}
+.sc-table tbody tr:hover{background:color-mix(in oklch,var(--muted),transparent 50%)}
+.sc-table .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.sc-table .r{text-align:right}
+.sc-table th:first-child,.sc-table td:first-child{padding-left:var(--pad)}
+.sc-table th:last-child,.sc-table td:last-child{padding-right:var(--pad)}
+
+.sc-2col{display:grid;grid-template-columns:1.35fr 1fr;gap:var(--gap)}
+.sc-3col{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--gap)}
+.sc-foot{border-top:1px solid var(--border);margin-top:8px;padding-top:16px;
+  font-size:var(--fs-sm);color:var(--muted-fg);display:flex;gap:8px;flex-wrap:wrap}
+.sc-foot i{font-style:normal;opacity:.4}
+
+/* ───────────────── H · Data Table — 목록이 주인공 ───────────────── */
+.sct-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:var(--pad);border-bottom:1px solid var(--border)}
+.sct-search{flex:1;min-width:200px;height:var(--h);border:1px solid var(--input);background:transparent;color:var(--fg);
+  border-radius:var(--r-lg);padding:0 10px;font-size:var(--fs-sm);display:flex;align-items:center;gap:7px}
+.sct-search span{color:var(--muted-fg)}
+.sct-chip{height:var(--h);padding:0 10px;border:1px dashed var(--border);border-radius:var(--r-lg);background:transparent;
+  color:var(--fg);font-size:var(--fs-sm);display:inline-flex;align-items:center;gap:6px}
+.sct-chip .x{color:var(--muted-fg)}
+.sct-chip.on{border-style:solid;background:var(--muted)}
+.sct-sel{width:16px;height:16px;border-radius:4px;border:1px solid var(--border);display:inline-block;vertical-align:-3px}
+.sct-sel.on{background:var(--pri);border-color:var(--pri);position:relative}
+.sct-sel.on::after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;color:var(--pri-fg);font-size:10px}
+.sct-page{display:flex;align-items:center;gap:8px;padding:var(--pad);border-top:1px solid var(--border);
+  font-size:var(--fs-sm);color:var(--muted-fg)}
+.sct-page .pg{margin-left:auto;display:flex;gap:4px}
+.sct-page .pg button{width:var(--h);height:var(--h);border:1px solid var(--input);background:transparent;color:var(--fg);
+  border-radius:var(--r-md);font-size:12px}
+.sct-page .pg button.on{background:var(--pri);color:var(--pri-fg);border-color:var(--pri)}
+.sct-page .pg button:disabled{opacity:.4}
+
+/* ───────────────── I · Analytics — 차트 우선 ───────────────── */
+.sca-hero{display:grid;grid-template-columns:220px 1fr;gap:0}
+.sca-legend{border-right:1px solid var(--border);padding:var(--pad);display:flex;flex-direction:column;gap:14px}
+.sca-legend button{border:0;background:transparent;text-align:left;padding:0;color:var(--fg);width:100%}
+.sca-legend .k{display:block;font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted-fg)}
+.sca-legend .v{display:block;margin-top:3px;font-size:22px;font-weight:600;letter-spacing:-.5px}
+.sca-legend button:not(.on) .v{color:var(--muted-fg)}
+.sca-legend .on .v{color:var(--info)}
+.sca-legend .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.sca-mini{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--gap)}
+.sca-tile .k{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted-fg)}
+.sca-tile .v{margin-top:4px;font-size:20px;font-weight:600;letter-spacing:-.4px}
+.sca-spark{margin-top:10px}
+.sca-seg{display:inline-flex;background:var(--muted);border-radius:var(--r-lg);padding:3px;gap:0}
+.sca-seg button{border:0;background:transparent;color:color-mix(in oklch,var(--fg),transparent 40%);
+  font-size:var(--fs-sm);font-weight:500;padding:0 10px;height:calc(var(--h) - 6px);border-radius:var(--r-md)}
+.sca-seg button.on{background:var(--bg);color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.05)}
+
 /* 공통 목업 차트 (시안별로 색만 override) */
 .mk-bars{display:flex;align-items:stretch;gap:6px;height:170px}
 .mk-bars .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;position:relative;min-width:0}
@@ -575,6 +768,16 @@ body{
   .vc-kpis{grid-template-columns:1fr 1fr}
   .ap-cards,.ap-two,.bm-grid2{grid-template-columns:1fr}
   .d-bmw,.d-binance{grid-template-columns:1fr}
+  .sc-kpis{grid-template-columns:1fr 1fr}
+  .sc-2col,.sc-3col{grid-template-columns:1fr}
+  .sc-flow{flex-direction:column}
+  .sc-arrow{display:none}
+  .d-sc-rail,.d-sc-rail.folded{grid-template-columns:1fr}
+  .scr-side{position:static;height:auto}
+  .sco-grid{grid-template-columns:1fr}
+  .sca-hero{grid-template-columns:1fr}
+  .sca-legend{border-right:0;border-bottom:1px solid var(--border);flex-direction:row;flex-wrap:wrap}
+  .sca-mini{grid-template-columns:1fr 1fr}
   .bm-side,.bn-rail{position:static;height:auto}
   .bn-rail{flex-direction:row;flex-wrap:wrap;height:auto}
   .bm-hero-in{flex-direction:column;align-items:stretch}
@@ -592,9 +795,11 @@ body{
     <button class="vw-tab" data-v="binance"><b>B · Binance</b><span>Ops Console — 관제형 고밀도</span></button>
     <button class="vw-tab" data-v="bmw"><b>C · BMW</b><span>Corporate Precision — 조직/표 중심</span></button>
     <button class="vw-tab" data-v="vercel"><b>D · Vercel</b><span>Developer Platform — 검색/딥링크</span></button>
+    <button class="vw-tab" data-v="shadcn"><b>E · shadcn</b><span>Design System — 토큰/테마 전환</span></button>
+    <button class="vw-tab" data-v="scdata"><b>F · shadcn</b><span>Data Studio — 분석＋목록</span></button>
   </div>
   <div class="vw-actions">
-    <span class="vw-hint">1–4 키로 전환</span>
+    <span class="vw-hint">1–6 키로 전환</span>
     <button class="vw-btn" id="noteBtn">설계 노트</button>
   </div>
 </div>
@@ -820,7 +1025,7 @@ body{
         <div class="bn-card">
           <div class="bn-ch">
             <h3>Action Throughput</h3>
-            <span class="sub">일 단위 · 성공/실패 적층</span>
+            <span class="sub" data-charttitle="일 단위 · {} · 성공/실패 적층">일 단위 · 성공/실패 적층</span>
             <span class="grow"></span>
             <div class="bn-tabs">
               <button class="on">처리량</button><button>응답지연</button><button>토큰</button>
@@ -965,7 +1170,7 @@ body{
         </div>
         <div class="bm-grid2">
           <div class="bm-cell">
-            <h3>일별 처리량</h3>
+            <h3 data-charttitle="일별 {}">일별 처리량</h3>
             <div class="cap">2026-07-20 — 07-31 · 최근 12일</div>
             <div id="bmChart"></div>
           </div>
@@ -1195,6 +1400,213 @@ body{
   </footer>
 </section>
 
+<!-- ═══════════════════════════════════════════════════════════════════
+     E · shadcn/ui — Design System
+     ═══════════════════════════════════════════════════════════════════ -->
+<section class="design d-sc d-sc-system" data-v="shadcn" data-theme="light" data-density="cozy">
+
+  <div class="sc-bar">
+    <div class="sc-mark">◆</div>
+    <span class="sc-name">TraceX</span>
+    <span class="sc-env">PRD</span>
+    <span class="sc-sep"></span>
+    <div class="sc-tabs">
+      <button class="on">Overview</button>
+      <button>Traces</button>
+      <button>Tokens</button>
+      <button>Failures</button>
+      <button>Report</button>
+    </div>
+    <span class="sc-grow"></span>
+    <button class="sc-ctl">최근 30일 <span class="cv">▾</span></button>
+    <button class="sc-ctl" id="scDensity" title="밀도 전환">밀도: 편안</button>
+    <button class="sc-ctl icon" id="scTheme" title="테마 전환">☾</button>
+  </div>
+
+  <div class="sc-wrap">
+
+    <div class="sc-head">
+      <div>
+        <h1 class="sc-h1">대시보드</h1>
+        <p class="sc-sub">최근 30일 · CUBE → GAIA → MCP → ONEOIS</p>
+      </div>
+      <span class="sc-tokenchip">--radius: 10px · oklch tokens · 4 states</span>
+    </div>
+
+    <div class="sc-kpis" id="scKpis"></div>
+
+    <div class="sc-2col">
+      <div class="sc-card">
+        <div class="sc-ch div">
+          <div><h3>사용 추이</h3><p>일 단위 · 트레이스 시작 시각 기준</p></div>
+          <span class="sc-grow"></span>
+          <span class="sc-badge mute">12,847건</span>
+        </div>
+        <div class="sc-cb" id="scChart"></div>
+      </div>
+      <div class="sc-card">
+        <div class="sc-ch div">
+          <div><h3>실패 큐</h3><p>Request Failure Tracker 연동</p></div>
+          <span class="sc-grow"></span>
+          <span class="sc-badge bad">23 미조치</span>
+        </div>
+        <div class="sc-cb">
+          <div class="sc-row"><span class="nm">미조치</span><span class="n">23</span></div>
+          <div class="sc-meter red"><i style="width:100%"></i></div>
+          <div class="sc-row" style="margin-top:10px"><span class="nm">조치중</span><span class="n">7</span></div>
+          <div class="sc-meter info"><i style="width:30%"></i></div>
+          <div class="sc-row" style="margin-top:10px"><span class="nm">조치완료</span><span class="n">118</span></div>
+          <div class="sc-meter"><i style="width:100%"></i></div>
+          <p style="margin:16px 0 0;font-size:12px;line-height:1.6;color:var(--muted-fg)">
+            ACTION_TYP 이 비어 있는 요청 = ACTION ROUTER 에서 실제 노드로 못 간 라우팅 실패.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="sc-card">
+      <div class="sc-ch div">
+        <div><h3>레이어 경로</h3><p>레이어별 행 수와 실패 비중 · 좌측 레일 색 = 레이어 식별</p></div>
+      </div>
+      <div class="sc-cb">
+        <div class="sc-flow" id="scFlow"></div>
+      </div>
+    </div>
+
+    <div class="sc-3col">
+      <div class="sc-card">
+        <div class="sc-ch div"><div><h3>주요 에러</h3><p>코드별 발생 건수</p></div></div>
+        <div class="sc-cb" id="scErr"></div>
+      </div>
+      <div class="sc-card">
+        <div class="sc-ch div"><div><h3>FAC별</h3><p>MCP 가 기록한 FAC_ID</p></div></div>
+        <div class="sc-cb" id="scFac"></div>
+      </div>
+      <div class="sc-card">
+        <div class="sc-ch div"><div><h3>노드별 토큰</h3><p>TRX_TOKEN_DET · NODE_NM</p></div></div>
+        <div class="sc-cb" id="scNode"></div>
+      </div>
+    </div>
+
+    <div class="sc-card">
+      <div class="sc-ch div">
+        <div><h3>최근 실패 요청</h3><p>진입 시각 기준 최신순</p></div>
+        <span class="sc-grow"></span>
+        <button class="sc-ctl">Tracker 열기</button>
+      </div>
+      <div class="sc-cb flush">
+        <table class="sc-table">
+          <thead><tr>
+            <th>시각</th><th>TRACE_ID</th><th>USER</th><th>FAB</th><th>에러</th><th class="r">상태</th>
+          </tr></thead>
+          <tbody id="scRows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="sc-foot">
+      <span>TraceX</span><i>·</i><span>shadcn/ui 디자인 언어</span><i>·</i>
+      <span>라이트/다크 · 편안/조밀 = 같은 마크업, 토큰만 교체</span>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     F · shadcn — Data Studio (분석 + 목록 한 화면)
+     ═══════════════════════════════════════════════════════════════════ -->
+<section class="design d-sc d-sc-data" data-v="scdata" data-theme="light" data-density="cozy">
+
+  <div class="sc-bar">
+    <div class="sc-mark">◆</div>
+    <span class="sc-name">TraceX</span>
+    <span class="sc-sep"></span>
+    <div class="sc-tabs" data-live>
+      <button>Overview</button>
+      <button class="on">Data Studio</button>
+      <button>Tokens</button>
+      <button>Report</button>
+    </div>
+    <span class="sc-grow"></span>
+    <span class="sca-seg" data-live><button class="on">30d</button><button>7d</button><button>24h</button></span>
+    <button class="sc-ctl" id="scdDensity">밀도: 편안</button>
+    <button class="sc-ctl icon" title="테마 전환" data-sctheme>☾</button>
+  </div>
+
+  <div class="sc-wrap">
+    <div class="sc-head">
+      <div>
+        <h1 class="sc-h1">데이터 스튜디오</h1>
+        <p class="sc-sub">위에서 추세를 잡고, 아래에서 그 건을 찾는다 · 최근 30일</p>
+      </div>
+      <button class="sc-ctl">CSV 내보내기</button>
+    </div>
+
+    <!-- ① 분석: 계열 스위처 + 큰 차트 -->
+    <div class="sc-card">
+      <div class="sca-hero">
+        <div class="sca-legend" id="scdLegend"></div>
+        <div class="sc-cb" id="scdChart"></div>
+      </div>
+    </div>
+
+    <div class="sca-mini" id="scdTiles"></div>
+
+    <!-- ② 목록: 같은 조건이 그대로 걸린 표 -->
+    <div class="sc-card">
+      <div class="sc-ch div">
+        <div><h3>트레이스</h3><p id="scdCount">12,847건 중 6건 표시</p></div>
+        <span class="sc-grow"></span>
+        <span class="sc-badge mute">위 차트와 같은 조건</span>
+      </div>
+      <div class="sct-tools">
+        <div class="sct-search"><span>⌕</span>TRACE_ID · USER_ID · 에러코드 검색…</div>
+        <div id="scdChips" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+        <button class="sct-chip" id="scdAddChip">+ 조건</button>
+        <button class="sc-ctl">컬럼 <span class="cv">▾</span></button>
+      </div>
+      <div class="sc-cb flush">
+        <table class="sc-table">
+          <thead><tr>
+            <th style="width:36px"><span class="sct-sel on" id="scdAll"></span></th>
+            <th>시각 ↓</th><th>TRACE_ID</th><th>USER</th><th>FAB</th>
+            <th>ACTION_TYP</th><th>에러</th><th class="r">응답</th><th class="r">상태</th>
+          </tr></thead>
+          <tbody id="scdRows"></tbody>
+        </table>
+      </div>
+      <div class="sct-page">
+        <span><span class="sct-sel on"></span> <span id="scdSel">6건 중 2건 선택</span></span>
+        <div class="pg" data-live>
+          <button disabled>‹</button>
+          <button class="on">1</button><button>2</button><button>3</button>
+          <button>›</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sc-3col">
+      <div class="sc-card">
+        <div class="sc-ch div"><div><h3>액션 타입별</h3></div></div>
+        <div class="sc-cb" id="scdAct"></div>
+      </div>
+      <div class="sc-card">
+        <div class="sc-ch div"><div><h3>FAC별</h3></div></div>
+        <div class="sc-cb" id="scdFac"></div>
+      </div>
+      <div class="sc-card">
+        <div class="sc-ch div"><div><h3>노드별 토큰</h3></div></div>
+        <div class="sc-cb" id="scdNode"></div>
+      </div>
+    </div>
+
+    <div class="sc-foot">
+      <span>차트가 먼저, 표는 근거</span><i>·</i>
+      <span>계열을 바꾸면 차트·타일이 같이 움직이고, 조건 칩은 표와 차트에 동시에 걸린다</span>
+    </div>
+  </div>
+</section>
+
 </div>
 
 <script>
@@ -1377,6 +1789,273 @@ document.getElementById("vcCode").innerHTML = FAILROWS.map(r=>`
     <span class="st ${r.st==="open"?"f":r.st==="doing"?"p":"o"}">${r.st}</span>
   </div>`).join("");
 
+/* ─────────────────────────── E · shadcn 렌더 ─────────────────────────── */
+const SKPI = [
+  {k:"총 실행",     v:"12,847",        d:"직전 30일 대비",        b:"good", bt:"↑ 6.2%"},
+  {k:"성공률",      v:"96.4", u:"%",   d:"성공 12,385건",         b:"good", bt:"↑ 1.8%p"},
+  {k:"실패",        v:"462",           d:"미조치 23건",           b:"good", bt:"↓ 4.1%"},
+  {k:"평균 응답",   v:"3.2",  u:"s",   d:"CUBE 기준 end-to-end",  b:"bad",  bt:"↑ 0.3s"},
+  {k:"사용자 수",   v:"218",  u:"명",  d:"트레이스 대표 사용자",   b:"good", bt:"↑ 3.5%"},
+];
+const scKpiHtml = (list) => list.map(x=>`
+  <div class="sc-card sc-kpi"><div class="sc-cb">
+    <div style="display:flex;align-items:flex-start;gap:8px">
+      <span class="k">${x.k}</span><span style="flex:1"></span>
+      <span class="sc-badge ${x.b}">${x.bt}</span>
+    </div>
+    <div class="v">${x.v}${x.u?`<small>${x.u}</small>`:""}</div>
+    <div class="d">${x.d}</div>
+  </div></div>`).join("");
+document.getElementById("scKpis").innerHTML = scKpiHtml(SKPI);
+
+const SLAYERS = [
+  {nm:"CUBE",   rows:12847, fail:462, ms:"3.24s", c:"var(--info)",   on:true},
+  {nm:"GAIA",   rows:13902, fail:414, ms:"2.87s", c:"var(--violet)", on:true},
+  {nm:"MCP",    rows:12310, fail:294, ms:"964ms", c:"var(--ok)",     on:true},
+  {nm:"ONEOIS", rows:0,     fail:0,   ms:"—",     c:"var(--warn)",   on:false},
+];
+const scFlowHtml = () => SLAYERS.map((l,i)=>{
+  const pct = l.rows ? (l.fail/l.rows*100) : 0;
+  const body = l.on ? `
+    <div class="n">${nf(l.rows)}<em>rows</em></div>
+    <div class="track">
+      <span style="width:${(100-pct).toFixed(1)}%;background:color-mix(in oklch,var(--ok),transparent 25%)"></span>
+      <span style="width:${pct.toFixed(1)}%;background:var(--err)"></span>
+    </div>
+    <div class="cap">실패 ${nf(l.fail)} · ${pct.toFixed(1)}%</div>`
+  : `<p style="margin:8px 0 0;font-size:11px;line-height:1.6;color:var(--muted-fg)">DB 연결 대기.<br>CUBE 응답으로 임시 판정 중.</p>`;
+  return `<div class="sc-lay${l.on?"":" off"}" style="--c:${l.c}">
+      <div class="t"><span class="nm">${l.nm}</span>${
+        l.on ? `<span class="sc-badge mute">${l.ms}</span>` : `<span class="sc-badge hold">미연결</span>`}</div>
+      ${body}
+    </div>${i<SLAYERS.length-1?'<span class="sc-arrow">›</span>':""}`;
+}).join("");
+document.getElementById("scFlow").innerHTML = scFlowHtml();
+
+document.getElementById("scChart").innerHTML =
+  bars({okColor:"color-mix(in oklch,var(--ok),transparent 25%)", failColor:"var(--err)",
+        xColor:"var(--muted-fg)", height:200});
+
+const scList = (items, cls) => items.map((x,i)=>`
+  <div style="padding:2px 0">
+    <div class="sc-row">
+      <span class="rk">${i+1}</span>
+      <span class="nm mono" title="${x.title||""}">${x.nm}</span>
+      <span class="n">${x.n}</span>
+    </div>
+    <div class="sc-meter ${cls}" style="margin:0 8px 4px 32px"><i style="width:${x.p}%"></i></div>
+  </div>`).join("");
+
+document.getElementById("scErr").innerHTML = scList(
+  ERRORS.map(e=>({nm:e.cd, n:e.n, p:(e.n/181*100).toFixed(0), title:e.msg})), "red");
+document.getElementById("scFac").innerHTML = scList(
+  FACS.map(f=>({nm:f.id, n:nf(f.n), p:(f.n/4210*100).toFixed(0)})), "");
+document.getElementById("scNode").innerHTML = scList(
+  NODES.map(n=>({nm:n.nm, n:n.tok+"M", p:(n.tok/3.41*100).toFixed(0)})), "info");
+
+document.getElementById("scRows").innerHTML = FAILROWS.map(r=>`
+  <tr>
+    <td class="mono" style="color:var(--muted-fg)">${r.t}</td>
+    <td class="mono">${r.id}</td>
+    <td class="mono" style="color:var(--muted-fg)">${r.u}</td>
+    <td class="mono" style="color:var(--muted-fg)">${r.fab}</td>
+    <td>${r.err==="—"?'<span style="color:var(--muted-fg)">—</span>':`<span class="mono" style="color:var(--err)">${r.err}</span>`}</td>
+    <td class="r"><span class="sc-badge ${r.st==="open"?"bad":r.st==="doing"?"hold":"good"}">${
+      r.st==="open"?"미조치":r.st==="doing"?"조치중":"완료"}</span></td>
+  </tr>`).join("");
+
+/* 토큰만 바꾸는 두 개의 토글 — 마크업은 그대로다 */
+const scSec = document.querySelector(".d-sc-system");
+document.getElementById("scTheme").addEventListener("click", (e)=>{
+  const dark = scSec.dataset.theme === "dark";
+  scSec.dataset.theme = dark ? "light" : "dark";
+  e.currentTarget.textContent = dark ? "☾" : "☀";
+});
+document.getElementById("scDensity").addEventListener("click", (e)=>{
+  const compact = scSec.dataset.density === "compact";
+  scSec.dataset.density = compact ? "cozy" : "compact";
+  e.currentTarget.textContent = compact ? "밀도: 편안" : "밀도: 조밀";
+});
+
+/* ───────────── F · Data Studio 렌더 (컴포넌트는 E 와 공유) ───────────── */
+const scChartHtml = (h=200) => bars({
+  okColor:"color-mix(in oklch,var(--ok),transparent 25%)", failColor:"var(--err)",
+  xColor:"var(--muted-fg)", height:h });
+const scErrItems  = ERRORS.map(e=>({nm:e.cd, n:e.n, p:(e.n/181*100).toFixed(0), title:e.msg}));
+const scFacItems  = FACS.map(f=>({nm:f.id, n:nf(f.n), p:(f.n/4210*100).toFixed(0)}));
+const scNodeItems = NODES.map(n=>({nm:n.nm, n:n.tok+"M", p:(n.tok/3.41*100).toFixed(0)}));
+const scActItems  = ACTIONS.map(a=>({nm:a.nm, n:nf(a.total), p:(a.total/6120*100).toFixed(0)}));
+const scStBadge = (st) =>
+  `<span class="sc-badge ${st==="open"?"bad":st==="doing"?"hold":"good"}">${
+    st==="open"?"미조치":st==="doing"?"조치중":"완료"}</span>`;
+
+/* F · Data Studio — 계열 스위처가 차트·타일·표를 한꺼번에 움직인다 */
+const SCD_SERIES = {
+  runs:   {k:"실행", v:"12,847", dot:"var(--info)",   ok:"color-mix(in oklch,var(--ok),transparent 25%)", fail:"var(--err)"},
+  fails:  {k:"실패", v:"462",    dot:"var(--err)",    ok:"color-mix(in oklch,var(--err),transparent 55%)", fail:"var(--err)"},
+  tokens: {k:"토큰", v:"8.42M",  dot:"var(--violet)", ok:"color-mix(in oklch,var(--violet),transparent 35%)", fail:"var(--violet)"},
+  lat:    {k:"응답", v:"3.2s",   dot:"var(--warn)",   ok:"color-mix(in oklch,var(--warn),transparent 35%)", fail:"var(--warn)"},
+};
+const SCD_TILES = {
+  runs:   [{k:"평균 응답",v:"3.2s",d:"↓ 0.3s"},{k:"LLM 지연",v:"1.18s",d:"↑ 0.04s"},{k:"토큰/호출",v:"270",d:"↓ 12"},{k:"사용자",v:"218",d:"↑ 7"}],
+  fails:  [{k:"미조치",v:"23",d:"↑ 4"},{k:"조치중",v:"7",d:"↓ 2"},{k:"평균 조치",v:"6.4h",d:"↓ 1.1h"},{k:"영향 사용자",v:"41",d:"↑ 3"}],
+  tokens: [{k:"토큰/호출",v:"270",d:"↓ 12"},{k:"LLM 호출",v:"31.2K",d:"↑ 1.4K"},{k:"최다 노드",v:"router",d:"3.41M"},{k:"LLM 지연",v:"1.18s",d:"↑ 0.04s"}],
+  lat:    [{k:"p50",v:"3.2s",d:"↓ 0.3s"},{k:"p95",v:"7.8s",d:"↑ 0.4s"},{k:"LLM 지연",v:"1.18s",d:"↑ 0.04s"},{k:"최장 구간",v:"GAIA",d:"2.87s"}],
+};
+let scdCur = "runs";
+
+function scdRender(){
+  const s = SCD_SERIES[scdCur];
+  document.getElementById("scdLegend").innerHTML = Object.entries(SCD_SERIES).map(([key,v])=>`
+    <button class="${key===scdCur?"on":""}" data-series="${key}">
+      <span class="k"><span class="dot" style="background:${v.dot}"></span>${v.k}</span>
+      <span class="v">${v.v}</span>
+    </button>`).join("");
+  document.getElementById("scdChart").innerHTML =
+    bars({okColor:s.ok, failColor:s.fail, xColor:"var(--muted-fg)", height:230});
+  document.getElementById("scdTiles").innerHTML = SCD_TILES[scdCur].map(t=>`
+    <div class="sc-card sca-tile"><div class="sc-cb">
+      <div class="k">${t.k}</div><div class="v">${t.v}</div>
+      <div class="sca-spark">${sparkline(s.dot)}</div>
+      <div style="margin-top:8px;font-size:12px;color:var(--muted-fg)">${t.d} vs 이전 기간</div>
+    </div></div>`).join("");
+}
+scdRender();
+document.getElementById("scdLegend").addEventListener("click",(e)=>{
+  const b = e.target.closest("[data-series]"); if(!b) return;
+  scdCur = b.dataset.series; scdRender();
+});
+
+/* 표 — 조건 칩을 지우면 행이 늘고, 차트 문맥도 같이 바뀐다 */
+const SCDACT = ["NEST_Seasoning","AutoQual_JobCreate","라우팅 실패","NEST_Seasoning","AutoQual_Abort","라우팅 실패"];
+const SCDMS  = ["3.12s","4.41s","0.81s","2.68s","—","5.29s"];
+let scdChips = [{lb:"상태: 실패", n:6},{lb:"FAB: M14, M15", n:6}];
+const scdSelected = new Set([0,1]);
+
+function scdRows(){
+  const shown = scdChips.length ? 6 : FAILROWS.length;
+  document.getElementById("scdRows").innerHTML = FAILROWS.slice(0,shown).map((r,i)=>`
+    <tr>
+      <td><span class="sct-sel${scdSelected.has(i)?" on":""}" data-row="${i}"></span></td>
+      <td class="mono" style="color:var(--muted-fg)">${r.t}</td>
+      <td class="mono">${r.id}</td>
+      <td class="mono" style="color:var(--muted-fg)">${r.u}</td>
+      <td class="mono" style="color:var(--muted-fg)">${r.fab}</td>
+      <td>${SCDACT[i]==="라우팅 실패"?`<span style="color:var(--muted-fg)">${SCDACT[i]}</span>`:SCDACT[i]}</td>
+      <td>${r.err==="—"?'<span style="color:var(--muted-fg)">—</span>':`<span class="mono" style="color:var(--err)">${r.err}</span>`}</td>
+      <td class="r">${SCDMS[i]}</td>
+      <td class="r">${scStBadge(r.st)}</td>
+    </tr>`).join("");
+  document.getElementById("scdChips").innerHTML = scdChips.map((c,i)=>
+    `<button class="sct-chip on" data-chip="${i}">${c.lb} <span class="x">✕</span></button>`).join("");
+  document.getElementById("scdCount").textContent =
+    `12,847건 중 ${shown}건 표시 · 조회 조건 ${scdChips.length}개 적용`;
+  document.getElementById("scdSel").textContent = `${shown}건 중 ${scdSelected.size}건 선택`;
+}
+scdRows();
+document.querySelector(".d-sc-data").addEventListener("click",(e)=>{
+  const chip = e.target.closest("[data-chip]");
+  if(chip){ scdChips.splice(+chip.dataset.chip,1); scdRows(); return; }
+  const cell = e.target.closest("[data-row]");
+  if(cell){ const i=+cell.dataset.row; scdSelected.has(i)?scdSelected.delete(i):scdSelected.add(i); scdRows(); return; }
+  if(e.target.id === "scdAddChip"){ scdChips.push({lb:"ACTION_TYP: NEST_Seasoning"}); scdRows(); }
+});
+document.getElementById("scdAct").innerHTML  = scList(scActItems, "info");
+document.getElementById("scdFac").innerHTML  = scList(scFacItems, "");
+document.getElementById("scdNode").innerHTML = scList(scNodeItems, "info");
+
+/* 밀도 토글 */
+const scdSec = document.querySelector(".d-sc-data");
+document.getElementById("scdDensity").addEventListener("click",(e)=>{
+  const compact = scdSec.dataset.density === "compact";
+  scdSec.dataset.density = compact ? "cozy" : "compact";
+  e.currentTarget.textContent = compact ? "밀도: 편안" : "밀도: 조밀";
+});
+
+/* 모든 shadcn 시안 공통: 테마 토글 (섹션 스코프) */
+document.querySelectorAll("[data-sctheme]").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const sec = btn.closest(".d-sc");
+    const dark = sec.dataset.theme === "dark";
+    sec.dataset.theme = dark ? "light" : "dark";
+    btn.textContent = dark ? "☾" : "☀";
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   전 시안 공통 인터랙션
+   목업이지만 "눌리는 것은 눌리게" 한다 — 죽은 화면은 밀도도 동선도 평가가 안 된다.
+   시안마다 활성 클래스가 .on / .cur 로 갈리므로 형제 중 무엇이 쓰였는지 보고 옮긴다.
+   ═══════════════════════════════════════════════════════════════════════ */
+const LIVE_SEL = "button, a[href='#']";
+const SKIP = ".vw-tab, .vw-btn, [data-chip], [data-row], [data-series], [data-sctheme], #scdDensity, #scDensity, #scdAddChip";
+
+document.querySelectorAll(".design").forEach(design=>{
+  design.addEventListener("click",(e)=>{
+    const el = e.target.closest(LIVE_SEL);
+    if(!el || !design.contains(el) || el.matches(SKIP) || el.closest(SKIP)) return;
+    e.preventDefault();
+    const sibs = [...el.parentElement.children].filter(c=>c.matches(LIVE_SEL));
+    if(sibs.length < 2) return;
+    /* 이 그룹이 실제로 쓰는 활성 클래스를 찾는다 (없으면 세그먼트가 아니므로 무시) */
+    const cls = ["on","cur"].find(c => sibs.some(s=>s.classList.contains(c)));
+    if(!cls) return;
+    sibs.forEach(s=>s.classList.toggle(cls, s===el));
+  });
+});
+
+/* A/B/C/D 의 계열 세그먼트가 차트를 실제로 바꾸게 한다 */
+const SERIES_TONE = {
+  "처리량":null, "실행":null,
+  "응답지연":"warn", "응답 지연":"warn",
+  "토큰":"violet", "토큰 사용":"violet",
+  "사용자":"info",
+};
+function repaintChart(design, label){
+  const host = design.querySelector("#apChart, #bnChart, #bmChart, #vcChart");
+  if(!host) return;
+  const tone = SERIES_TONE[label];
+  const palette = {
+    null:     {ok:host.dataset.ok, fail:host.dataset.fail},
+    warn:     {ok:"#f59e0b", fail:"#b45309"},
+    violet:   {ok:"#8b5cf6", fail:"#6d28d9"},
+    info:     {ok:"#3b82f6", fail:"#1d4ed8"},
+  }[tone];
+  host.innerHTML = bars({
+    okColor: palette.ok, failColor: palette.fail,
+    xColor: host.dataset.x, height:+host.dataset.h || 200 });
+  /* 차트만 바뀌고 제목이 그대로면 버그처럼 읽힌다 — 캡션도 같이 옮긴다 */
+  design.querySelectorAll("[data-charttitle]").forEach(el=>{
+    el.textContent = el.dataset.charttitle.replace("{}", label);
+  });
+}
+/* 각 시안 차트의 원래 색을 기억시켜 둔다 (되돌릴 때 씀) */
+[["#apChart","#0066cc","#c50000","#7a7a7a",200],
+ ["#bnChart","#0ecb81","#f6465d","#707a8a",200],
+ ["#bmChart","#1c69d4","#dc2626","#9a9a9a",200],
+ ["#vcChart","#171717","#ee0000","#a1a1a1",200]].forEach(([sel,ok,fail,x,hh])=>{
+  const el=document.querySelector(sel); if(!el) return;
+  Object.assign(el.dataset,{ok,fail,x,h:hh});
+});
+document.querySelectorAll(".design").forEach(design=>{
+  design.addEventListener("click",(e)=>{
+    const b = e.target.closest("button"); if(!b) return;
+    const label = b.textContent.trim();
+    if(label in SERIES_TONE) repaintChart(design, label);
+  });
+});
+
+/* C · BMW — 사이드바 접기 (좁은 화면·타임라인용) */
+const bmSide = document.querySelector(".bm-side");
+if(bmSide){
+  const fold = document.createElement("button");
+  fold.className = "bm-fold";
+  fold.title = "사이드바 접기";
+  fold.textContent = "☰";
+  fold.addEventListener("click", ()=> document.querySelector(".d-bmw").classList.toggle("folded"));
+  bmSide.prepend(fold);
+}
+
 /* ─────────────────────────── 설계 노트 ─────────────────────────── */
 const NOTES = {
   apple:{
@@ -1418,6 +2097,26 @@ const NOTES = {
       ["내비게이션","탭 <u>한 줄에 7개</u>(Overview/Traces/Tokens/Failures/Report/Agent/Settings). 깊이를 늘리지 않고 넓게 펼쳐 클릭 1회로 어디든 간다. 기능이 더 늘면 Settings 하위로 접는다."],
       ["트레이드오프","기능이 10개를 넘으면 <u>탭 한 줄이 깨진다</u> — 그때 좌측 레일을 추가해야 한다. 또 검은 잉크 위주라 성공/실패 같은 <u>상태 구분이 약해</u> 색 규칙을 별도로 세워야 한다."]
     ]
+  },
+  shadcn:{
+    title:"E · shadcn — Design System",
+    lead:"앞의 넷이 '어떤 인상을 줄까'를 고른 시안이라면, 이건 <u>고르지 않는</u> 시안이다. 색·반경·밀도를 컴포넌트가 아니라 토큰이 정하게 만들어, 같은 마크업이 라이트/다크 × 편안/조밀 네 가지 상태로 산다. 상단 우측 두 버튼을 눌러 보라 — 바뀌는 건 CSS 변수뿐이다.",
+    cards:[
+      ["누구를 위한 화면","<u>모두</u>. 정확히는 '한 명을 고르지 않아도 되게' 만든 화면이다. 임원은 라이트+편안으로 캡처하고, 운영자는 다크+조밀로 띄워 둔다. A~D 가 서로 배타적인 선택지였다면 E 는 <u>그 선택을 런타임으로 미룬다</u>."],
+      ["비즈니스 장치","반경이 <u>--radius 하나</u>에서 파생된다(sm~4xl 전부 calc). 이 숫자를 0 으로 두면 BMW 시안처럼 각지고, 1rem 으로 두면 소비자용으로 부드러워진다. 색도 마찬가지 — 뉴트럴은 전부 <u>OKLCH chroma 0</u> 이라 브랜드 색을 하나 꽂으면 전 화면이 따라온다."],
+      ["내비게이션","상단 56px 바에 세그먼트 탭 한 줄. D 와 비슷해 보이지만 <u>기능이 늘면 C(BMW)처럼 사이드바로 갈아탈 수 있다</u> — 컴포넌트가 같아서 레이아웃만 바꾸면 되고, 그게 이 시안의 요지다."],
+      ["트레이드오프","<u>개성이 없다</u>. 의도된 것이지만 대가는 분명하다 — 'TraceX 답다'는 인상을 이 시안 혼자서는 못 만든다. 브랜드 토큰(색 1개, 폰트 1개)을 얹지 않으면 어느 회사 관리도구로도 보인다. 또 기본 팔레트에 <u>성공/경고 색이 아예 없어</u> 상태 색은 반드시 제품이 정의해야 한다."]
+    ]
+  },
+  scdata:{
+    title:"F · shadcn — Data Studio",
+    lead:"E 와 <u>같은 컴포넌트</u>로 만든 두 번째 화면. A~E 가 전부 대시보드라면 이건 <u>일하는 화면</u>이다 — 위에서 추세를 잡고 아래에서 그 건을 찾는다. 좌측 계열을 눌러 보라: 차트와 타일이 같이 바뀐다. 조건 칩의 ✕ 를 지우면 표가 늘어난다.",
+    cards:[
+      ["누구를 위한 화면","<u>조사하는 사람</u>. '지난주 M14 에서 실패한 시즈닝이 늘었나, 그럼 그게 어떤 건들인가' — 추세와 개별 건이 <u>한 질문의 앞뒤</u>인데, 지금까지의 시안은 늘 둘 중 하나만 답했다."],
+      ["비즈니스 장치","<u>계열 스위처</u>가 실행/실패/토큰/응답을 한 축에 겹쳐 비교를 강제하고, 아래 표에는 <u>같은 조건이 그대로 걸린다</u>. 조건은 제거 가능한 칩으로 노출돼 '지금 무엇을 빼고 보는지'가 항상 보인다 — 빈 표를 장애로 오해하는 사고를 막는 장치다."],
+      ["내비게이션","상단 탭 4개 + 기간 세그먼트. 이 화면에서는 <u>표와 차트가 곧 내비게이션</u>이라 메뉴가 할 일이 적다."],
+      ["트레이드오프","<u>한 화면이 두 일을 한다</u>. 그만큼 세로로 길어져 스크롤 없이는 전체가 안 보이고, 차트와 표 어느 쪽도 전용 화면만큼 넓지 않다. 관제(B)처럼 '한눈에'가 목적인 자리에는 맞지 않는다."]
+    ]
   }
 };
 
@@ -1436,7 +2135,12 @@ function renderNote(){
 }
 function show(v){
   current = v;
-  tabs.forEach(t=>t.classList.toggle("on", t.dataset.v===v));
+  tabs.forEach(t=>{
+    const on = t.dataset.v===v;
+    t.classList.toggle("on", on);
+    /* 시안이 9개라 탭 바가 가로 스크롤된다 — 키보드로 넘겨도 선택 탭이 보이게 */
+    if(on) t.scrollIntoView({block:"nearest", inline:"center", behavior:"smooth"});
+  });
   document.querySelectorAll(".design").forEach(d=>d.classList.toggle("on", d.dataset.v===v));
   renderNote();
   window.scrollTo({top:0});
@@ -1447,8 +2151,8 @@ noteBtn.addEventListener("click",()=>{
   noteBtn.classList.toggle("on", note.classList.contains("open"));
 });
 document.addEventListener("keydown",(e)=>{
-  const order = ["apple","binance","bmw","vercel"];
-  if(e.key>="1" && e.key<="4"){ show(order[+e.key-1]); }
+  const order = ["apple","binance","bmw","vercel","shadcn","scdata"];
+  if(e.key>="1" && e.key<="6"){ show(order[+e.key-1]); }
   if(e.key.toLowerCase()==="n"){ noteBtn.click(); }
 });
 renderNote();

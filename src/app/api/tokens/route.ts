@@ -30,7 +30,6 @@ export async function GET(req: NextRequest) {
     nodeNm: sp.get("nodeNm") || undefined,
     modelNm: sp.get("modelNm") || undefined,
     traceId: sp.get("traceId") || undefined,
-    status: sp.get("status") === "error" ? "error" : sp.get("status") === "ok" ? "ok" : undefined,
   };
 
   logger.info("GET /api/tokens", { ...ctx, filter });

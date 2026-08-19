@@ -69,14 +69,8 @@ function bucketExpr(g: Granularity): string {
   return `TRUNC(CALL_TM, 'HH24') + FLOOR(TO_NUMBER(TO_CHAR(CALL_TM, 'MI')) / 5) * 5 / 1440`;
 }
 
-/**
- * TokenFilter → WHERE 절 + 바인드. 시간 컬럼은 CALL_TM 기준.
- * status 필터는 STAT_CD 컬럼이 있을 때만 붙인다(hasStatus).
- */
-function buildWhere(
-  filter: TokenFilter,
-  hasStatus = false
-): { where: string; binds: Record<string, unknown> } {
+/** TokenFilter → WHERE 절 + 바인드. 시간 컬럼은 CALL_TM 기준. */
+function buildWhere(filter: TokenFilter): { where: string; binds: Record<string, unknown> } {
   const where: string[] = [];
   const binds: Record<string, unknown> = {};
   if (filter.dateFrom) {
@@ -103,22 +97,18 @@ function buildWhere(
     where.push(`TRACE_ID = :traceId`);
     binds.traceId = filter.traceId;
   }
-  if (hasStatus && filter.status) {
-    where.push(filter.status === "error" ? SQL_ERR_PRED : SQL_OK_PRED);
-  }
   return { where: where.length ? " WHERE " + where.join(" AND ") : "", binds };
 }
 
 /** 빈 버킷 리터럴 — 데이터 없음/미구성일 때도 차트가 균일하게 그려지도록 */
 function emptyBucket(ts: string): TokenBucket {
-  return { ts, inputTokens: 0, outputTokens: 0, totalTokens: 0, calls: 0, avgLatencyMs: null, errorCalls: 0 };
+  return { ts, inputTokens: 0, outputTokens: 0, totalTokens: 0, calls: 0, avgLatencyMs: null };
 }
 
 function emptyStats(filter: TokenFilter, g: Granularity, buckets: TokenBucket[]): TokenStatsResponse {
   return {
     range: { from: filter.dateFrom ?? null, to: filter.dateTo ?? null },
-    totals: { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, errorCalls: 0 },
-    statusAvailable: false,
+    totals: { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     avgTotalPerCall: null,
     avgLatencyMs: null,
     granularity: g,
@@ -164,7 +154,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       logger.warn("fetchTokenStats: STAT_CD/ERR_CTN 미존재 — 실패 호출 집계 생략", { err: String(e) });
     }
 
-    const { where, binds } = buildWhere(filter, hasStatus);
+    const { where, binds } = buildWhere(filter);
 
     // 쿼리별 격리 실행 — 한 집계가 SQL 에러(문법/버전 차 등)로 죽어도 응답 전체를 비우지 않고,
     // 어느 섹션이 무슨 에러로 실패했는지 로그에 남긴다. 실패 섹션만 빈 결과.
@@ -181,12 +171,14 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       }
     };
 
-    // 실패 호출 수 / 성공 호출만의 LATENCY 표현식 — 컬럼이 없으면 상수로 대체한다.
-    const errCntExpr = hasStatus ? `SUM(CASE WHEN ${SQL_ERR_PRED} THEN 1 ELSE 0 END)` : "0";
     // ⚠️ 지연 평균은 성공 호출만: 타임아웃(90s 한도)이 섞이면 평균이 한도값 쪽으로 끌려가
-    //    "모델이 느려졌다" 로 오독된다. 실패 건의 소요시간은 실패 목록/호출 카드에서 따로 본다.
+    //    "모델이 느려졌다" 로 오독된다. 실패 호출의 소요시간은 호출 카드에서 개별로 본다.
     const latExpr = hasStatus ? `CASE WHEN ${SQL_OK_PRED} THEN LATENCY_MS END` : "LATENCY_MS";
     const statCols = hasStatus ? ", STAT_CD, ERR_CTN" : "";
+    /** 실패한 호출의 NODE_NM 만 모으는 표현식 (질문 행에서 "어느 노드가 끊겼나" 표시용) */
+    const errNodeExpr = hasStatus
+      ? `LISTAGG(CASE WHEN ${SQL_ERR_PRED} THEN NODE_NM END, ',' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY CALL_TM)`
+      : "NULL";
 
     // 1) 시계열 버킷 (+ totals 는 버킷 합으로 도출)
     //   LATENCY_MS 는 NULL 가능 → SUM/COUNT(latExpr) 로 NULL 제외 평균을 도출하고,
@@ -194,7 +186,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     const bucketSql =
       `SELECT TO_CHAR(${bucketExpr(g)}, 'YYYY-MM-DD"T"HH24:MI:SS') AS BKT,` +
       ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T, COUNT(*) AS N,` +
-      ` SUM(${latExpr}) AS LSUM, COUNT(${latExpr}) AS LCNT, ${errCntExpr} AS ERRN` +
+      ` SUM(${latExpr}) AS LSUM, COUNT(${latExpr}) AS LCNT` +
       ` FROM TRX_TOKEN_DET${where} GROUP BY ${bucketExpr(g)} ORDER BY 1`;
     const bucketMap = new Map<number, TokenBucket>();
     let latSum = 0;
@@ -214,7 +206,6 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
         totalTokens: num(r.T ?? r.t),
         calls: num(r.N ?? r.n),
         avgLatencyMs: lcnt > 0 ? lsum / lcnt : null,
-        errorCalls: num(r.ERRN ?? r.errn),
       });
     }
     const buckets = enumerateBucketStarts(fromMs, toMs, g).map(
@@ -226,10 +217,9 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
         acc.inputTokens += b.inputTokens;
         acc.outputTokens += b.outputTokens;
         acc.totalTokens += b.totalTokens;
-        acc.errorCalls += b.errorCalls;
         return acc;
       },
-      { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, errorCalls: 0 }
+      { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 }
     );
 
     // 2) byNode / 3) byModel — 동일 패턴 (차원 컬럼만 다름)
@@ -237,7 +227,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     const dimSql = (col: string) =>
       `SELECT NVL(${col}, '(none)') AS K, COUNT(*) AS N,` +
       ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T,` +
-      ` AVG(${latExpr}) AS L, ${errCntExpr} AS ERRN` +
+      ` AVG(${latExpr}) AS L` +
       ` FROM TRX_TOKEN_DET${where} GROUP BY NVL(${col}, '(none)') ORDER BY T DESC`;
     const dimFrom = (rows: Array<Record<string, unknown>>): TokenDimStat[] =>
       rows.map((r) => {
@@ -245,7 +235,6 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
         return {
           key: String(r.K ?? r.k ?? "(none)"),
           calls: num(r.N ?? r.n),
-          errorCalls: num(r.ERRN ?? r.errn),
           inputTokens: num(r.P ?? r.p),
           outputTokens: num(r.C ?? r.c),
           totalTokens: num(r.T ?? r.t),
@@ -296,19 +285,19 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     const agg = (col: string) =>
       `LISTAGG(${col}, ',' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY CALL_TM)`;
     const questionsSql =
-      `SELECT QKEY, TRACE_ID, NODES, MODELS, QCTN, USR, CALLS, ERRN, P, C, T, LAST_TM FROM (` +
+      `SELECT QKEY, TRACE_ID, NODES, MODELS, ERRNODES, QCTN, USR, CALLS, P, C, T, LAST_TM FROM (` +
         `SELECT TRACE_ID AS QKEY, TRACE_ID,` +
-        ` ${agg("NODE_NM")} AS NODES, ${agg("MODEL_NM")} AS MODELS,` +
+        ` ${agg("NODE_NM")} AS NODES, ${agg("MODEL_NM")} AS MODELS, ${errNodeExpr} AS ERRNODES,` +
         ` MIN(QUERY_CTN) KEEP (DENSE_RANK FIRST ORDER BY NVL2(QUERY_CTN, 0, 1), CALL_TM) AS QCTN,` +
-        ` MAX(USER_ID) AS USR, COUNT(*) AS CALLS, ${errCntExpr} AS ERRN,` +
+        ` MAX(USER_ID) AS USR, COUNT(*) AS CALLS,` +
         ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T,` +
         ` TO_CHAR(MAX(CALL_TM), 'YYYY-MM-DD"T"HH24:MI:SS') AS LAST_TM` +
         ` FROM TRX_TOKEN_DET${grpWhere("TRACE_ID IS NOT NULL")} GROUP BY TRACE_ID` +
         ` UNION ALL ` +
         `SELECT 'token:' || TOKEN_ID AS QKEY, NULL AS TRACE_ID, NODE_NM AS NODES, MODEL_NM AS MODELS,` +
+        ` ${hasStatus ? `CASE WHEN ${SQL_ERR_PRED} THEN NODE_NM END` : "NULL"} AS ERRNODES,` +
         ` QUERY_CTN AS QCTN,` +
         ` USER_ID AS USR, 1 AS CALLS,` +
-        ` ${hasStatus ? `CASE WHEN ${SQL_ERR_PRED} THEN 1 ELSE 0 END` : "0"} AS ERRN,` +
         ` INPUT_TOKENS AS P, OUTPUT_TOKENS AS C, TOTAL_TOKENS AS T,` +
         ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS') AS LAST_TM` +
         ` FROM TRX_TOKEN_DET${grpWhere("TRACE_ID IS NULL")}` +
@@ -318,10 +307,10 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       traceId: str(r.TRACE_ID ?? r.trace_id),
       nodes: dedupeCsv(str(r.NODES ?? r.nodes)),
       models: dedupeCsv(str(r.MODELS ?? r.models)),
+      errorNodes: dedupeCsv(str(r.ERRNODES ?? r.errnodes)),
       queryCtn: str(r.QCTN ?? r.qctn),
       userId: str(r.USR ?? r.usr),
       calls: num(r.CALLS ?? r.calls),
-      errorCalls: num(r.ERRN ?? r.errn),
       inputTokens: num(r.P ?? r.p),
       outputTokens: num(r.C ?? r.c),
       totalTokens: num(r.T ?? r.t),
@@ -367,7 +356,6 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
 
     logger.info("fetchTokenStats ok", {
       calls: totals.calls,
-      errorCalls: totals.errorCalls,
       questions: questions.length,
       ms: Date.now() - t0,
     });
@@ -375,7 +363,6 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     return {
       range: { from: filter.dateFrom ?? null, to: filter.dateTo ?? null },
       totals,
-      statusAvailable: hasStatus,
       avgTotalPerCall: totals.calls > 0 ? totals.totalTokens / totals.calls : null,
       avgLatencyMs: latCnt > 0 ? latSum / latCnt : null,
       granularity: g,

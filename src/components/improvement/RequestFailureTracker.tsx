@@ -10,6 +10,7 @@ import {
   RequestFailureContextResponse,
 } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
+import { humanText } from "@/lib/humanText";
 
 // Improvement Center 의 첫 모듈. 에이전트가 라우팅/LLM 단계에서 처리하지 못하고 튕긴
 // "실패 요청"(ACTION_TYP IS NULL AND RECV_MSG_CTN IS NOT NULL)을 좌측 리스트로 훑고,
@@ -57,37 +58,7 @@ function snippet(s: string | null, n = 140): string {
 }
 
 // CUBE 의 SEND/RESP 는 보통 JSON envelope 이다. 대화로 읽히게 사람이 읽는 문장만 뽑고,
-// 못 찾으면 원문을 그대로 둔다(말풍선이 pre-wrap 이라 잘리지 않는다).
-const TEXT_KEYS = [
-  "query", "question", "message", "msg", "text", "content",
-  "answer", "reply", "response", "result", "output",
-];
-function humanText(raw: string | null): string {
-  if (!raw) return "";
-  const t = raw.trim();
-  if (!t.startsWith("{") && !t.startsWith("[")) return t;
-  try {
-    const seen = new Set<unknown>();
-    const walk = (v: unknown, depth: number): string => {
-      if (typeof v === "string") return v.trim();
-      if (!v || typeof v !== "object" || depth > 3 || seen.has(v)) return "";
-      seen.add(v);
-      const o = v as Record<string, unknown>;
-      for (const k of TEXT_KEYS) {
-        const hit = o[k];
-        if (typeof hit === "string" && hit.trim()) return hit.trim();
-      }
-      for (const nested of Object.values(o)) {
-        const found = walk(nested, depth + 1);
-        if (found) return found;
-      }
-      return "";
-    };
-    return walk(JSON.parse(t), 0) || t;
-  } catch {
-    return t; // JSON 이 아니면 원문
-  }
-}
+// 못 찾으면 원문을 그대로 둔다(말풍선이 pre-wrap 이라 잘리지 않는다). — lib/humanText.ts 공용
 
 export function RequestFailureTracker() {
   const [data, setData] = useState<RequestFailureListResponse | null>(null);

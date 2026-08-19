@@ -239,14 +239,7 @@ function buildReportText(opts: {
     L.push(`  · 총 호출        ${t.calls.toLocaleString()}회`);
     L.push(`  · 총 토큰        ${t.totalTokens.toLocaleString()} (IN ${t.inputTokens.toLocaleString()} / OUT ${t.outputTokens.toLocaleString()})`);
     L.push(`  · 호출당 평균    ${tok.avgTotalPerCall != null ? `${Math.round(tok.avgTotalPerCall).toLocaleString()} tok` : "—"}`);
-    L.push(`  · 평균 호출 지연 ${fmtDuration(tok.avgLatencyMs)}${tok.statusAvailable ? " (성공 호출 기준)" : ""}`);
-    // 실패 호출(타임아웃 포함) — 성공만 적재하던 때는 리포트에 아예 안 잡히던 값
-    if (tok.statusAvailable) {
-      L.push(
-        `  · 실패 호출      ${t.errorCalls.toLocaleString()}회` +
-          (t.calls > 0 ? ` (${pct(t.errorCalls, t.calls)})` : "")
-      );
-    }
+    L.push(`  · 평균 호출 지연 ${fmtDuration(tok.avgLatencyMs)}`);
 
     if (tok.byNode.length > 0) {
       L.push("");
@@ -255,7 +248,6 @@ function buildReportText(opts: {
         L.push(
           `  · ${n.key}: ${n.totalTokens.toLocaleString()} tok (${pct(n.totalTokens, t.totalTokens)})` +
             ` · 호출 ${n.calls.toLocaleString()}` +
-            (n.errorCalls > 0 ? ` · 실패 ${n.errorCalls.toLocaleString()}` : "") +
             ` · 지연 ${fmtDuration(n.avgLatencyMs)}`
         );
       }

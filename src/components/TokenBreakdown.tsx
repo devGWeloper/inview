@@ -9,14 +9,13 @@ import { fmtDuration } from "@/components/TokenLatencyChart";
 // 메트릭 토글(토큰/호출/토큰·호출/지연)은 두 카드가 공유하고, 행 클릭 = 해당 노드/모델 필터.
 // 카드 색: 노드 = 파랑, 모델 = 보라 (지연 메트릭의 바만 빨강 = 느림).
 
-type MetricKey = "tokens" | "calls" | "perCall" | "latency" | "errors";
+type MetricKey = "tokens" | "calls" | "perCall" | "latency";
 
 const METRICS: { key: MetricKey; label: string; hint: string }[] = [
   { key: "tokens",  label: "토큰",      hint: "총 토큰" },
   { key: "calls",   label: "호출",      hint: "LLM 호출 수" },
   { key: "perCall", label: "토큰/호출", hint: "호출당 평균 토큰 — 어디가 비싼가" },
-  { key: "latency", label: "지연",      hint: "평균 호출 소요시간(성공 호출만) — 어디가 느린가" },
-  { key: "errors",  label: "실패",      hint: "실패(타임아웃 포함) 호출 수 — 어느 노드에서 끊기나" },
+  { key: "latency", label: "지연",      hint: "평균 호출 소요시간 — 어디가 느린가" },
 ];
 
 const HUE = {
@@ -35,18 +34,15 @@ function metricOf(d: TokenDimStat, m: MetricKey): number | null {
   if (m === "tokens") return d.totalTokens;
   if (m === "calls") return d.calls;
   if (m === "perCall") return d.calls > 0 ? d.totalTokens / d.calls : null;
-  if (m === "errors") return d.errorCalls;
   return d.avgLatencyMs;
 }
 
 function fmtMetric(v: number | null, m: MetricKey): string {
   if (v == null) return "—";
   if (m === "latency") return fmtDuration(v);
-  if (m === "calls" || m === "errors") return v < 10_000 ? Math.round(v).toLocaleString() : fmtCompact(v);
+  if (m === "calls") return v < 10_000 ? Math.round(v).toLocaleString() : fmtCompact(v);
   return fmtCompact(v);
 }
-
-const errRate = (d: TokenDimStat): number => (d.calls > 0 ? (d.errorCalls / d.calls) * 100 : 0);
 
 function rowTitle(d: TokenDimStat, subLabel: string): string {
   const subLine =
@@ -59,10 +55,9 @@ function rowTitle(d: TokenDimStat, subLabel: string): string {
   return (
     `${d.key}\n` +
     `호출 ${d.calls.toLocaleString()}\n` +
-    (d.errorCalls > 0 ? `실패 ${d.errorCalls.toLocaleString()} (${errRate(d).toFixed(1)}%)\n` : "") +
     `IN ${d.inputTokens.toLocaleString()} · OUT ${d.outputTokens.toLocaleString()}\n` +
     `총 토큰 ${d.totalTokens.toLocaleString()}\n` +
-    `평균 지연 ${d.avgLatencyMs == null ? "측정 없음" : fmtDuration(d.avgLatencyMs) + " (성공 호출만)"}` +
+    `평균 지연 ${d.avgLatencyMs == null ? "측정 없음" : fmtDuration(d.avgLatencyMs)}` +
     subLine
   );
 }
@@ -110,7 +105,7 @@ function Board({
   const maxV = vals.length ? Math.max(...vals) : 0;
   const showShare = metric === "tokens" || metric === "calls";
   const base = metric === "calls" ? shareBase.calls : shareBase.tokens;
-  const barColor = metric === "latency" || metric === "errors" ? LATENCY_BAR : hue.main;
+  const barColor = metric === "latency" ? LATENCY_BAR : hue.main;
 
   return (
     <div
@@ -148,13 +143,6 @@ function Board({
               .filter(([k]) => k !== metric)
               .map(([, s]) => s)
               .join(" · ");
-            // 실패는 메트릭 선택과 무관하게 항상 눈에 띄어야 한다 (0 이면 표시 안 함)
-            const errBadge =
-              d.errorCalls > 0 ? (
-                <span className="tbd-errbadge" title={`실패(타임아웃 포함) ${d.errorCalls.toLocaleString()}건 · 실패율 ${errRate(d).toFixed(1)}%`}>
-                  실패 {d.errorCalls.toLocaleString()}
-                </span>
-              ) : null;
             return (
               <button
                 key={d.key}
@@ -168,7 +156,6 @@ function Board({
                 <span className="tbd-main">
                   <span className="tbd-line1">
                     <span className={"tbd-key" + (isNone ? " none" : "")}>{d.key}</span>
-                    {errBadge}
                     <span className="tbd-val">{fmtMetric(v, metric)}</span>
                   </span>
                   <span className="tbd-barrow">
@@ -224,14 +211,12 @@ export function TokenBreakdown({
   const [metric, setMetric] = useState<MetricKey>("tokens");
   const current = METRICS.find((x) => x.key === metric)!;
   const shareBase = { tokens: stats.totals.totalTokens, calls: stats.totals.calls };
-  // STAT_CD 미적재면 "실패" 메트릭은 전부 0 이라 오히려 오해를 부르므로 감춘다
-  const metrics = stats.statusAvailable ? METRICS : METRICS.filter((m) => m.key !== "errors");
 
   return (
     <div className="tbd">
       <div className="tbd-toolbar">
         <div className="tbd-metrics" role="tablist" aria-label="breakdown metric">
-          {metrics.map((m) => (
+          {METRICS.map((m) => (
             <button
               key={m.key}
               type="button"

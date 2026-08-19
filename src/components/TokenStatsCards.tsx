@@ -37,20 +37,18 @@ function Sparkline({
 }
 
 export function TokenStatsCards({ stats }: { stats: TokenStatsResponse }) {
-  const { totals, avgTotalPerCall, avgLatencyMs, buckets, granularity, statusAvailable } = stats;
+  const { totals, avgTotalPerCall, avgLatencyMs, buckets, granularity } = stats;
 
   const totalSpark = buckets.map((b: TokenBucket) => b.totalTokens);
   const inputSpark = buckets.map((b: TokenBucket) => b.inputTokens);
   const outputSpark = buckets.map((b: TokenBucket) => b.outputTokens);
   const callsSpark = buckets.map((b: TokenBucket) => b.calls);
   const latencySpark = buckets.map((b: TokenBucket) => b.avgLatencyMs ?? 0);
-  const errorSpark = buckets.map((b: TokenBucket) => b.errorCalls);
   const peak = Math.max(0, ...totalSpark);
   const peakLatency = Math.max(0, ...latencySpark);
-  const errRate = totals.calls > 0 ? (totals.errorCalls / totals.calls) * 100 : 0;
 
   return (
-    <div className="kpi-grid kpi-grid-6">
+    <div className="kpi-grid kpi-grid-5">
       <Card
         title="Total Tokens"
         value={fmtCompact(totals.totalTokens)}
@@ -83,30 +81,10 @@ export function TokenStatsCards({ stats }: { stats: TokenStatsResponse }) {
         color="var(--ok)"
         tone="default"
       />
-      {/* 실패 호출 — GAIA 가 call_llm 예외까지 적재해야 값이 찬다.
-          미적재(STAT_CD 컬럼 없음)면 "0건 실패" 로 오해되지 않도록 값 자체를 '—' 로 둔다. */}
-      <Card
-        title="실패 호출"
-        value={statusAvailable ? fmtInt(totals.errorCalls) : "—"}
-        sub={
-          !statusAvailable
-            ? "미적재 · STAT_CD 적재 시 표시"
-            : totals.errorCalls === 0
-              ? "전건 정상 응답"
-              : `실패율 ${errRate.toFixed(1)}% · 타임아웃 포함`
-        }
-        spark={statusAvailable ? errorSpark : undefined}
-        color="var(--err)"
-        tone={statusAvailable && totals.errorCalls > 0 ? "err" : "default"}
-      />
       <Card
         title="Avg Latency"
         value={fmtDuration(avgLatencyMs)}
-        sub={
-          avgLatencyMs === null
-            ? "측정값 없음"
-            : `peak ${fmtDuration(peakLatency)} / ${granLabel(granularity)}${statusAvailable ? " · 성공 호출만" : ""}`
-        }
+        sub={avgLatencyMs !== null ? `peak ${fmtDuration(peakLatency)} / ${granLabel(granularity)}` : "측정값 없음"}
         spark={avgLatencyMs !== null ? latencySpark : undefined}
         color="#f59e0b"
         tone="default"

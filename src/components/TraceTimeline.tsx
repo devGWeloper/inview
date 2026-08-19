@@ -144,6 +144,74 @@ type JsonKind = "recv" | "send" | "resp";
 
 const KIND_LABEL: Record<JsonKind, string> = { recv: "RECV", send: "SEND", resp: "RESP" };
 
+// ── 송수신 순번(seq) ──────────────────────────────────────────────────────────
+// 한 트레이스는 요청이 상위→하위로 내려갔다가(recv/send) 응답이 하위→상위로 올라온다(resp).
+//   ① CUBE RECV → ② CUBE SEND → ③ GAIA RECV → ④ GAIA SEND → … → ⑧ GAIA RESP → ⑨ CUBE RESP
+// 레이어 카드는 이 순서대로 나열되지 않으므로(레이어별로 묶여 있음) 각 칼럼에 순번을 찍는다.
+// 순서는 **기록된 시각 오름차순**으로 매긴다 — 화면에 함께 표시되는 시각과 어긋나지 않고,
+// GAIA→MCP 를 두 번 호출하는 multi-call 도 자연스럽게 끼워 넣어진다.
+// 시각이 완전히 같을 때만 구조 순서(요청은 상위 먼저, 응답은 하위 먼저)로 가른다.
+type SeqMap = Map<string, number>;
+
+function seqKey(row: TraceRow, kind: JsonKind): string {
+  return `${row.layer}|${row.timekey}|${kind}`;
+}
+
+function buildSeqMap(rows: TraceRow[]): SeqMap {
+  const layerRank = new Map(LAYER_ORDER.map((l, i) => [l, i] as const));
+  const evs: { key: string; t: number; tie: number }[] = [];
+  for (const r of rows) {
+    const li = layerRank.get(r.layer) ?? 0;
+    const push = (kind: JsonKind, ts: string | null, tie: number) => {
+      if (!ts) return;
+      const t = Date.parse(ts);
+      if (!Number.isFinite(t)) return;
+      evs.push({ key: seqKey(r, kind), t, tie });
+    };
+    push("recv", r.recvTm, li * 2);      // 요청(하강): 상위 레이어가 먼저
+    push("send", r.sendTm, li * 2 + 1);
+    push("resp", r.respTm, 1000 - li);   // 응답(상승): 하위 레이어가 먼저
+  }
+  evs.sort((a, b) => a.t - b.t || a.tie - b.tie);
+  return new Map(evs.map((e, i) => [e.key, i + 1] as const));
+}
+
+function SeqBadge({ n, kind, layer }: { n?: number; kind: JsonKind; layer: LayerKey }) {
+  if (!n) {
+    return <span className="seq none" title="시각이 기록되지 않아 순서를 알 수 없습니다">·</span>;
+  }
+  const up = kind === "resp";
+  return (
+    <span
+      className={`seq ${up ? "up" : "down"}`}
+      title={`${n}번째 · ${layer} ${KIND_LABEL[kind]} — ${up ? "응답(하위 → 상위)" : "요청(상위 → 하위)"}`}
+    >
+      {n}
+    </span>
+  );
+}
+
+// recv/send/resp 칼럼 머리 — 순번 배지 + 상대 시스템 + 시각
+function ColHead({ kind, seq, row, peer, ts }: {
+  kind: JsonKind;
+  seq: SeqMap;
+  row: TraceRow;
+  peer: string | null;
+  ts: string | null;
+}) {
+  return (
+    <div className="tl-col-head">
+      <span className="ch-label">
+        <SeqBadge n={seq.get(seqKey(row, kind))} kind={kind} layer={row.layer} />
+        {KIND_LABEL[kind]}
+      </span>
+      <span className="peer">
+        {kind === "send" ? "→" : "←"} {peer ?? "-"} · {fmtTsShort(ts)}
+      </span>
+    </div>
+  );
+}
+
 function showToast(message: string) {
   if (typeof document === "undefined") return;
   const el = document.createElement("div");
@@ -309,8 +377,9 @@ function Stepper({ groups }: { groups: LayerGroup[] }) {
 }
 
 // ── 단일 호출 카드 (recv | send | resp 3컬럼) ─────────────────────────────────
-function SingleCallCard({ row, frac3, setFrac3, startResize }: {
+function SingleCallCard({ row, seq, frac3, setFrac3, startResize }: {
   row: TraceRow;
+  seq: SeqMap;
   frac3: number[];
   setFrac3: (next: number[]) => void;
   startResize: StartColResize;
@@ -348,10 +417,7 @@ function SingleCallCard({ row, frac3, setFrac3, startResize }: {
 
       <div ref={bodyRef} className="tl-body tl-body-3" style={colsStyle(frac3)}>
         <div className="tl-col">
-          <div className="tl-col-head">
-            <span>RECV</span>
-            <span className="peer">← {row.recvSysId ?? "-"} · {fmtTsShort(row.recvTm)}</span>
-          </div>
+          <ColHead kind="recv" seq={seq} row={row} peer={row.recvSysId} ts={row.recvTm} />
           <JsonBlock raw={row.recvMsgCtn} kind="recv" />
         </div>
         <div
@@ -363,10 +429,7 @@ function SingleCallCard({ row, frac3, setFrac3, startResize }: {
           onDoubleClick={() => setFrac3([1, 1, 1])}
         />
         <div className="tl-col">
-          <div className="tl-col-head">
-            <span>SEND</span>
-            <span className="peer">→ {row.sendSysId ?? "-"} · {fmtTsShort(row.sendTm)}</span>
-          </div>
+          <ColHead kind="send" seq={seq} row={row} peer={row.sendSysId} ts={row.sendTm} />
           <JsonBlock raw={row.sendMsgCtn} kind="send" />
         </div>
         <div
@@ -378,10 +441,7 @@ function SingleCallCard({ row, frac3, setFrac3, startResize }: {
           onDoubleClick={() => setFrac3([1, 1, 1])}
         />
         <div className="tl-col">
-          <div className="tl-col-head">
-            <span>RESP</span>
-            <span className="peer">← {row.sendSysId ?? "-"} · {fmtTsShort(row.respTm)}</span>
-          </div>
+          <ColHead kind="resp" seq={seq} row={row} peer={row.sendSysId} ts={row.respTm} />
           <JsonBlock raw={row.respMsgCtn} kind="resp" />
         </div>
       </div>
@@ -399,8 +459,9 @@ function SingleCallCard({ row, frac3, setFrac3, startResize }: {
 // ── 복수 호출 카드 ────────────────────────────────────────────────────────────
 // recv는 첫 번째 row(upstream 요청)를 상단에 전체 폭으로 표시
 // 각 call은 번호 붙여 send | resp 2컬럼으로 표시
-function MultiCallCard({ group, frac2, setFrac2, startResize }: {
+function MultiCallCard({ group, seq, frac2, setFrac2, startResize }: {
   group: LayerGroup;
+  seq: SeqMap;
   frac2: number[];
   setFrac2: (next: number[]) => void;
   startResize: StartColResize;
@@ -437,10 +498,7 @@ function MultiCallCard({ group, frac2, setFrac2, startResize }: {
 
       {/* upstream recv — 전체 폭 */}
       <div className="tl-recv-section">
-        <div className="tl-col-head">
-          <span>RECV</span>
-          <span className="peer">← {firstRow.recvSysId ?? "-"} · {fmtTsShort(firstRow.recvTm)}</span>
-        </div>
+        <ColHead kind="recv" seq={seq} row={firstRow} peer={firstRow.recvSysId} ts={firstRow.recvTm} />
         <JsonBlock raw={firstRow.recvMsgCtn} kind="recv" />
       </div>
 
@@ -451,6 +509,7 @@ function MultiCallCard({ group, frac2, setFrac2, startResize }: {
             key={row.timekey}
             row={row}
             ci={ci}
+            seq={seq}
             frac2={frac2}
             setFrac2={setFrac2}
             startResize={startResize}
@@ -461,9 +520,10 @@ function MultiCallCard({ group, frac2, setFrac2, startResize }: {
   );
 }
 
-function CallItem({ row, ci, frac2, setFrac2, startResize }: {
+function CallItem({ row, ci, seq, frac2, setFrac2, startResize }: {
   row: TraceRow;
   ci: number;
+  seq: SeqMap;
   frac2: number[];
   setFrac2: (next: number[]) => void;
   startResize: StartColResize;
@@ -488,10 +548,7 @@ function CallItem({ row, ci, frac2, setFrac2, startResize }: {
       </div>
       <div ref={bodyRef} className="tl-call-body" style={colsStyle(frac2)}>
         <div className="tl-col">
-          <div className="tl-col-head">
-            <span>SEND</span>
-            <span className="peer">→ {row.sendSysId ?? "-"} · {fmtTsShort(row.sendTm)}</span>
-          </div>
+          <ColHead kind="send" seq={seq} row={row} peer={row.sendSysId} ts={row.sendTm} />
           <JsonBlock raw={row.sendMsgCtn} kind="send" />
         </div>
         <div
@@ -503,10 +560,7 @@ function CallItem({ row, ci, frac2, setFrac2, startResize }: {
           onDoubleClick={() => setFrac2([1, 1])}
         />
         <div className="tl-col">
-          <div className="tl-col-head">
-            <span>RESP</span>
-            <span className="peer">← {row.sendSysId ?? "-"} · {fmtTsShort(row.respTm)}</span>
-          </div>
+          <ColHead kind="resp" seq={seq} row={row} peer={row.sendSysId} ts={row.respTm} />
           <JsonBlock raw={row.respMsgCtn} kind="resp" />
         </div>
       </div>
@@ -551,6 +605,9 @@ export function TraceTimeline({ traceId, rows, loading }: {
     .map((l) => ({ layer: l, rows: rows.filter((r) => r.layer === l) }))
     .filter((g) => g.rows.length > 0);
 
+  const seq = buildSeqMap(rows);
+  const seqTotal = seq.size;
+
   return (
     <>
       <div className="detail-head">
@@ -568,10 +625,23 @@ export function TraceTimeline({ traceId, rows, loading }: {
       </div>
 
       <div className="timeline">
+        {seqTotal > 0 && (
+          <div className="tl-legend">
+            <span className="tl-legend-title">송수신 순서</span>
+            <span className="tl-legend-item">
+              <span className="seq down">1</span>요청 · 상위 → 하위
+            </span>
+            <span className="tl-legend-arrow">…</span>
+            <span className="tl-legend-item">
+              <span className="seq up">{seqTotal}</span>응답 · 하위 → 상위
+            </span>
+            <span className="tl-legend-note">칼럼의 숫자는 이 트레이스에서 실제 기록된 순번입니다</span>
+          </div>
+        )}
         {groups.map((g) =>
           g.rows.length === 1
-            ? <SingleCallCard key={g.layer} row={g.rows[0]} frac3={frac3} setFrac3={setFrac3} startResize={startResize} />
-            : <MultiCallCard key={g.layer} group={g} frac2={frac2} setFrac2={setFrac2} startResize={startResize} />
+            ? <SingleCallCard key={g.layer} row={g.rows[0]} seq={seq} frac3={frac3} setFrac3={setFrac3} startResize={startResize} />
+            : <MultiCallCard key={g.layer} group={g} seq={seq} frac2={frac2} setFrac2={setFrac2} startResize={startResize} />
         )}
       </div>
     </>

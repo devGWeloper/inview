@@ -369,8 +369,11 @@ export interface TokenQuestion {
   userId: string | null;
   /** 이 질문에서 발생한 LLM 호출 수 (실패 호출 포함) */
   calls: number;
-  /** 그중 실패(타임아웃 포함)한 호출 수. STAT_CD 미적재면 항상 0 */
-  errorCalls: number;
+  /**
+   * 이 질문에서 LLM 호출이 실패(타임아웃)한 노드 이름들.
+   * 표의 NODE 칩 중 어느 노드에서 끊겼는지 표시하는 데만 쓴다. 미적재/전건 성공이면 빈 배열.
+   */
+  errorNodes: string[];
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
@@ -386,8 +389,6 @@ export interface TokenFilter {
   modelNm?: string;
   /** 특정 질문(TRACE_ID) 으로 좁히기. 설정 시 응답 calls 에 그 질문의 호출별 행이 채워진다. */
   traceId?: string;
-  /** 호출 결과로 좁히기 — 'error' = 실패(타임아웃 포함) 호출만, 'ok' = 성공만 */
-  status?: "ok" | "error";
 }
 
 export interface TokenBucket {
@@ -404,8 +405,6 @@ export interface TokenBucket {
    * LATENCY_MS 가 기록된 성공 호출이 없으면 null.
    */
   avgLatencyMs: number | null;
-  /** 해당 버킷의 실패(타임아웃 포함) 호출 수. STAT_CD 미적재면 항상 0 */
-  errorCalls: number;
 }
 
 /** 교차 차원 구성 항목 — 노드별 카드에선 그 노드가 쓴 모델들, 모델별 카드에선 그 모델을 쓴 노드들 */
@@ -421,8 +420,6 @@ export interface TokenDimStat {
   key: string;
   /** 호출 수 (실패 호출 포함) */
   calls: number;
-  /** 그중 실패(타임아웃 포함) 호출 수 — "어느 노드가 제일 많이 터지나". 미적재면 0 */
-  errorCalls: number;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
@@ -434,21 +431,7 @@ export interface TokenDimStat {
 
 export interface TokenStatsResponse {
   range: { from: string | null; to: string | null };
-  totals: {
-    /** 전체 호출 수 (실패 포함) */
-    calls: number;
-    inputTokens: number;
-    outputTokens: number;
-    totalTokens: number;
-    /** 실패(타임아웃 포함) 호출 수. STAT_CD 미적재면 0 */
-    errorCalls: number;
-  };
-  /**
-   * TRX_TOKEN_DET 에 STAT_CD/ERR_CTN 컬럼이 있는지.
-   * false = 아직 ALTER 전(또는 조회 불가) → 실패 관련 수치는 전부 0 이며
-   * 화면은 "0건 실패" 가 아니라 "미적재" 로 안내해야 한다.
-   */
-  statusAvailable: boolean;
+  totals: { calls: number; inputTokens: number; outputTokens: number; totalTokens: number };
   /** 호출당 평균 총 토큰. 호출이 없으면 null */
   avgTotalPerCall: number | null;
   /** 전체 평균 LLM 호출 소요시간(ms). **성공 호출만**. 기록이 없으면 null */
@@ -636,4 +619,80 @@ export interface StatsResponse {
   excludeErrCds: string[];
   /** 제외 필터로 인해 빠진 trace 수. UI 가 사용자에게 "N개 제외 중" 같은 안내를 띄울 때 사용 */
   excludedTraceCount: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 타임아웃 추적 (Timeout 탭)
+//
+// ⚠️ 이 집계는 **기존 데이터만** 쓴다 — BIZ_AIACTIONTXN_HIS 의 ERR_CD 다.
+// GAIA 가 LLM 호출 타임아웃으로 실패하면 그 트레이스에 ERR_CD='ERROR_LLM' 이 남는데,
+// 이게 사실상 대부분 타임아웃(외부 LLM 인프라 문제)이다. 기존 대시보드에선 그냥
+// "에러 1건" 으로 뭉뚱그려져 얼마나 심한지·어디서 나는지가 안 보였다.
+// 노드/모델은 TRX_TOKEN_DET 를 TRACE_ID 로 조인해 붙인다(있으면).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 타임아웃으로 간주하는 기본 ERR_CD. 화면에서 다른 코드로 바꿔 볼 수 있다. */
+export const TIMEOUT_DEFAULT_ERR_CD = "ERROR_LLM";
+
+export interface TimeoutBucket {
+  /** ISO 버킷 시작 시각 (TZ 없음) */
+  ts: string;
+  /** 해당 버킷의 타임아웃 트레이스 수 */
+  count: number;
+}
+
+/** 타임아웃 1건 = 트레이스 1건 */
+export interface TimeoutItem {
+  traceId: string;
+  /** 발생 시각 (트레이스 첫 recv 시각) */
+  tm: string | null;
+  userId: string | null;
+  actionTyp: string | null;
+  /** 사용자 질문 — 진입 레이어(CUBE)의 SEND_MSG_CTN 에서 추출 */
+  question: string | null;
+  errCd: string | null;
+  errDescCtn: string | null;
+  /** ERR_CD 를 기록한 레이어 */
+  errLayer: string | null;
+  /**
+   * 끊긴 LLM 호출의 노드/모델 (TRX_TOKEN_DET).
+   * STAT_CD 가 적재돼 있으면 실패한 호출의 값, 없으면 **마지막으로 기록된 호출**의 값
+   * (= 타임아웃 직전 노드). exact=false 면 후자라는 뜻이다.
+   */
+  nodeNm: string | null;
+  modelNm: string | null;
+  /** 위 노드/모델이 실패 호출에서 직접 온 값인지(true) 마지막 기록 호출 추정인지(false) */
+  nodeExact: boolean;
+}
+
+export interface TimeoutStatsResponse {
+  range: { from: string | null; to: string | null };
+  granularity: "5m" | "1h" | "1d";
+  /** 적용된 대상 에러 코드 */
+  errCd: string;
+  /** 기간 내 전체 트레이스 수 (비율 계산용) */
+  totalTraces: number;
+  /** 그중 타임아웃(대상 ERR_CD) 트레이스 수 */
+  timeoutTraces: number;
+  /** 타임아웃을 겪은 고유 사용자 수 */
+  affectedUsers: number;
+  /** 마지막 발생 시각 */
+  lastAt: string | null;
+  buckets: TimeoutBucket[];
+  /** 기간 내 **모든** 에러 코드 분포 — 대상 코드 선택 + "정말 ERROR_LLM 이 맞나" 검증용 */
+  byErrCd: TopItem[];
+  /** 타임아웃의 액션 유형 분포 */
+  byAction: TopItem[];
+  /** 타임아웃이 난 노드 분포 (TRX_TOKEN_DET 조인) */
+  byNode: TopItem[];
+  /** 타임아웃이 난 모델 분포 (TRX_TOKEN_DET 조인) */
+  byModel: TopItem[];
+  /** 타임아웃을 겪은 사용자 분포 */
+  byUser: TopItem[];
+  /** 최근 타임아웃 요청 목록 (발생 시각 desc) */
+  items: TimeoutItem[];
+  /** 노드/모델을 하나라도 붙였는지 — false 면 화면이 "TRX_TOKEN_DET 연계 없음" 안내 */
+  nodeLinked: boolean;
+  /** TRX_TOKEN_DET 에 STAT_CD 가 있어 실패 호출을 정확히 집었는지 */
+  nodeExact: boolean;
 }

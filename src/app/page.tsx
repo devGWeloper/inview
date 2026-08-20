@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { CSSProperties, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TraceTimeline } from "@/components/TraceTimeline";
 import {
   LAYER_COLOR, LAYER_ORDER,
@@ -62,11 +62,12 @@ function workUserLabel(w: WorkSummary): string {
  * 목록의 TRACE 행. 묶음이 1건짜리면 그대로 최상위 행으로, 여러 건이면 펼친 자식 행으로 쓰인다.
  * (child 여부만 다르고 내용은 동일 — 묶음 도입 전 화면과 같은 정보를 보여준다)
  */
-function traceRow(t: WorkTraceItem, active: boolean, onClick: () => void, child = false) {
+function traceRow(t: WorkTraceItem, active: boolean, onClick: () => void, child = false, last = false) {
   return (
     <tr
       key={t.traceId}
-      className={(child ? "work-child" : "") + (active ? " active" : "")}
+      // last = 묶음의 마지막 자식. 덩어리를 닫는 선을 긋는 자리다(.work-last)
+      className={(child ? "work-child" : "") + (child && last ? " work-last" : "") + (active ? " active" : "")}
       onClick={onClick}
     >
       <td className="mono strong" title={t.traceId}>{t.traceId}</td>
@@ -105,6 +106,8 @@ export default function Page() {
   const [works, setWorks] = useState<WorkSummary[]>([]);
   // 펼쳐놓은 묶음 (TRACE 2건 이상인 것만 펼침 대상)
   const [expandedWorks, setExpandedWorks] = useState<Set<string>>(new Set());
+  // 묶음만 보기 — 서버 재조회 없이 이미 받은 목록에서 TRACE 2건 이상인 묶음만 남긴다
+  const [groupedOnly, setGroupedOnly] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [detailRows, setDetailRows] = useState<TraceRow[]>([]);
   const [listLoading, setListLoading] = useState(false);
@@ -274,6 +277,7 @@ export default function Page() {
   const onReset = () => {
     setFilter(DEFAULT_FILTER);
     setDatePreset("all");
+    setGroupedOnly(false);
     runList(DEFAULT_FILTER);
   };
 
@@ -286,8 +290,12 @@ export default function Page() {
     runList(next);
   };
 
-  const errorCount = works.filter((w) => w.status === "error").length;
-  const failCount = works.filter((w) => w.status === "fail").length;
+  const visibleWorks = useMemo(
+    () => (groupedOnly ? works.filter((w) => w.traces.length > 1) : works),
+    [works, groupedOnly]
+  );
+  const errorCount = visibleWorks.filter((w) => w.status === "error").length;
+  const failCount = visibleWorks.filter((w) => w.status === "fail").length;
 
   return (
     <>
@@ -300,7 +308,7 @@ export default function Page() {
           <div className="panel-header">
             <span className="title">Traces</span>
             <span className="meta">
-              {works.length.toLocaleString()} 건
+              {visibleWorks.length.toLocaleString()} 건
               {errorCount > 0 && <>  ·  <span style={{ color: "var(--err)" }}>오류 {errorCount}</span></>}
               {failCount > 0 && <>  ·  <span style={{ color: "var(--fail)" }}>실패 {failCount}</span></>}
             </span>
@@ -397,6 +405,15 @@ export default function Page() {
                     />
                     오류만
                   </label>
+                  {/* 묶음만 — 조회 조건이 아니라 이미 받은 목록을 좁히는 보기 토글이라 즉시 반영된다 */}
+                  <label className="flt-check">
+                    <input
+                      type="checkbox"
+                      checked={groupedOnly}
+                      onChange={(e) => setGroupedOnly(e.target.checked)}
+                    />
+                    묶음만
+                  </label>
                   <button type="button" className="btn ghost xs" onClick={onReset}>초기화</button>
                   <button type="submit" className="btn primary xs">조회</button>
                 </div>
@@ -445,10 +462,14 @@ export default function Page() {
                     <div className="load-error"><span aria-hidden>⚠</span>{listErr}</div>
                   </td></tr>
                 )}
-                {!listLoading && !listErr && works.length === 0 && (
-                  <tr><td colSpan={5} className="muted" style={{ padding: 16 }}>조건에 맞는 TRACE 가 없습니다.</td></tr>
+                {!listLoading && !listErr && visibleWorks.length === 0 && (
+                  <tr><td colSpan={5} className="muted" style={{ padding: 16 }}>
+                    {groupedOnly && works.length > 0
+                      ? "묶인 TRACE 가 없습니다."
+                      : "조건에 맞는 TRACE 가 없습니다."}
+                  </td></tr>
                 )}
-                {works.map((w) => {
+                {visibleWorks.map((w) => {
                   // TRACE 1건짜리 묶음(대부분)은 펼칠 게 없으니 지금까지의 목록 행 그대로 둔다.
                   if (w.traces.length <= 1) {
                     const only = w.traces[0];
@@ -473,8 +494,8 @@ export default function Page() {
                         </td>
                         <td>{statusPill(w.status)}</td>
                       </tr>
-                      {open && w.traces.map((t) =>
-                        traceRow(t, selected === t.traceId, () => setSelected(t.traceId), true)
+                      {open && w.traces.map((t, i) =>
+                        traceRow(t, selected === t.traceId, () => setSelected(t.traceId), true, i === w.traces.length - 1)
                       )}
                     </Fragment>
                   );

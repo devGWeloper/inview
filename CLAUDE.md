@@ -254,6 +254,13 @@ Points that matter when touching this code:
   empty and every trace becomes a one-trace work — i.e. the pre-grouping screen.
 - This is temporary. When GAIA gains a real `TXN_ID`, only the inference in `workGroup.ts` is
   replaced; `WorkSummary`, the API shape, and the UI stay.
+- **목록 UI** — 묶음은 요약 행(`.work-row`) + 자식 행(`.work-child`)이 **한 덩어리**로 읽혀야 한다.
+  글자를 더하지 않고 톤으로만 구분한다: 바탕 `--work-band`(자식) / `--work-head`(펼친 요약 행) +
+  요약 행부터 마지막 자식(`.work-last`)까지 끊기지 않는 좌측 레일 `--work-rail` + 위(요약 행 border-top)
+  아래(마지막 자식 border-bottom)를 닫는 선. ⚠️ 묶음 바탕 규칙이 `tr.active` 보다 **뒤에** 오므로
+  선택 행 배경은 `tr.work-child.active`/`tr.work-row.active` 로 명시해 되돌린다(같은 specificity).
+  필터 바의 **"묶음만"** 체크는 조회 조건이 아니라 이미 받은 `works` 를 좁히는 **보기 토글**(즉시 반영,
+  `groupedOnly` → `visibleWorks`)이라 서버 재조회가 없다.
 
 ### ⚠️ 클라이언트 API 호출 규칙 — 원시 `fetch` 금지 (`src/lib/apiClient.ts`)
 

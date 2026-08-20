@@ -17,6 +17,12 @@
   --accent:     #2563eb;
   --accent-soft:#e8efff;
 
+  /* 묶음(현장 작업 1건) 행 톤 — 목록에서 "한 덩어리"로 읽히게 하는 3단계.
+     레일 > 요약 행 > 자식 행 순으로 옅어지고, 일반 행(흰 바탕)과는 바탕색으로 갈린다. */
+  --work-head:  #e9edf4;
+  --work-band:  #f3f5f9;
+  --work-rail:  #a8b6cc;
+
   --ok:         #067647;
   --ok-soft:    #e6f4ec;
   --warn:       #b54708;
@@ -381,10 +387,21 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
 /* ---- [TEMP][WORK_GROUP] 묶음(현장 작업 1건) 행 ----
    목록 1행 = 묶음. TRACE 1건짜리 묶음은 위의 일반 행 그대로 그려지고,
    여러 건인 묶음만 아래 요약 행 + 펼친 자식 행(.work-child)으로 나온다. */
+/* 묶음은 요약 행 + 자식 행이 이어진 한 덩어리다. 글자를 더하지 않고
+   바탕 톤 + 왼쪽으로 이어지는 레일 + 위아래를 닫는 선으로 그 경계를 보인다. */
 .trace-list tbody tr.work-row {
-  background: var(--surface-2);
+  background: var(--work-band);
 }
-.trace-list tbody tr.work-row:hover { background: var(--surface-3); }
+.trace-list tbody tr.work-row > td { border-top: 1px solid var(--border-strong); }
+.trace-list tbody tr.work-row:hover { background: var(--work-head); }
+/* 펼친 묶음의 요약 행은 아래 자식들을 이고 있는 머리 — 한 단계 더 내려앉는다 */
+.trace-list tbody tr.work-row.open { background: var(--work-head); }
+.trace-list tbody tr.work-row.open:hover { background: #e1e6ef; }
+/* 레일 — 요약 행부터 마지막 자식까지 끊기지 않고 내려온다 */
+.trace-list tbody tr.work-row > td:first-child,
+.trace-list tbody tr.work-child > td:first-child {
+  box-shadow: inset 3px 0 0 0 var(--work-rail);
+}
 .work-caret {
   display: inline-block;
   width: 14px;
@@ -433,12 +450,25 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
   text-overflow: ellipsis;
 }
 
-/* 자식 TRACE 행 — 묶음에 속해 있다는 걸 들여쓰기와 좌측 선으로 표시 */
-.trace-list tbody tr.work-child > td:first-child {
-  padding-left: 18px;
-  box-shadow: inset 2px 0 0 0 var(--border-strong);
+/* 자식 TRACE 행 — 묶음 바탕 위에 들여쓰기로 얹는다 */
+.trace-list tbody tr.work-child {
+  background: var(--work-band);
 }
-.trace-list tbody tr.work-child.active > td:first-child {
+.trace-list tbody tr.work-child:hover { background: #eaeef5; }
+.trace-list tbody tr.work-child > td:first-child { padding-left: 18px; }
+.trace-list tbody tr.work-child > td { border-bottom-color: #e4e8f0; }
+/* 묶음의 마지막 자식 — 덩어리를 닫는 선 */
+.trace-list tbody tr.work-child.work-last > td {
+  border-bottom: 1px solid var(--border-strong);
+}
+/* 선택된 행은 묶음 톤보다 액센트가 이긴다 (묶음 바탕 규칙이 뒤에 오므로 명시적으로 되돌린다).
+   레일은 그 자리에서 액센트 막대로 이어진다. */
+.trace-list tbody tr.work-child.active,
+.trace-list tbody tr.work-row.active {
+  background: var(--accent-soft);
+}
+.trace-list tbody tr.work-child.active > td:first-child,
+.trace-list tbody tr.work-row.active > td:first-child {
   box-shadow: none;
 }
 

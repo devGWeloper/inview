@@ -265,9 +265,14 @@ MCP `send→resp` 창 **밖**(주로 앞)에서 일어나므로 자연히 `self_
 - 시계 편차로 `wait > outer` 인 경우 `Math.max(0, …)` 로 clamp.
 - **실패 발생 레이어**(`LayerStats.failOriginTraces`) = `errCd` 를 가진 **가장 깊은** 레이어로 트레이스 1건 귀속.
   에러가 상위로 전파돼 여러 레이어에 `errCd` 가 찍혀도 최초 발생지 1곳만 센다. (행 단위 `failCount` 는 그대로 유지)
-- 화면 `src/components/LayerBudget.tsx` (`lb-*`): 평균 응답 히어로 + **100% 스택 스트립 2개**(시간 비중 /
-  실패 발생 비중, 레이어 색 = `LAYER_COLOR`) + 레이어별 표(자체 소요 평균·비중·실패·행 수, 최다 행 강조).
-  막대 길이 비교가 아니라 **비중**으로 읽는 구성. (구 `LayerBars.tsx` 는 삭제됨)
+- 화면 `src/components/LayerBudget.tsx` (`lb-*`): **좌 도넛 + 우 표** 2단 컴팩트 레이아웃.
+  도넛은 시간/실패 **세그먼트 토글**로 한 번에 하나의 비중만 그리고(레이어 색 = `LAYER_COLOR`),
+  중앙에 전체 요약(평균 응답 / 실패 건수)을, hover 시엔 그 레이어 값+비중을 띄운다.
+  우측 표(자체 소요 평균·비중·실패·행 수)와 도넛은 hover 로 **서로를 하이라이트**하고,
+  활성 토글에 대응하는 열만 배경을 띄워 둘을 연결한다. 막대 길이 비교가 아니라 **비중**으로 읽는 구성.
+  ⚠️ 도넛은 **recharts 를 쓰지 않고 SVG arc 를 직접 그린다** — recharts v3 의 `Pie` 에는 제어형
+  `activeIndex` 가 없어 표→도넛 하이라이트 동기화가 불가능하다. 100% 한 조각(예: 실패가 한 레이어에서만)은
+  시작점=끝점이라 arc 가 사라지므로 그때만 `<circle>` 링으로 그린다. (구 `LayerBars.tsx` 는 삭제됨)
 
 ## ⚠️ TEMPORARY WORKAROUND — ONEOIS 미연결 status 보정 (제거 예정)
 

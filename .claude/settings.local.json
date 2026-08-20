@@ -84,7 +84,8 @@
       "Bash(python -m http.server 8931 --bind 127.0.0.1)",
       "Bash(python -)",
       "PowerShell(Stop-Process *)",
-      "PowerShell(npx tsc --noEmit -p tsconfig.json; if \\($?\\) { \"TYPECHECK OK\" })"
+      "PowerShell(npx tsc --noEmit -p tsconfig.json; if \\($?\\) { \"TYPECHECK OK\" })",
+      "Bash(powershell -c \"Stop-Process -Id \\(Get-NetTCPConnection -LocalPort 7391 -State Listen\\).OwningProcess -Force\")"
     ]
   }
 }

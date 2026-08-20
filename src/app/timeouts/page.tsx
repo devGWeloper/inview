@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { fmtDuration } from "@/components/TokenLatencyChart";
+import { TimeoutTrendChart } from "@/components/TimeoutTrendChart";
 import { TimeoutDimStat, TimeoutItem, TimeoutStatsResponse } from "@/lib/types";
 import { callStatus } from "@/lib/tokenStatus";
 import { apiJson, errMessage } from "@/lib/apiClient";
@@ -29,9 +29,6 @@ function fmtRange(from: string | null, to: string | null): string {
 }
 function fmtTs(ts: string | null): string {
   return ts ? ts.replace("T", " ").slice(0, 19) : "—";
-}
-function tickOf(ts: string, g: TimeoutStatsResponse["granularity"]): string {
-  return g === "1d" ? ts.slice(5, 10) : ts.slice(11, 16);
 }
 const pct = (n: number, total: number): string => (total > 0 ? ((n / total) * 100).toFixed(1) + "%" : "—");
 
@@ -66,13 +63,6 @@ export default function TimeoutsPage() {
 
   const onPreset = (p: Preset) => { setPreset(p); load(p, node); };
   const onNode = (k: string) => { const next = node === k ? "" : k; setNode(next); load(preset, next); };
-
-  // 스택 막대용 — 타임아웃 / 그 외 오류
-  const data = (stats?.buckets ?? []).map((b) => ({
-    tick: tickOf(b.ts, stats!.granularity),
-    timeout: b.timeout,
-    other: Math.max(0, b.failed - b.timeout),
-  }));
 
   return (
     <div className="dash">
@@ -155,34 +145,7 @@ export default function TimeoutsPage() {
               {stats.failedCalls === 0 ? (
                 <div className="top-empty">이 기간에 실패한 LLM 호출이 없습니다</div>
               ) : (
-                <div className="ts-chart">
-                  <ResponsiveContainer width="100%" height={260}>
-                    <BarChart data={data} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
-                      <XAxis
-                        dataKey="tick"
-                        tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}
-                        tickLine={{ stroke: "var(--border-strong)" }}
-                        axisLine={{ stroke: "var(--border-strong)" }}
-                        tickMargin={8}
-                        height={32}
-                        minTickGap={28}
-                      />
-                      <YAxis
-                        allowDecimals={false}
-                        tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}
-                        tickLine={{ stroke: "var(--border-strong)" }}
-                        axisLine={{ stroke: "var(--border-strong)" }}
-                        width={44}
-                      />
-                      <Tooltip
-                        cursor={{ fill: "var(--surface-3)" }}
-                        formatter={(v, n) => [`${Number(v ?? 0)}건`, String(n)] as [string, string]}
-                      />
-                      <Bar dataKey="timeout" name="타임아웃" stackId="f" fill="var(--err)" isAnimationActive={false} />
-                      <Bar dataKey="other" name="기타 오류" stackId="f" fill="var(--fail)" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                <TimeoutTrendChart stats={stats} />
               )}
             </div>
           </section>

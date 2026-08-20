@@ -1527,92 +1527,92 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
 
 /* ── 레이어별 소요 비중 (LayerBudget) ──────────────────────────────────────────
    행의 SEND→RESP 는 하위 대기를 품는 중첩 시간이라 그대로 비교하면 진입 레이어가 항상 1등이다.
-   여기서는 하위 대기를 뺀 self time 을 100% 스택 스트립 = "비중" 으로 읽는다. */
-.lb { display: flex; flex-direction: column; gap: 16px; }
+   여기서는 하위 대기를 뺀 self time 을 도넛 = "비중" 으로 읽는다.
+   좌: 도넛(시간/실패 토글) · 우: 세부 표. 둘은 hover 로 서로를 하이라이트한다. */
+.lb {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  gap: 6px 22px;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .lb { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+}
 
-.lb-hero {
-  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px;
-}
-.lb-hero-k {
-  font-size: 12px; font-weight: 700; color: var(--text-3);
-  text-transform: uppercase; letter-spacing: 0.6px;
-}
-.lb-hero-v {
-  font-family: var(--mono); font-size: 30px; font-weight: 700;
-  color: var(--text); line-height: 1.1; font-variant-numeric: tabular-nums;
-}
-.lb-hero-note { font-size: 12.5px; color: var(--text-muted); }
+.lb-viz { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 
-.lb-block { display: flex; flex-direction: column; gap: 7px; }
-.lb-block-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
-.lb-block-title {
-  font-size: 12px; font-weight: 700; color: var(--text-2);
-  text-transform: uppercase; letter-spacing: 0.6px;
+/* 세그먼트 토글 — 도넛이 무엇의 비중인지 가른다 */
+.lb-modes {
+  display: inline-flex; gap: 2px; padding: 2px;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--surface-2);
 }
-.lb-block-note { font-size: 12.5px; color: var(--text-muted); }
+.lb-mode {
+  padding: 4px 14px; border: none; border-radius: 5px; background: transparent;
+  font-family: var(--sans); font-size: 12px; font-weight: 700; letter-spacing: 0.3px;
+  color: var(--text-muted); cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.lb-mode:hover { color: var(--text-2); }
+.lb-mode.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
 
-/* 100% 스택 스트립 — 세그먼트 사이 2px 서피스 갭, 양끝만 라운드 */
-.lb-strip {
-  display: flex;
-  gap: 2px;
-  height: 46px;
-  border-radius: 5px;
-  overflow: hidden;
-  background: var(--surface);
-}
-.lb-seg {
-  flex-basis: 0;
-  min-width: 4px;
-  display: flex; align-items: center; justify-content: center;
-  overflow: hidden;
-  transition: filter 120ms ease;
+.lb-donut-wrap { position: relative; width: 190px; height: 190px; }
+.lb-donut-wrap.empty { opacity: 0.55; }
+.lb-donut { width: 100%; height: 100%; display: block; overflow: visible; }
+.lb-arc {
   cursor: default;
+  transition: opacity 130ms ease, d 130ms ease;
 }
-.lb-seg:first-child { border-radius: 5px 0 0 5px; }
-.lb-seg:last-child  { border-radius: 0 5px 5px 0; }
-.lb-seg:hover { filter: brightness(1.12); }
-.lb-seg-label {
-  display: flex; align-items: baseline; gap: 7px;
-  padding: 0 8px;
-  white-space: nowrap;
-  color: #fff;
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-}
-.lb-seg-name { font-size: 12px; font-weight: 700; letter-spacing: 0.3px; }
-.lb-seg-val  { font-size: 12.5px; font-weight: 600; opacity: 0.95; }
-.lb-seg-pct  { font-size: 12px; font-weight: 600; opacity: 0.8; }
-.lb-strip-empty {
-  height: 46px;
-  display: flex; align-items: center; justify-content: center;
-  border: 1px dashed var(--border-strong);
-  border-radius: 5px;
-  font-size: 12.5px; color: var(--text-muted);
-}
+.lb-arc.dim { opacity: 0.28; }
 
-.lb-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.lb-center {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; pointer-events: none; text-align: center;
+}
+.lb-center-k {
+  font-size: 10.5px; font-weight: 700; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: 0.7px;
+}
+.lb-center-v {
+  font-family: var(--mono); font-size: 21px; font-weight: 700; line-height: 1.15;
+  color: var(--text); font-variant-numeric: tabular-nums;
+}
+.lb-center-note { font-size: 11px; color: var(--text-muted); }
+
+.lb-legendnote { margin: 0; font-size: 11.5px; color: var(--text-muted); text-align: center; }
+
+.lb-detail { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+.lb-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .lb-table th {
   text-align: left;
-  font-size: 11.5px; font-weight: 700; color: var(--text-3);
+  font-size: 11px; font-weight: 700; color: var(--text-3);
   text-transform: uppercase; letter-spacing: 0.5px;
-  padding: 0 10px 7px;
+  padding: 0 8px 6px;
   border-bottom: 1px solid var(--border);
+  white-space: nowrap;
 }
 .lb-table th.num, .lb-table td.num { text-align: right; }
+.lb-table th.on { color: var(--text-2); }
 .lb-table td {
-  padding: 9px 10px;
+  padding: 7px 8px;
   border-bottom: 1px solid var(--border);
   color: var(--text-2);
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
+/* 활성 토글에 대응하는 열만 살짝 띄운다 — 도넛이 무엇을 그리는지와 표를 연결 */
+.lb-table th.on, .lb-table td.on { background: var(--surface-2); }
 .lb-table tbody tr:last-child td { border-bottom: none; }
-.lb-table tbody tr.peak td { background: var(--surface-2); }
+.lb-table tbody tr { transition: opacity 130ms ease; cursor: default; }
+.lb-table tbody tr.dim { opacity: 0.42; }
+.lb-table tbody tr.on td { background: var(--surface-2); }
 .lb-table td.strong { color: var(--text); font-weight: 700; }
 .lb-table td.dim { color: var(--text-muted); }
 .lb-chip {
-  display: inline-block; width: 10px; height: 10px; border-radius: 3px;
-  margin-right: 8px; vertical-align: baseline;
+  display: inline-block; width: 9px; height: 9px; border-radius: 3px;
+  margin-right: 7px; vertical-align: baseline;
 }
 .lb-name { font-family: var(--sans); color: var(--text); font-weight: 600; }
 .lb-key { margin-left: 7px; font-size: 11.5px; color: var(--text-muted); }

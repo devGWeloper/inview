@@ -5,6 +5,9 @@ import {
   TimeoutBucket,
   TimeoutDimStat,
   TimeoutItem,
+  TimeoutModelCell,
+  TimeoutModelSeries,
+  TimeoutReason,
   TimeoutStatsResponse,
 } from "./types";
 import {
@@ -29,6 +32,9 @@ import {
 
 const ITEM_LIMIT = 200; // 목록에 내릴 최근 실패 호출 수
 const DIM_LIMIT = 10;   // 노드/모델/사용자 분포 상위 N
+const MODEL_TREND_LIMIT = 8; // 히트맵에 노출할 모델 수 (호출 많은 순)
+const REASON_LIMIT = 8; // 오류 사유 top N
+const REASON_KEYLEN = 100; // ERR_CTN 앞 N자를 클러스터 키로
 
 let oracledbCached: typeof import("oracledb") | null = null;
 async function getOracle(): Promise<typeof import("oracledb") | null> {
@@ -107,6 +113,8 @@ function emptyStats(
     byModel: [],
     byUser: [],
     items: [],
+    modelTrend: [],
+    topReasons: [],
   };
 }
 
@@ -202,6 +210,69 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
     const byModel = dimFrom(await run("byModel", dimSql("MODEL_NM")));
     const byUser = dimFrom(await run("byUser", dimSql("USER_ID")));
 
+    // 3.5) 모델 × 시간 히트맵 — "이 시간대에 이 모델이 몇 건 요청 중 몇 건 실패했나".
+    //   총 호출 수(=실패 분모) 까지 세서 셀 색상을 실패율로 매길 수 있게 한다.
+    //   상위 MODEL_TREND_LIMIT 개 모델(호출 많은 순) 만 편성 — 밀도 관리.
+    const modelTrendSql =
+      `SELECT NVL(MODEL_NM, '(없음)') AS M,` +
+      ` TO_CHAR(${bucketExpr(g)}, 'YYYY-MM-DD"T"HH24:MI:SS') AS BKT,` +
+      ` COUNT(*) AS N, ${FAILED} AS F, ${TIMEOUT} AS T` +
+      ` FROM TRX_TOKEN_DET${where}` +
+      ` GROUP BY NVL(MODEL_NM, '(없음)'), ${bucketExpr(g)}`;
+    const modelAgg = new Map<
+      string,
+      { totalCalls: number; totalFailed: number; totalTimeout: number; cells: Map<number, TimeoutModelCell> }
+    >();
+    for (const r of await run("modelTrend", modelTrendSql)) {
+      const m = String(r.M ?? r.m ?? "(없음)");
+      const ms = parseTs(str(r.BKT ?? r.bkt));
+      if (ms === null) continue;
+      const key = floorToBucket(ms, g);
+      const calls = num(r.N ?? r.n);
+      const failed = num(r.F ?? r.f);
+      const timeout = num(r.T ?? r.t);
+      let entry = modelAgg.get(m);
+      if (!entry) {
+        entry = { totalCalls: 0, totalFailed: 0, totalTimeout: 0, cells: new Map() };
+        modelAgg.set(m, entry);
+      }
+      entry.totalCalls += calls;
+      entry.totalFailed += failed;
+      entry.totalTimeout += timeout;
+      entry.cells.set(key, { ts: isoNoTz(key), calls, failed, timeout });
+    }
+    const bucketKeys = enumerateBucketStarts(fromMs, toMs, g);
+    const modelTrend: TimeoutModelSeries[] = [...modelAgg.entries()]
+      .sort((a, b) => b[1].totalCalls - a[1].totalCalls)
+      .slice(0, MODEL_TREND_LIMIT)
+      .map(([model, v]) => ({
+        model,
+        totalCalls: v.totalCalls,
+        totalFailed: v.totalFailed,
+        totalTimeout: v.totalTimeout,
+        cells: bucketKeys.map(
+          (k) => v.cells.get(k) ?? { ts: isoNoTz(k), calls: 0, failed: 0, timeout: 0 }
+        ),
+      }));
+
+    // 3.6) 오류 사유 top N — ERR_CTN 앞 N자 로 클러스터링 (스택 트레이스는 앞머리가 같으니 그룹핑됨).
+    //   실패 건이 무엇 때문에 나는지 한 눈에 보여준다.
+    const reasonSql =
+      `SELECT SUBSTR(TRIM(ERR_CTN), 1, ${REASON_KEYLEN}) AS R,` +
+      ` COUNT(*) AS N,` +
+      ` SUM(CASE WHEN ${SQL_TIMEOUT_PRED} THEN 1 ELSE 0 END) AS T,` +
+      ` TO_CHAR(MAX(CALL_TM), 'YYYY-MM-DD"T"HH24:MI:SS') AS LAST_TM` +
+      ` FROM TRX_TOKEN_DET${where}${where ? " AND" : " WHERE"} ${SQL_ERR_PRED}` +
+      ` AND ERR_CTN IS NOT NULL` +
+      ` GROUP BY SUBSTR(TRIM(ERR_CTN), 1, ${REASON_KEYLEN})` +
+      ` ORDER BY N DESC FETCH FIRST ${REASON_LIMIT} ROWS ONLY`;
+    const topReasons: TimeoutReason[] = (await run("topReasons", reasonSql)).map((r) => ({
+      reason: String(r.R ?? r.r ?? "").trim() || "(사유 미기록)",
+      failed: num(r.N ?? r.n),
+      timeout: num(r.T ?? r.t),
+      lastAt: str(r.LAST_TM ?? r.last_tm),
+    }));
+
     // 4) 실패 호출 목록 (최근순)
     const itemSql =
       `SELECT TOKEN_ID, TRACE_ID, NODE_NM, MODEL_NM, USER_ID, QUERY_CTN, LATENCY_MS, STAT_CD, ERR_CTN,` +
@@ -239,6 +310,8 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
       byModel,
       byUser,
       items,
+      modelTrend,
+      topReasons,
     };
 
     logger.info("fetchTimeoutStats ok", {

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fmtDuration } from "@/components/TokenLatencyChart";
 import { TimeoutTrendChart } from "@/components/TimeoutTrendChart";
-import { TimeoutDimStat, TimeoutItem, TimeoutStatsResponse } from "@/lib/types";
+import { TimeoutModelHeatmap } from "@/components/TimeoutModelHeatmap";
+import { TimeoutDimStat, TimeoutItem, TimeoutReason, TimeoutStatsResponse } from "@/lib/types";
 import { callStatus } from "@/lib/tokenStatus";
 import { apiJson, errMessage } from "@/lib/apiClient";
 
@@ -224,6 +225,22 @@ export default function TimeoutsPage() {
             </div>
           </section>
 
+          {/* 모델 × 시간 히트맵 — "그 시간대에 이 모델이 몇 건 중 몇 건 실패" 를 셀 하나로 압축.
+              총 요청 수를 분모로 두는 게 핵심 — 색은 실패율, 라벨 옆 숫자는 총 호출. */}
+          <section className="dash-card dash-card-hero">
+            <div className="dash-card-head">
+              <div className="dash-card-title-group">
+                <span className="dash-card-title">모델별 요청·실패 격자</span>
+                <span className="dash-card-sub">
+                  가로축 시간 · 세로축 모델 · 셀 색 = 그 슬롯의 실패율{scope && ` · ${scope}`}
+                </span>
+              </div>
+            </div>
+            <div className="dash-card-body">
+              <TimeoutModelHeatmap stats={stats} selectedModel={model} onSelectModel={onModel} />
+            </div>
+          </section>
+
           <div className="to-grid">
             <DimCard
               title="노드별"
@@ -241,6 +258,20 @@ export default function TimeoutsPage() {
             />
             <DimCard title="사용자별" sub="누가 겪었나" dims={stats.byUser} />
           </div>
+
+          {stats.topReasons.length > 0 && (
+            <section className="dash-card">
+              <div className="dash-card-head">
+                <div className="dash-card-title-group">
+                  <span className="dash-card-title">자주 발생한 오류 사유</span>
+                  <span className="dash-card-sub">ERR_CTN 앞머리 기준 클러스터 · 클릭 = 목록 필터</span>
+                </div>
+              </div>
+              <div className="dash-card-body">
+                <ReasonList reasons={stats.topReasons} totalFailed={stats.failedCalls} />
+              </div>
+            </section>
+          )}
 
           <section className="dash-card">
             <div className="dash-card-head">
@@ -306,6 +337,37 @@ function DimCard({
         )}
       </div>
     </section>
+  );
+}
+
+/** 오류 사유 top — 순위 배지 + 문구 + 발생 수 + 그중 타임아웃 비중 바 */
+function ReasonList({ reasons, totalFailed }: { reasons: TimeoutReason[]; totalFailed: number }) {
+  const max = Math.max(1, ...reasons.map((r) => r.failed));
+  return (
+    <ol className="rs-list">
+      {reasons.map((r, i) => {
+        const timeoutRate = r.failed > 0 ? r.timeout / r.failed : 0;
+        const share = totalFailed > 0 ? (r.failed / totalFailed) * 100 : 0;
+        return (
+          <li key={`${r.reason}-${i}`} className="rs-item">
+            <span className="rs-rank">{i + 1}</span>
+            <div className="rs-body">
+              <span className="rs-text" title={r.reason}>{r.reason}</span>
+              <span className="rs-bar" aria-hidden>
+                <span className="rs-bar-t" style={{ width: `${(r.timeout / max) * 100}%` }} />
+                <span className="rs-bar-o" style={{ width: `${(Math.max(0, r.failed - r.timeout) / max) * 100}%` }} />
+              </span>
+            </div>
+            <span className="rs-stats mono">
+              <b>{r.failed.toLocaleString()}</b>
+              <span className="rs-stats-sub">
+                {share.toFixed(1)}% · 타임아웃 {(timeoutRate * 100).toFixed(0)}%
+              </span>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 

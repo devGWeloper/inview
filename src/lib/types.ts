@@ -712,4 +712,39 @@ export interface TimeoutStatsResponse {
   byUser: TimeoutDimStat[];
   /** 최근 실패 호출 목록 (callTm desc) */
   items: TimeoutItem[];
+  /**
+   * 모델 × 시간 히트맵 — 모델별로 버킷마다 총 호출/실패/타임아웃 을 편성한다.
+   * buckets 와 같은 시간 격자를 공유한다 (빈 셀은 calls=0 으로 채움).
+   * 상위 N개(호출 많은 순) 모델만 포함해 화면 밀도를 관리한다.
+   */
+  modelTrend: TimeoutModelSeries[];
+  /** 오류 사유 top N — ERR_CTN 앞머리로 클러스터링해 자주 나오는 문구를 세운다 */
+  topReasons: TimeoutReason[];
+}
+
+/** 히트맵 셀 하나 — 특정 모델·특정 시간 버킷의 요청/실패/타임아웃 수 */
+export interface TimeoutModelCell {
+  ts: string;
+  calls: number;
+  failed: number;
+  timeout: number;
+}
+
+/** 모델 1개의 시간 격자 */
+export interface TimeoutModelSeries {
+  model: string;
+  totalCalls: number;
+  totalFailed: number;
+  totalTimeout: number;
+  /** buckets 와 정확히 같은 순서/시각으로 정렬된 셀 배열 */
+  cells: TimeoutModelCell[];
+}
+
+/** 자주 발생한 오류 사유 (ERR_CTN 앞 100자 기준 클러스터) */
+export interface TimeoutReason {
+  /** 그룹핑 키 겸 표시 텍스트 */
+  reason: string;
+  failed: number;
+  timeout: number;
+  lastAt: string | null;
 }

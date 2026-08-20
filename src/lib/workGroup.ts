@@ -13,19 +13,22 @@
  *
  * ### 제거 방법
  * 1. `groupTracesIntoWorks()` 를 TXN_ID 를 읽어 Map 을 만드는 구현으로 교체
- * 2. `CHAMBER_FIELD` / `VARIANT_FIELD` / `WORK_WINDOW_HOURS` 삭제
+ * 2. `CHAMBER_FIELD` / `VARIANT_FIELD` / `FLOW_ORDER` / `WORK_WINDOW_HOURS` 삭제
  * 3. `db.ts` 의 `fetchWorkGroupRows()` 에서 SEND_MSG_CTN 대신 TXN_ID 를 읽게 수정
  *
  * ## 묶는 규칙
  * ```
  * 챔버를 못 읽으면                      → 단독 (1건짜리 묶음)
  * 같은 챔버 + 윈도우(기본 8시간) 안 +
- *   그 묶음에 같은 액션이 아직 없으면    → 붙인다
+ *   흐름의 뒤 단계로 진행하는 요청이면   → 붙인다
  * 그 외                                 → 새 묶음을 연다
  * ```
  * 윈도우는 **마지막 요청 시각 기준**으로 갱신된다 (전값→후값 8h, 후값→ERMAP 다시 8h).
- * 같은 액션이 또 오면 새 묶음을 여는 덕에 "종료 액션" 을 지정할 필요가 없다 —
- * 나중에 SEA 가 흐름에 끼어도 이 규칙은 그대로 돈다.
+ *
+ * 흐름 순서는 `전값 → 후값 → ERMAP`(FLOW_ORDER)로 고정이고 **뒤로만 갈 수 있다.**
+ * 되돌아가는 요청(후값 뒤의 전값)이나 같은 단계 반복(전값 뒤의 전값)은 다음 작업의
+ * 시작으로 보고 새 묶음을 연다. 건너뛰기는 허용된다 (전값 → ERMAP).
+ * 덕분에 "종료 액션" 을 따로 지정할 필요가 없다.
  *
  * 묶음 ID 는 **그 묶음의 첫 TRACE_ID** 를 그대로 쓴다. 발번 규칙이 필요 없고
  * 같은 입력이면 항상 같은 값이라 URL·북마크가 안정적이다.
@@ -61,13 +64,25 @@ const CHAMBER_FIELD: Record<string, string> = {
 };
 
 /**
- * "같은 액션이 또 왔다" 를 판정할 때 ACTION_TYP 보다 잘게 갈라야 하는 액션.
+ * 흐름 단계를 ACTION_TYP 보다 잘게 갈라야 하는 액션.
  * 전값/후값은 ACTION_TYP 이 둘 다 AutoQual_PrePost 라, ACT_SEQ(PRE/POST)까지 봐야
  * 서로 다른 단계로 인식된다. 이 값은 화면의 액션 칩 라벨로도 그대로 쓰인다.
  */
 const VARIANT_FIELD: Record<string, string> = {
   AutoQual_PrePost: "ACT_SEQ",
 };
+
+/**
+ * 작업 흐름의 단계 순서. 요청은 이 순서를 **앞에서 뒤로만** 진행할 수 있다.
+ * 원소는 아래 stepKey() 가 만드는 키 (`ACTION_TYP` 또는 `ACTION_TYP/변형값`).
+ *
+ * 흐름이 바뀌면(예: 중간에 SEA 가 들어오면) 이 배열에 자리만 끼워 넣는다.
+ */
+const FLOW_ORDER = [
+  "AutoQual_PrePost/PRE",   // 전값 측정
+  "AutoQual_PrePost/POST",  // 후값 측정
+  "ERMAP",                  // ERMAP 요청 (DSP 발) — 흐름의 마지막
+];
 
 /** 묶음 산출에 필요한 GAIA 행의 최소 형태 */
 export interface WorkSourceRow {
@@ -92,8 +107,8 @@ interface Entry {
   traceId: string;
   ms: number | null;
   chamber: string | null;
-  /** 중복 판정 단위 — 같은 값이 한 묶음에 두 번 들어갈 수 없다 */
-  variantKey: string;
+  /** FLOW_ORDER 상의 위치. 흐름에 없는 단계면 -1 (= 묶지 않는다) */
+  step: number;
   label: string | null;
 }
 
@@ -150,11 +165,12 @@ function toEntry(r: WorkSourceRow): Entry {
   const chamber = chamberField ? readField(payload, r.sendMsgCtn, chamberField) : null;
   const variant = variantField ? readField(payload, r.sendMsgCtn, variantField) : null;
   const v = variant ? variant.toUpperCase() : null;
+  const stepKey = v ? `${action}/${v}` : action;
   return {
     traceId: r.traceId,
     ms: toMs(r.recvTm),
     chamber: chamber ? chamber.toUpperCase() : null,
-    variantKey: v ? `${action}/${v}` : action,
+    step: FLOW_ORDER.indexOf(stepKey),
     label: v ?? (action || null),
   };
 }
@@ -187,28 +203,27 @@ export function groupTracesIntoWorks(
     }
     if (!prev.chamber && e.chamber) {
       prev.chamber = e.chamber;
-      prev.variantKey = e.variantKey;
+      prev.step = e.step;
       prev.label = e.label;
     }
   }
 
-  const open = new Map<string, { workId: string; lastMs: number; variants: Set<string> }>();
+  const open = new Map<string, { workId: string; lastMs: number; lastStep: number }>();
   const out = new Map<string, TraceWorkInfo>();
 
   for (const e of order) {
-    // 챔버를 못 읽었거나 수신 시각이 없으면 묶을 근거가 없다 → 단독
-    if (!e.chamber || e.ms === null) {
+    // 챔버를 못 읽었거나, 수신 시각이 없거나, 흐름에 없는 단계면 묶을 근거가 없다 → 단독
+    if (!e.chamber || e.ms === null || e.step < 0) {
       out.set(e.traceId, { workId: e.traceId, chamberId: e.chamber, actionLabel: e.label });
       continue;
     }
     const cur = open.get(e.chamber);
-    const fits = !!cur && e.ms - cur.lastMs <= windowMs && !cur.variants.has(e.variantKey);
-    const group = fits
-      ? cur!
-      : { workId: e.traceId, lastMs: e.ms, variants: new Set<string>() };
+    // 흐름은 뒤로만 진행한다 — 같은 단계 반복도, 되돌아가는 요청도 다음 작업의 시작으로 본다.
+    const fits = !!cur && e.ms - cur.lastMs <= windowMs && e.step > cur.lastStep;
+    const group = fits ? cur! : { workId: e.traceId, lastMs: e.ms, lastStep: e.step };
     if (!fits) open.set(e.chamber, group);
-    group.variants.add(e.variantKey);
     group.lastMs = e.ms;
+    group.lastStep = e.step;
     out.set(e.traceId, { workId: group.workId, chamberId: e.chamber, actionLabel: e.label });
   }
 

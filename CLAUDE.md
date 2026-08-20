@@ -18,12 +18,13 @@ TraceX is a single-page **AI Action Transaction trace viewer** built on Next.js 
 ### Data flow
 
 1. Browser (`src/app/page.tsx`, client component) calls the two API routes:
-   - `GET /api/traces` — list view, returns per-trace summaries
+   - `GET /api/traces` — list view, returns **works** (traces grouped into one field job each; see "Work grouping" below)
    - `GET /api/traces/[traceId]` — detail view, returns the raw rows across layers
 2. Route handlers in `src/app/api/traces/` delegate to `src/lib/db.ts`.
 3. `db.ts` fans out **one query per layer** in parallel (`Promise.all` over `LAYER_ORDER`), each using its own connection config read from the YAML loader in `src/lib/config.ts` (see "Config files" below).
 4. `/api/traces` groups rows by `TRACE_ID` and computes `allComplete` (requires `layerSet.size === LAYER_ORDER.length` and every row `SEND_COMPLT_YN='Y'`) and `hasError`. `lastSendTm` in `TraceSummary` is the max of all `sendTm` and `respTm` values.
-5. `TraceTimeline` groups rows by layer and renders them. Single-call layers show **recv | send | resp** in a 3-column layout; multi-call layers show the upstream recv once at the top, then numbered `Call #N` items each with a **send | resp** pair.
+5. `/api/traces` then hands those summaries to `buildWorks()`, which groups them into **works** via `src/lib/workGroup.ts` and back-fills the sibling traces of every matched work. See "Work grouping" below.
+6. `TraceTimeline` groups rows by layer and renders them. Single-call layers show **recv | send | resp** in a 3-column layout; multi-call layers show the upstream recv once at the top, then numbered `Call #N` items each with a **send | resp** pair.
 
 ### Row lifecycle — 3-phase write pattern
 
@@ -222,13 +223,34 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
 `ChangePasswordModal` 의 `forced` 모드(닫기 불가 + 안내문)와 `UserMenu` 의 강제 렌더를 되살린다.
 DB 마이그레이션은 불필요(컬럼 유지). 되살릴 땐 남아 있는 `'Y'` 행을 한 번 정리할지 판단할 것.
 
+### Work grouping — `src/lib/workGroup.ts` [TEMP]
+
+GAIA records **one request = one TRACE_ID**, but a field job spans several requests
+(`전값 측정 → (SEA) → 후값 측정 → ERMAP`). `workGroup.ts` infers the job boundary so the
+list panel can show one row per job. Rules, the excluded actions, and the removal path are
+documented in the file header and in `README.md` ("묶음 — 여러 요청을 작업 1건으로").
+
+Points that matter when touching this code:
+
+- **GAIA is the only layer that can group.** The chamber id lives in `SEND_MSG_CTN` (the
+  params handed to MCP); CUBE has natural language only, MCP/ONEOIS do not record `ACTION_TYP`.
+- **The source query is widened by `WORK_WINDOW_HOURS` on both sides** of the matched traces'
+  time span (`buildWorks()` in `src/app/api/traces/route.ts`). Without it, a job straddling the
+  date filter splits in two.
+- **Filters decide which works to find, not what a work contains.** Matched traces are resolved
+  to works, then the missing siblings are fetched with no filters applied.
+- **Failure is soft.** If the GAIA query fails or GAIA is not configured, the mapping comes back
+  empty and every trace becomes a one-trace work — i.e. the pre-grouping screen.
+- This is temporary. When GAIA gains a real `TXN_ID`, only the inference in `workGroup.ts` is
+  replaced; `WorkSummary`, the API shape, and the UI stay.
+
 ### ⚠️ 클라이언트 API 호출 규칙 — 원시 `fetch` 금지 (`src/lib/apiClient.ts`)
 
 세션은 7일(고정 만료)이라 **화면을 오래 열어두면 결국 만료**된다. 페이지 '이동' 은 미들웨어가
 `/login` 으로 리다이렉트해 주지만, **이미 떠 있는 탭의 fetch 는 리다이렉트가 아니라 401 JSON
 (`{error}`)** 을 받는다. 화면이 `res.ok` 를 안 보고 `await res.json()` 결과를 그대로 상태에
 넣으면 기대한 배열이 `undefined` 가 되어 렌더에서 죽는다 (실제 사례: Traces 화면의
-`summaries.filter` → `TypeError: Cannot read properties of undefined`).
+`works.filter` → `TypeError: Cannot read properties of undefined`).
 
 - 클라이언트에서 `/api/*` 를 부를 땐 **`apiJson<T>()`**(또는 상태코드 분기가 필요하면 `apiFetch()`)만 쓴다.
 - `apiJson` 은 401/403/그 외 실패를 **`ApiError`(`status` 보유)로 던진다** — 실패가 데이터로 둔갑하지 않는다.

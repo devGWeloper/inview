@@ -351,7 +351,7 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
   position: sticky; top: 0;
   background: var(--surface-2);
   text-align: left;
-  padding: 11px 16px;
+  padding: 11px 10px;
   font-size: 12.5px;
   color: var(--text-3);
   font-weight: 600;
@@ -371,7 +371,7 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
   box-shadow: inset 3px 0 0 0 var(--accent);
 }
 .trace-list td {
-  padding: 11px 16px;
+  padding: 11px 10px;
   vertical-align: middle;
   border-bottom: 1px solid var(--border);
 }
@@ -392,34 +392,39 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
   color: var(--text-3);
   font-size: 11px;
 }
-.work-chips {
-  display: inline-flex;
-  gap: 4px;
-  margin-left: 8px;
-  vertical-align: middle;
-}
-.work-chip {
-  display: inline-block;
-  padding: 1px 7px;
-  border-radius: 99px;
-  border: 1px solid var(--border);
-  background: var(--surface);
+/* 묶음 행의 흐름 표기 — "PRE › POST › ERMAP" */
+.work-flow {
   font-family: var(--mono);
   font-size: 11px;
   font-weight: 600;
   color: var(--text-3);
-  letter-spacing: 0.3px;
   white-space: nowrap;
 }
-.work-child .work-chip { margin-right: 8px; }
-.work-count {
+.work-chip {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--surface);
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 10.5px;
+  font-weight: 600;
   color: var(--text-3);
+  white-space: nowrap;
 }
+/* 묶음 행이 첫 컬럼을 넓히면 나머지 컬럼이 줄바꿈된다.
+   시각·레이어·상태 컬럼은 폭이 고정적인 값이라 줄바꿈을 막고, 남는 폭 조절은
+   첫 컬럼이 감당하게 한다 (넘치면 말줄임). */
+.trace-list th:nth-child(3), .trace-list td:nth-child(3),
+.trace-list th:nth-child(4), .trace-list td:nth-child(4),
+.trace-list th:nth-child(5), .trace-list td:nth-child(5) {
+  white-space: nowrap;
+}
+.work-child .work-chip { margin-right: 6px; }
+.trace-list td .work-chip + .layer-dots { vertical-align: middle; }
 /* 자식 TRACE 행 — 묶음에 속해 있다는 걸 들여쓰기와 좌측 선으로 표시 */
 .trace-list tbody tr.work-child > td:first-child {
-  padding-left: 30px;
+  padding-left: 18px;
   box-shadow: inset 2px 0 0 0 var(--border-strong);
 }
 .trace-list tbody tr.work-child.active > td:first-child {
@@ -3386,7 +3391,7 @@ button.tbd-row:not(:disabled):hover {
 .ic-mod {
   display: flex; align-items: center; gap: 11px; text-align: left; width: 100%;
   border: 1px solid var(--border); border-radius: 11px; background: var(--surface);
-  padding: 11px 12px; cursor: pointer; transition: border-color .12s, box-shadow .12s, transform .06s;
+  padding: 11px 10px; cursor: pointer; transition: border-color .12s, box-shadow .12s, transform .06s;
 }
 .ic-mod:hover { border-color: var(--border-strong); }
 .ic-mod.active {

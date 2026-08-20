@@ -48,11 +48,14 @@ function statusPill(status: TraceStatus) {
   return <span className="pill warn"><span className="dot" />PARTIAL</span>;
 }
 
-/** 묶음 대표 사용자 — 여러 명이면 "외 N" 을 붙인다 */
+/**
+ * 묶음 대표 사용자 = 후값(POST)을 요청한 사람.
+ * 흐름을 끝맺는 사람이라 작업의 주인으로 보기 가장 자연스럽다.
+ * 아직 후값이 안 온 미완결 묶음은 첫 요청자로 대신한다.
+ */
 function workUserLabel(w: WorkSummary): string {
-  const users = Array.from(new Set(w.traces.map((t) => t.userId).filter((v): v is string => !!v)));
-  if (users.length === 0) return "—";
-  return users.length === 1 ? users[0] : `${users[0]} 외 ${users.length - 1}`;
+  const post = w.traces.find((t) => t.actionLabel === "POST" && t.userId);
+  return post?.userId ?? w.traces.find((t) => t.userId)?.userId ?? "—";
 }
 
 /**
@@ -66,13 +69,13 @@ function traceRow(t: WorkTraceItem, active: boolean, onClick: () => void, child 
       className={(child ? "work-child" : "") + (active ? " active" : "")}
       onClick={onClick}
     >
-      <td className="mono strong">
-        {child && t.actionLabel && <span className="work-chip">{t.actionLabel}</span>}
-        {t.traceId}
-      </td>
+      <td className="mono strong">{t.traceId}</td>
       <td>{t.userId ?? "—"}</td>
       <td className="mono">{fmtTs(t.firstRecvTm)}</td>
       <td>
+        {/* 액션 칩은 첫 열이 아니라 여기 둔다 — 이 열의 폭은 이미 묶음 행의 칩들이
+            정하고 있어서 칩이 하나 더 들어가도 안 넓어지고, 첫 열(TRACE_ID)은 그만큼 넉넉해진다 */}
+        {child && t.actionLabel && <span className="work-chip">{t.actionLabel}</span>}
         <span
           className="layer-dots"
           title={`${t.layerCount} / ${LAYER_ORDER.length} layers · ${t.layers.join(", ") || "—"}`}
@@ -458,15 +461,16 @@ export default function Page() {
                         <td className="strong">
                           <span className="work-caret" aria-hidden>{open ? "▾" : "▸"}</span>
                           <span className="mono">{w.chamberId ?? w.workId}</span>
-                          <span className="work-chips">
-                            {w.traces.map((t) => (
-                              <span key={t.traceId} className="work-chip">{t.actionLabel ?? "?"}</span>
-                            ))}
-                          </span>
                         </td>
                         <td>{workUserLabel(w)}</td>
                         <td className="mono">{fmtTs(w.firstRecvTm)}</td>
-                        <td><span className="work-count">{w.traces.length}건</span></td>
+                        {/* 레이어 dots 자리 — 묶음 행은 흐름이 어디까지 갔는지를 보여준다.
+                            칩 여러 개보다 화살표로 이은 한 덩이가 좁고, 순서가 있는 흐름이라 읽기도 낫다 */}
+                        <td>
+                          <span className="work-flow" title={`TRACE ${w.traces.length}건`}>
+                            {w.traces.map((t) => t.actionLabel ?? "?").join(" › ")}
+                          </span>
+                        </td>
                         <td>{statusPill(w.status)}</td>
                       </tr>
                       {open && w.traces.map((t) =>

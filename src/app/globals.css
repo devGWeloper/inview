@@ -422,6 +422,17 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
 }
 .work-child .work-chip { margin-right: 6px; }
 .trace-list td .work-chip + .layer-dots { vertical-align: middle; }
+/* 첫 열(TRACE_ID)이 남는 폭을 전부 가져가게 한다.
+   이 선언이 없으면 브라우저가 "줄바꿈 가능한 열" 로 보고 좁게 배분해 TRACE_ID 가 접힌다.
+   패널을 끝까지 좁히면 줄바꿈 대신 말줄임으로 떨어진다 (전체 값은 title 툴팁). */
+.trace-list td:first-child {
+  max-width: 0;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* 자식 TRACE 행 — 묶음에 속해 있다는 걸 들여쓰기와 좌측 선으로 표시 */
 .trace-list tbody tr.work-child > td:first-child {
   padding-left: 18px;

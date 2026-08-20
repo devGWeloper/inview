@@ -69,7 +69,7 @@ function traceRow(t: WorkTraceItem, active: boolean, onClick: () => void, child 
       className={(child ? "work-child" : "") + (active ? " active" : "")}
       onClick={onClick}
     >
-      <td className="mono strong">{t.traceId}</td>
+      <td className="mono strong" title={t.traceId}>{t.traceId}</td>
       <td>{t.userId ?? "—"}</td>
       <td className="mono">{fmtTs(t.firstRecvTm)}</td>
       <td>
@@ -458,7 +458,7 @@ export default function Page() {
                   return (
                     <Fragment key={w.workId}>
                       <tr className={"work-row" + (open ? " open" : "")} onClick={() => toggleWork(w)}>
-                        <td className="strong">
+                        <td className="strong" title={w.chamberId ?? w.workId}>
                           <span className="work-caret" aria-hidden>{open ? "▾" : "▸"}</span>
                           <span className="mono">{w.chamberId ?? w.workId}</span>
                         </td>

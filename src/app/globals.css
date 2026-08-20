@@ -4121,11 +4121,12 @@ button.tbd-row:not(:disabled):hover {
 .to-st.is-timeout { color: var(--err); background: var(--err-soft); }
 .to-trace { font-size: 11.5px; color: var(--text-muted); }
 
-/* 노드/모델/사용자 분포 행 — 이름 · 막대 · 실패 수 · 실패율 */
+/* 노드/모델 분포 행 — 이름 · 막대(폭 캡) · 실패 수 · 실패율.
+   막대는 마냥 늘어나면 보기 안 좋아 max 180px 로 캡. */
 .to-dims { display: flex; flex-direction: column; }
 .to-dim {
   display: grid;
-  grid-template-columns: minmax(90px, 1fr) minmax(60px, 2fr) auto auto;
+  grid-template-columns: minmax(90px, 1fr) minmax(60px, 180px) auto auto;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -4148,7 +4149,6 @@ button.tbd-row:not(:disabled):hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 막대는 추이 차트와 같은 색 규칙 — 타임아웃(err) + 기타 오류(fail) 두 조각 */
 .to-dim-bar {
   display: flex;
   height: 7px;
@@ -4397,57 +4397,40 @@ button.tbd-row:not(:disabled):hover {
 }
 
 /* ── 오류 사유 리스트 (ReasonList) ──
-   순위 배지 + 문구 + 발생 수 + 타임아웃 비중 바. topReasons 렌더용. */
+   좁은 카드 컬럼에 들어가는 미니 리스트 — 순위 · 문구 · 발생 수/비중. */
 .rs-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
 }
 .rs-item {
   display: grid;
-  grid-template-columns: 28px 1fr auto;
+  grid-template-columns: 22px 1fr auto;
   align-items: center;
-  gap: 12px;
-  padding: 8px 10px;
-  border-radius: 8px;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 7px;
   transition: background 120ms ease;
 }
+.rs-item + .rs-item { border-top: 1px dashed var(--border); }
 .rs-item:hover { background: var(--surface-2); }
 .rs-rank {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: var(--surface-3);
-  color: var(--text-3);
+  font-family: var(--mono);
   font-size: 12px;
   font-weight: 700;
-  font-family: var(--mono);
+  color: var(--text-muted);
+  text-align: center;
 }
-.rs-item:nth-child(1) .rs-rank {
-  background: var(--err-soft);
-  color: var(--err);
-}
+.rs-item:nth-child(1) .rs-rank { color: var(--err); }
 .rs-item:nth-child(2) .rs-rank,
-.rs-item:nth-child(3) .rs-rank {
-  background: var(--fail-soft);
-  color: var(--fail);
-}
-.rs-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
+.rs-item:nth-child(3) .rs-rank { color: var(--fail); }
 .rs-text {
   font-size: 13px;
   color: var(--text);
   line-height: 1.4;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
@@ -4455,30 +4438,11 @@ button.tbd-row:not(:disabled):hover {
   -webkit-box-orient: vertical;
   overflow-wrap: anywhere;
 }
-.rs-bar {
-  display: flex;
-  height: 5px;
-  border-radius: 3px;
-  background: var(--surface-3);
-  overflow: hidden;
-}
-.rs-bar > span { display: block; height: 100%; }
-.rs-bar-t { background: var(--err); }
-.rs-bar-o { background: var(--fail); }
 .rs-stats {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.2;
-  min-width: 92px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
 }
-.rs-stats b {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text);
-}
-.rs-stats-sub {
-  font-size: 11.5px;
-  color: var(--text-muted);
-  font-family: var(--mono);
-}
+.rs-stats b { font-size: 13px; font-weight: 700; color: var(--text); }
+.rs-stats-sub { font-size: 11.5px; color: var(--text-muted); }

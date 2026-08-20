@@ -244,34 +244,34 @@ export default function TimeoutsPage() {
           <div className="to-grid">
             <DimCard
               title="노드별"
-              sub="끊긴 그 호출의 NODE_NM · 클릭 = 필터"
+              sub="어느 노드에서 끊겼나"
               dims={stats.byNode}
               selected={node}
               onSelect={onNode}
             />
             <DimCard
               title="모델별"
-              sub="끊긴 그 호출의 MODEL_NM · 클릭 = 필터"
+              sub="어느 모델에서 끊겼나"
               dims={stats.byModel}
               selected={model}
               onSelect={onModel}
             />
-            <DimCard title="사용자별" sub="누가 겪었나" dims={stats.byUser} />
-          </div>
-
-          {stats.topReasons.length > 0 && (
             <section className="dash-card">
               <div className="dash-card-head">
                 <div className="dash-card-title-group">
-                  <span className="dash-card-title">자주 발생한 오류 사유</span>
-                  <span className="dash-card-sub">ERR_CTN 앞머리 기준 클러스터 · 클릭 = 목록 필터</span>
+                  <span className="dash-card-title">오류 사유</span>
+                  <span className="dash-card-sub">가장 흔한 원인</span>
                 </div>
               </div>
               <div className="dash-card-body">
-                <ReasonList reasons={stats.topReasons} totalFailed={stats.failedCalls} />
+                {stats.topReasons.length === 0 ? (
+                  <div className="top-empty">데이터 없음</div>
+                ) : (
+                  <ReasonList reasons={stats.topReasons} totalFailed={stats.failedCalls} />
+                )}
               </div>
             </section>
-          )}
+          </div>
 
           <section className="dash-card">
             <div className="dash-card-head">
@@ -340,29 +340,19 @@ function DimCard({
   );
 }
 
-/** 오류 사유 top — 순위 배지 + 문구 + 발생 수 + 그중 타임아웃 비중 바 */
+/** 오류 사유 top — 순위 · 문구 · 발생 수(비중) */
 function ReasonList({ reasons, totalFailed }: { reasons: TimeoutReason[]; totalFailed: number }) {
-  const max = Math.max(1, ...reasons.map((r) => r.failed));
   return (
     <ol className="rs-list">
       {reasons.map((r, i) => {
-        const timeoutRate = r.failed > 0 ? r.timeout / r.failed : 0;
         const share = totalFailed > 0 ? (r.failed / totalFailed) * 100 : 0;
         return (
           <li key={`${r.reason}-${i}`} className="rs-item">
             <span className="rs-rank">{i + 1}</span>
-            <div className="rs-body">
-              <span className="rs-text" title={r.reason}>{r.reason}</span>
-              <span className="rs-bar" aria-hidden>
-                <span className="rs-bar-t" style={{ width: `${(r.timeout / max) * 100}%` }} />
-                <span className="rs-bar-o" style={{ width: `${(Math.max(0, r.failed - r.timeout) / max) * 100}%` }} />
-              </span>
-            </div>
+            <span className="rs-text" title={r.reason}>{r.reason}</span>
             <span className="rs-stats mono">
               <b>{r.failed.toLocaleString()}</b>
-              <span className="rs-stats-sub">
-                {share.toFixed(1)}% · 타임아웃 {(timeoutRate * 100).toFixed(0)}%
-              </span>
+              <span className="rs-stats-sub">{share.toFixed(0)}%</span>
             </span>
           </li>
         );

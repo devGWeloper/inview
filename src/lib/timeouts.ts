@@ -47,6 +47,8 @@ export interface TimeoutFilter {
   dateTo?: string;
   /** 특정 노드로 좁히기 */
   nodeNm?: string;
+  /** 특정 모델로 좁히기 (노드와 조합 가능) */
+  modelNm?: string;
 }
 
 const num = (v: unknown): number => {
@@ -77,6 +79,10 @@ function buildWhere(filter: TimeoutFilter): { where: string; binds: Record<strin
     where.push(`NODE_NM = :nodeNm`);
     binds.nodeNm = filter.nodeNm;
   }
+  if (filter.modelNm) {
+    where.push(`MODEL_NM = :modelNm`);
+    binds.modelNm = filter.modelNm;
+  }
   return { where: where.length ? " WHERE " + where.join(" AND ") : "", binds };
 }
 
@@ -94,7 +100,7 @@ function emptyStats(
     failedCalls: 0,
     timeoutCalls: 0,
     affectedUsers: 0,
-    avgWaitMs: null,
+    affectedTraces: 0,
     lastAt: null,
     buckets,
     byNode: [],
@@ -148,15 +154,16 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
     const FAILED = `SUM(CASE WHEN ${SQL_ERR_PRED} THEN 1 ELSE 0 END)`;
     const TIMEOUT = `SUM(CASE WHEN ${SQL_ERR_PRED} AND ${SQL_TIMEOUT_PRED} THEN 1 ELSE 0 END)`;
 
-    // 1) 총계 — 전체 호출 / 실패 / 타임아웃 / 실패 대기시간 평균 / 마지막 실패 시각
+    // 1) 총계 — 전체 호출 / 실패 / 타임아웃 / 영향 사용자·질문 / 마지막 실패 시각.
+    //    "대기시간 평균" 은 어차피 전부 실패 건이라 해석할 게 없어 빼고(개별 대기는 목록에서 본다),
+    //    대신 영향 질문 수(고유 TRACE_ID)를 센다 — 사용자 체감 피해량에 가장 가깝다.
     const totalSql =
       `SELECT COUNT(*) AS N, ${FAILED} AS F, ${TIMEOUT} AS T,` +
-      ` AVG(CASE WHEN ${SQL_ERR_PRED} THEN LATENCY_MS END) AS W,` +
       ` COUNT(DISTINCT CASE WHEN ${SQL_ERR_PRED} THEN USER_ID END) AS U,` +
+      ` COUNT(DISTINCT CASE WHEN ${SQL_ERR_PRED} THEN TRACE_ID END) AS Q,` +
       ` TO_CHAR(MAX(CASE WHEN ${SQL_ERR_PRED} THEN CALL_TM END), 'YYYY-MM-DD"T"HH24:MI:SS') AS LAST_TM` +
       ` FROM TRX_TOKEN_DET${where}`;
     const totalRow = (await run("totals", totalSql))[0] ?? {};
-    const w = totalRow.W ?? totalRow.w;
 
     // 2) 시계열
     const bucketSql =
@@ -225,7 +232,7 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
       failedCalls: num(totalRow.F ?? totalRow.f),
       timeoutCalls: num(totalRow.T ?? totalRow.t),
       affectedUsers: num(totalRow.U ?? totalRow.u),
-      avgWaitMs: w == null ? null : num(w),
+      affectedTraces: num(totalRow.Q ?? totalRow.q),
       lastAt: str(totalRow.LAST_TM ?? totalRow.last_tm),
       buckets,
       byNode,

@@ -85,7 +85,8 @@
       "Bash(python -)",
       "PowerShell(Stop-Process *)",
       "PowerShell(npx tsc --noEmit -p tsconfig.json; if \\($?\\) { \"TYPECHECK OK\" })",
-      "Bash(powershell -c \"Stop-Process -Id \\(Get-NetTCPConnection -LocalPort 7391 -State Listen\\).OwningProcess -Force\")"
+      "Bash(powershell -c \"Stop-Process -Id \\(Get-NetTCPConnection -LocalPort 7391 -State Listen\\).OwningProcess -Force\")",
+      "Bash(echo \"tsc-exit=$?\")"
     ]
   }
 }

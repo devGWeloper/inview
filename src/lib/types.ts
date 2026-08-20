@@ -696,8 +696,11 @@ export interface TimeoutStatsResponse {
   timeoutCalls: number;
   /** 타임아웃을 겪은 고유 사용자 수 */
   affectedUsers: number;
-  /** 타임아웃까지 기다린 시간 평균(ms) — 실패 호출의 LATENCY_MS 평균. 없으면 null */
-  avgWaitMs: number | null;
+  /**
+   * 실패 호출이 하나라도 있는 고유 질문(TRACE_ID) 수 = "사용자 질문 몇 개가 깨졌나".
+   * TRACE_ID 가 없는 호출(비액션 흐름)은 셀 수 없어 제외된다.
+   */
+  affectedTraces: number;
   /** 마지막 실패 발생 시각 */
   lastAt: string | null;
   buckets: TimeoutBucket[];

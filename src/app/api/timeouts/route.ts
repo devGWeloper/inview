@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
     dateFrom: sp.get("dateFrom") || isoNoTz(now - 24 * 3_600_000),
     dateTo: sp.get("dateTo") || isoNoTz(now),
     nodeNm: sp.get("nodeNm") || undefined,
+    modelNm: sp.get("modelNm") || undefined,
   };
 
   logger.info("GET /api/timeouts", { ...ctx, filter });

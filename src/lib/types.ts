@@ -132,6 +132,11 @@ export interface TraceFilter {
   dateTo?: string;
   onlyError?: boolean;
   limit?: number;
+  /**
+   * 서버 내부용: 목록(요약)용 가벼운 컬럼만 읽는다 — 요청/전달 본문 제외.
+   * 이 모드의 행은 recvMsgCtn/sendMsgCtn 이 항상 null 이다 (db.ts SUMMARY_COLUMNS 참고).
+   */
+  lean?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchAllRows, fetchRecentTraceIds, fetchTraceIdsBy, fetchWorkGroupRows, connectedLayerCount, getAppEnv } from "@/lib/db";
 import { LAYER_ORDER, LayerKey, TraceFilter, TraceStatus, TraceSummary, TraceRow, WorkSummary } from "@/lib/types";
 import { logger, reqContext } from "@/lib/logger";
+import { isoNoTz } from "@/lib/timeBuckets";
 import { classifyPendingByCubeResp } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
-import { WORK_WINDOW_HOURS, groupTracesIntoWorks, rollupStatus, shiftLocalIso } from "@/lib/workGroup"; // TEMP(WORK_GROUP)
+import { TraceWorkInfo, WORK_WINDOW_HOURS, groupTracesIntoWorks, rollupStatus, shiftLocalIso } from "@/lib/workGroup"; // TEMP(WORK_GROUP)
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,9 @@ function summarize(rows: TraceRow[]): TraceSummary[] {
 /** 형제 TRACE 를 채우려고 추가 조회하는 최대 건수 (Oracle IN 목록 상한 여유) */
 const MAX_SIBLING_TRACES = 500;
 
+/** 목록 기본 상한 (TRACE 건수). db.ts 가 최대 500 으로 clamp 한다 */
+const DEFAULT_LIMIT = 500;
+
 /**
  * [TEMP][WORK_GROUP] 필터에 걸린 TRACE 들을 "현장 작업" 단위로 묶는다.
  *
@@ -87,7 +91,11 @@ const MAX_SIBLING_TRACES = 500;
  *
  * GAIA 미연결이나 조회 실패면 매핑이 비어 모든 TRACE 가 1건짜리 묶음이 된다 = 기존 화면.
  */
-async function buildWorks(matched: TraceSummary[]): Promise<WorkSummary[]> {
+async function buildWorks(
+  matched: TraceSummary[],
+  /** 이미 만들어 둔 TRACE→묶음 매핑 (묶음만 조회 경로가 넘긴다). 없으면 여기서 GAIA 를 읽는다 */
+  preInfo?: Map<string, TraceWorkInfo>
+): Promise<WorkSummary[]> {
   if (matched.length === 0) return [];
 
   // 묶음 경계가 정확해지려면 화면에 걸린 TRACE 의 시간 범위보다 앞뒤로 윈도우만큼 더 읽어야 한다.
@@ -97,14 +105,19 @@ async function buildWorks(matched: TraceSummary[]): Promise<WorkSummary[]> {
     .flatMap((s) => [s.firstRecvTm, s.lastSendTm])
     .filter((v): v is string => !!v)
     .sort();
-  if (times.length === 0) {
+  if (times.length === 0 && !preInfo) {
     return matched.map((s) => soloWork(s));
   }
-  const from = shiftLocalIso(times[0], -WORK_WINDOW_HOURS);
-  const to = shiftLocalIso(times[times.length - 1], WORK_WINDOW_HOURS);
 
-  const sourceRows = await fetchWorkGroupRows(from, to);
-  const infoByTrace = groupTracesIntoWorks(sourceRows, WORK_WINDOW_HOURS);
+  let infoByTrace: Map<string, TraceWorkInfo>;
+  if (preInfo) {
+    infoByTrace = preInfo;
+  } else {
+    const from = shiftLocalIso(times[0], -WORK_WINDOW_HOURS);
+    const to = shiftLocalIso(times[times.length - 1], WORK_WINDOW_HOURS);
+    const sourceRows = await fetchWorkGroupRows(from, to);
+    infoByTrace = groupTracesIntoWorks(sourceRows, WORK_WINDOW_HOURS);
+  }
 
   // 걸린 TRACE 가 속한 묶음들 → 그 묶음에 든 TRACE 전부
   const matchedWorkIds = new Set(matched.map((s) => infoByTrace.get(s.traceId)?.workId ?? s.traceId));
@@ -123,7 +136,7 @@ async function buildWorks(matched: TraceSummary[]): Promise<WorkSummary[]> {
         fetched: capped.length,
       });
     }
-    siblings = summarize(await fetchAllRows({ traceIds: capped }));
+    siblings = summarize(await fetchAllRows({ traceIds: capped, lean: true }));
   }
 
   const byWork = new Map<string, WorkSummary>();
@@ -169,6 +182,65 @@ function soloWork(s: TraceSummary): WorkSummary {
   };
 }
 
+/**
+ * [TEMP][WORK_GROUP] "묶음만" 조회를 위해 순서를 뒤집는다.
+ *
+ * 목록 상한(limit)은 트레이스 단위라, 묶음이 드문 기간에는 최근 N 트레이스 안에
+ * 묶음이 한 건도 안 걸릴 수 있다 — 실제로는 있는데 화면은 계속 빈다. 그래서 이 경로는
+ * GAIA 소스로 **묶음을 먼저 산출**하고, TRACE 2건 이상인 묶음만 최신순으로 골라
+ * 그 묶음에 든 TRACE 를 (묶음 단위로 통째로) limit 만큼 가져온다.
+ *
+ * 소스 조회는 `fetchWorkGroupRows`(GAIA 4개 컬럼, 최근 5000행 상한)라 기간을 넓게 잡아도 가볍다.
+ */
+const GROUPED_SCAN_HOURS = 24 * 365; // 기간 '전체'일 때 훑는 범위 (행 상한이 실질 경계)
+
+async function resolveGroupedTraceIds(
+  filter: TraceFilter,
+  limit: number
+): Promise<{ traceIds: string[]; info: Map<string, TraceWorkInfo> }> {
+  const nowIso = isoNoTz(Date.now());
+  // 묶음이 기간 경계에 걸려 갈라지지 않게 앞뒤로 윈도우만큼 넓혀 읽는다 (buildWorks 와 같은 이유)
+  const to = shiftLocalIso(filter.dateTo ?? nowIso, WORK_WINDOW_HOURS);
+  const from = filter.dateFrom
+    ? shiftLocalIso(filter.dateFrom, -WORK_WINDOW_HOURS)
+    : shiftLocalIso(nowIso, -GROUPED_SCAN_HOURS);
+
+  const sourceRows = await fetchWorkGroupRows(from, to);
+  const info = groupTracesIntoWorks(sourceRows, WORK_WINDOW_HOURS);
+
+  // 묶음별 TRACE 목록 + 마지막 시각 (최신 묶음부터 담기 위해)
+  const lastByTrace = new Map<string, string>();
+  for (const r of sourceRows) {
+    if (!r.traceId || !r.recvTm) continue;
+    const prev = lastByTrace.get(r.traceId);
+    if (prev === undefined || prev.localeCompare(r.recvTm) < 0) lastByTrace.set(r.traceId, r.recvTm);
+  }
+  const byWork = new Map<string, { traceIds: string[]; last: string }>();
+  for (const [traceId, i] of info) {
+    let w = byWork.get(i.workId);
+    if (!w) { w = { traceIds: [], last: "" }; byWork.set(i.workId, w); }
+    w.traceIds.push(traceId);
+    const last = lastByTrace.get(traceId) ?? "";
+    if (w.last.localeCompare(last) < 0) w.last = last;
+  }
+
+  // TRACE 2건 이상 = 묶음. 최신 묶음부터 통째로 담되 상한을 넘기면 멈춘다(묶음을 쪼개지 않는다).
+  const groups = Array.from(byWork.values())
+    .filter((w) => w.traceIds.length > 1)
+    .sort((a, b) => b.last.localeCompare(a.last));
+
+  const traceIds: string[] = [];
+  for (const g of groups) {
+    if (traceIds.length > 0 && traceIds.length + g.traceIds.length > limit) break;
+    traceIds.push(...g.traceIds);
+    if (traceIds.length >= limit) break;
+  }
+  logger.info("resolveGroupedTraceIds", {
+    from, to, sourceRows: sourceRows.length, groups: groups.length, traces: traceIds.length,
+  });
+  return { traceIds, info };
+}
+
 export async function GET(req: NextRequest) {
   const t0 = Date.now();
   const ctx = reqContext(req);
@@ -182,8 +254,12 @@ export async function GET(req: NextRequest) {
     dateFrom: sp.get("dateFrom") || undefined,
     dateTo: sp.get("dateTo") || undefined,
     onlyError: sp.get("onlyError") === "true" ? true : undefined,
-    limit: sp.get("limit") ? Number(sp.get("limit")) : 200
+    // 목록 상한 = TRACE(묶음이면 그 안의 TRACE) 건수. 2단계 조회가 TRACE_ID IN (...) 이라
+    // Oracle IN 목록 상한(1000)에 여유를 두고 db.ts 가 500 으로 clamp 한다.
+    limit: sp.get("limit") ? Number(sp.get("limit")) : DEFAULT_LIMIT
   };
+  // 묶음(TRACE 2건 이상)만 보기 — 조회 순서가 아예 달라진다(resolveGroupedTraceIds 참고)
+  const groupedOnly = sp.get("groupedOnly") === "true";
 
   logger.info("GET /api/traces", { ...ctx, query: sp.toString(), filter });
 
@@ -199,30 +275,55 @@ export async function GET(req: NextRequest) {
     // 트레이스가 깨진다. 진입 레이어(CUBE) USER_ID 로 TRACE_ID 를 먼저 확정하는 2단계로 처리한다.
     if (filter.userId) idFilters.push([LAYER_ORDER[0], "USER_ID", filter.userId]);
 
-    // 1단계 — 보여줄 TRACE_ID 확정. 상한(limit)은 반드시 여기서 트레이스 단위로 건다.
-    let traceIds: string[];
-    if (filter.traceId) {
-      traceIds = [filter.traceId];
-    } else if (idFilters.length > 0) {
+    // 조건에 걸린 TRACE_ID 를 확정하는 보조 조회 (묶음만 경로에서는 묶음을 좁히는 데 쓴다)
+    const matchedByDimension = async (): Promise<Set<string> | null> => {
+      if (idFilters.length === 0) return null;
       const idSets = await Promise.all(
         idFilters.map(([layer, column, value]) => fetchTraceIdsBy(layer, column, value, filter))
       );
-      traceIds = idSets.reduce((acc, set) => {
-        const s = new Set(set);
-        return acc.filter((id) => s.has(id));
-      });
+      return new Set(
+        idSets.reduce((acc, set) => {
+          const s = new Set(set);
+          return acc.filter((id) => s.has(id));
+        })
+      );
+    };
+
+    // 1단계 — 보여줄 TRACE_ID 확정. 상한(limit)은 반드시 여기서 트레이스 단위로 건다.
+    const limit = Math.max(1, Math.min(Number.isFinite(filter.limit) ? filter.limit! : DEFAULT_LIMIT, 500));
+    let traceIds: string[];
+    let groupInfo: Map<string, TraceWorkInfo> | undefined;
+    if (groupedOnly) {
+      const g = await resolveGroupedTraceIds(filter, limit);
+      traceIds = g.traceIds;
+      groupInfo = g.info;
+    } else if (filter.traceId) {
+      traceIds = [filter.traceId];
+    } else if (idFilters.length > 0) {
+      traceIds = Array.from((await matchedByDimension()) ?? []);
     } else {
       traceIds = await fetchRecentTraceIds(filter);
     }
 
     // 2단계 — 그 TRACE 들의 전 레이어 행을 통째로 읽는다. 여기서는 행 단위 필터를 걸지 않는다:
     // 무엇을 찾을지는 1단계가 이미 정했고, 찾은 트레이스는 있는 그대로 보여줘야
-    // LAYERS 점이 실제 도달한 레이어와 일치한다.
-    let rows: TraceRow[] = traceIds.length > 0 ? await fetchAllRows({ traceIds }) : [];
-    rows = keepErrorMatchingTraces(rows, filter);
+    // LAYERS 점이 실제 도달한 레이어와 일치한다. (lean = 목록에 안 쓰는 본문 컬럼 제외)
+    let rows: TraceRow[] = traceIds.length > 0 ? await fetchAllRows({ traceIds, lean: true }) : [];
+    if (!groupedOnly) rows = keepErrorMatchingTraces(rows, filter);
 
     const summaries = summarize(rows);
-    const works = await buildWorks(summaries);
+    let works = await buildWorks(summaries, groupInfo);
+
+    if (groupedOnly) {
+      // 묶음만 — 나머지 조건은 "그 조건에 걸린 TRACE 를 가진 묶음" 으로 본다(묶음을 쪼개지 않는다)
+      works = works.filter((w) => w.traces.length > 1);
+      const allowed = await matchedByDimension();
+      if (allowed) works = works.filter((w) => w.traces.some((t) => allowed.has(t.traceId)));
+      if (filter.errCd || filter.onlyError) {
+        const hit = new Set(keepErrorMatchingTraces(rows, filter).map((r) => r.traceId));
+        works = works.filter((w) => w.traces.some((t) => hit.has(t.traceId)));
+      }
+    }
     const connectedLayers = connectedLayerCount();
     const appEnv = getAppEnv();
 
@@ -230,6 +331,7 @@ export async function GET(req: NextRequest) {
       ...ctx,
       appEnv,
       rows: rows.length,
+      groupedOnly,
       matchedTraces: summaries.length,
       total: works.length,
       groupedWorks: works.filter((w) => w.traces.length > 1).length,

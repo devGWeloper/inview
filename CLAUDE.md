@@ -33,6 +33,13 @@ TraceX is a single-page **AI Action Transaction trace viewer** built on Next.js 
      `fetchTraceIdsBy()` 가 1단계를 맡는다.
    - Oracle `ORDER BY <ts> DESC` 의 기본은 **NULLS FIRST** 라, RECV_TM 이 빈 멀티콜 2번째 행이 상한을 먼저 먹는다.
      행수 상한이 붙는 정렬에는 `DESC NULLS LAST` 를 명시한다.
+   - 목록 상한은 **TRACE 건수** 기준 기본 500 (`DEFAULT_LIMIT`), `db.ts` 가 **500 으로 clamp** 한다 —
+     2단계가 `TRACE_ID IN (...)` 이라 Oracle IN 목록 상한(1000)에 여유를 둔 값이다. 더 늘리려면
+     `fetchAllRows` 가 traceIds 를 나눠 조회하도록 먼저 고쳐야 한다.
+   - 목록 조회는 `lean: true` 로 **요청/전달 본문(RECV_MSG_CTN/SEND_MSG_CTN)을 빼고** 읽는다
+     (`db.ts` `SUMMARY_COLUMNS`). 목록은 요약만 만들면 되고 본문은 행당 수 KB 라 500건이면 그대로 지연이 된다.
+     `RESP_MSG_CTN` 은 남긴다 — TEMP 상태 판정이 CUBE 응답 문구를 본다. ⚠️ lean 행의
+     `recvMsgCtn`/`sendMsgCtn` 은 **항상 null** 이므로 본문이 필요한 곳(상세)은 lean 을 켜지 않는다.
 4. `/api/traces` groups rows by `TRACE_ID` and computes `allComplete` (requires `layerSet.size === LAYER_ORDER.length` and every row `SEND_COMPLT_YN='Y'`) and `hasError`. `lastSendTm` in `TraceSummary` is the max of all `sendTm` and `respTm` values.
 5. `/api/traces` then hands those summaries to `buildWorks()`, which groups them into **works** via `src/lib/workGroup.ts` and back-fills the sibling traces of every matched work. See "Work grouping" below.
 6. `TraceTimeline` groups rows by layer and renders them. Single-call layers show **recv | send | resp** in a 3-column layout; multi-call layers show the upstream recv once at the top, then numbered `Call #N` items each with a **send | resp** pair.
@@ -259,8 +266,12 @@ Points that matter when touching this code:
   요약 행부터 마지막 자식(`.work-last`)까지 끊기지 않는 좌측 레일 `--work-rail` + 위(요약 행 border-top)
   아래(마지막 자식 border-bottom)를 닫는 선. ⚠️ 묶음 바탕 규칙이 `tr.active` 보다 **뒤에** 오므로
   선택 행 배경은 `tr.work-child.active`/`tr.work-row.active` 로 명시해 되돌린다(같은 specificity).
-  필터 바의 **"묶음만"** 체크는 조회 조건이 아니라 이미 받은 `works` 를 좁히는 **보기 토글**(즉시 반영,
-  `groupedOnly` → `visibleWorks`)이라 서버 재조회가 없다.
+- **"묶음만" 조회는 순서가 반대다** (`groupedOnly=true` → `route.ts` `resolveGroupedTraceIds`).
+  목록 상한은 트레이스 단위라, 묶음이 드문 기간엔 최근 N 트레이스 안에 묶음이 한 건도 안 걸려
+  화면이 계속 빈다(실제로는 있는데). 그래서 이 경로는 **GAIA 소스(`fetchWorkGroupRows`, 4컬럼·최근
+  5000행)로 묶음을 먼저 산출**하고 TRACE 2건 이상인 묶음만 최신순으로 골라 그 묶음의 TRACE 를
+  통째로 가져온다(묶음을 쪼개지 않는다). 나머지 조건(FAC/ACTION/USER/에러)은 "그 조건에 걸린 TRACE 를
+  가진 묶음" 으로 본다. `buildWorks(summaries, preInfo)` 가 이미 만든 매핑을 재사용해 GAIA 재조회는 없다.
 
 ### ⚠️ 클라이언트 API 호출 규칙 — 원시 `fetch` 금지 (`src/lib/apiClient.ts`)
 

@@ -40,6 +40,28 @@ export function connectedLayerCount(): number {
   return LAYER_ORDER.filter((l) => readConfig(l) !== null).length;
 }
 
+/**
+ * 목록(요약) 조회용 컬럼 — 요청/전달 본문(RECV_MSG_CTN / SEND_MSG_CTN)을 뺀다.
+ * 목록은 트레이스 요약만 만들면 되고, 본문은 행당 수 KB 라 500건 × 레이어수 만큼
+ * 끌어오면 그대로 응답 지연이 된다. RESP_MSG_CTN 은 남긴다 —
+ * TEMP(ONEOIS 미연결) 상태 판정이 CUBE 응답 문구를 본다(tempStatus.ts).
+ * ⚠️ 이 모드로 읽은 행의 recvMsgCtn/sendMsgCtn 은 항상 null 이다. 본문이 필요한
+ * 화면(상세 타임라인)은 lean 을 켜지 않는다.
+ */
+const SUMMARY_COLUMNS = `
+  TRACE_ID, TIMEKEY, USER_ID, SYS_ID,
+  CHANNEL_ID, ACTION_TYP, FAC_ID, AREA_ID,
+  RECV_SYS_ID,
+  TO_CHAR(RECV_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS RECV_TM,
+  SEND_SYS_ID,
+  TO_CHAR(SEND_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS SEND_TM,
+  SEND_COMPLT_YN,
+  RESP_MSG_CTN,
+  TO_CHAR(RESP_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS RESP_TM,
+  HTTP_STS_CD,
+  ERR_CD, ERR_DESC_CTN
+`;
+
 const SELECT_COLUMNS = `
   TRACE_ID, TIMEKEY, USER_ID, SYS_ID,
   CHANNEL_ID, ACTION_TYP, FAC_ID, AREA_ID,
@@ -133,7 +155,7 @@ async function queryLayer(layer: LayerKey, filter: TraceFilter): Promise<TraceRo
   const rowLimit = filter.limit === undefined ? null : clampLimit(filter.limit, 200);
   if (rowLimit !== null) binds.rowLimit = rowLimit;
   const sql =
-    `SELECT ${SELECT_COLUMNS} FROM BIZ_AIACTIONTXN_HIS` +
+    `SELECT ${filter.lean ? SUMMARY_COLUMNS : SELECT_COLUMNS} FROM BIZ_AIACTIONTXN_HIS` +
     (where.length ? " WHERE " + where.join(" AND ") : "") +
     " ORDER BY RECV_TM DESC NULLS LAST" +
     (rowLimit !== null ? " FETCH FIRST :rowLimit ROWS ONLY" : "");

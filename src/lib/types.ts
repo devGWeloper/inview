@@ -71,13 +71,42 @@ export interface TraceSummary {
   allComplete: boolean;
 }
 
+/**
+ * 묶음(= 현장 작업 1건) 안의 TRACE 한 건. TraceSummary 에 액션 표기만 얹은 것.
+ */
+export interface WorkTraceItem extends TraceSummary {
+  /** 액션 칩 라벨 — "PRE" / "POST" / "ERMAP" 등. 판정 불가면 null */
+  actionLabel: string | null;
+}
+
+/**
+ * 여러 요청을 하나로 묶은 "현장 작업" 단위.
+ * 전값 측정 → 후값 측정 → ERMAP 요청처럼 요청은 3건이지만 작업은 1건인 흐름을
+ * 목록에서 한 행으로 보여주기 위한 것. 묶는 규칙은 lib/workGroup.ts 참고.
+ *
+ * 대부분의 묶음은 TRACE 1건짜리다 (= 지금까지의 목록 행과 같음).
+ */
+export interface WorkSummary {
+  /** 묶음 식별자 = 묶음의 첫 TRACE_ID */
+  workId: string;
+  /** 묶음을 건 챔버 ID. 챔버를 못 읽어 단독으로 남은 묶음은 null */
+  chamberId: string | null;
+  firstRecvTm: string | null;
+  lastRecvTm: string | null;
+  /** 안에 든 TRACE 중 가장 나쁜 상태 */
+  status: TraceStatus;
+  /** 시간순(오름차순) TRACE 목록. 최소 1건 */
+  traces: WorkTraceItem[];
+}
+
 export interface TraceDetailResponse {
   traceId: string;
   rows: TraceRow[];
 }
 
 export interface TraceListResponse {
-  summaries: TraceSummary[];
+  works: WorkSummary[];
+  /** 묶음 개수 (TRACE 건수가 아니다) */
   total: number;
   connectedLayers: number;
   appEnv: "dev" | "prd";

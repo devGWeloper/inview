@@ -1,10 +1,11 @@
 "use client";
 
-import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import { CSSProperties, Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { TraceTimeline } from "@/components/TraceTimeline";
 import {
   LAYER_COLOR, LAYER_ORDER,
-  TraceFilter, TraceListResponse, TraceDetailResponse, TraceSummary, TraceRow
+  TraceFilter, TraceListResponse, TraceDetailResponse, TraceRow,
+  TraceStatus, WorkSummary, WorkTraceItem
 } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 
@@ -39,9 +40,68 @@ function withSeconds(v: string | undefined): string | undefined {
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v) ? `${v}:00` : v;
 }
 
+/** 상태 뱃지 — 묶음 행과 TRACE 행이 같은 모양을 쓴다 */
+function statusPill(status: TraceStatus) {
+  if (status === "error") return <span className="pill err"><span className="dot" />ERROR</span>;
+  if (status === "fail") return <span className="pill fail"><span className="dot" />FAIL</span>;
+  if (status === "ok") return <span className="pill ok"><span className="dot" />OK</span>;
+  return <span className="pill warn"><span className="dot" />PARTIAL</span>;
+}
+
+/** 묶음 대표 사용자 — 여러 명이면 "외 N" 을 붙인다 */
+function workUserLabel(w: WorkSummary): string {
+  const users = Array.from(new Set(w.traces.map((t) => t.userId).filter((v): v is string => !!v)));
+  if (users.length === 0) return "—";
+  return users.length === 1 ? users[0] : `${users[0]} 외 ${users.length - 1}`;
+}
+
+/**
+ * 목록의 TRACE 행. 묶음이 1건짜리면 그대로 최상위 행으로, 여러 건이면 펼친 자식 행으로 쓰인다.
+ * (child 여부만 다르고 내용은 동일 — 묶음 도입 전 화면과 같은 정보를 보여준다)
+ */
+function traceRow(t: WorkTraceItem, active: boolean, onClick: () => void, child = false) {
+  return (
+    <tr
+      key={t.traceId}
+      className={(child ? "work-child" : "") + (active ? " active" : "")}
+      onClick={onClick}
+    >
+      <td className="mono strong">
+        {child && t.actionLabel && <span className="work-chip">{t.actionLabel}</span>}
+        {t.traceId}
+      </td>
+      <td>{t.userId ?? "—"}</td>
+      <td className="mono">{fmtTs(t.firstRecvTm)}</td>
+      <td>
+        <span
+          className="layer-dots"
+          title={`${t.layerCount} / ${LAYER_ORDER.length} layers · ${t.layers.join(", ") || "—"}`}
+        >
+          {LAYER_ORDER.map((l) => {
+            const present = t.layers.includes(l);
+            return (
+              <span
+                key={l}
+                className={"layer-dot" + (present ? " on" : "")}
+                style={present ? { background: LAYER_COLOR[l], borderColor: LAYER_COLOR[l] } : undefined}
+                aria-label={`${l} ${present ? "present" : "missing"}`}
+              />
+            );
+          })}
+          <span className="layer-dots-count">{t.layerCount}/{LAYER_ORDER.length}</span>
+        </span>
+      </td>
+      <td>{statusPill(t.status)}</td>
+    </tr>
+  );
+}
+
 export default function Page() {
   const [filter, setFilter] = useState<TraceFilter>(DEFAULT_FILTER);
-  const [summaries, setSummaries] = useState<TraceSummary[]>([]);
+  // 목록 1행 = 묶음(현장 작업 1건). 대부분은 TRACE 1건짜리라 지금까지의 행과 같아 보인다.
+  const [works, setWorks] = useState<WorkSummary[]>([]);
+  // 펼쳐놓은 묶음 (TRACE 2건 이상인 것만 펼침 대상)
+  const [expandedWorks, setExpandedWorks] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
   const [detailRows, setDetailRows] = useState<TraceRow[]>([]);
   const [listLoading, setListLoading] = useState(false);
@@ -118,10 +178,10 @@ export default function Page() {
       if (f.onlyError) q.set("onlyError", "true");
       // apiJson: 401(세션 만료)/에러 응답을 데이터로 오인하지 않고 ApiError 로 던진다.
       const data = await apiJson<TraceListResponse>(`/api/traces?${q.toString()}`, { cache: "no-store" });
-      setSummaries(asArray<TraceSummary>(data.summaries));
+      setWorks(asArray<WorkSummary>(data.works));
     } catch (e) {
       setListErr(errMessage(e, "목록을 불러오지 못했습니다."));
-      setSummaries([]);
+      setWorks([]);
     } finally {
       setListLoading(false);
     }
@@ -174,14 +234,33 @@ export default function Page() {
   }, []);
   useEffect(() => { if (selected) loadDetail(selected); }, [selected, loadDetail]);
 
+  // 첫 묶음의 첫 TRACE 를 자동 선택. 여러 건짜리면 선택한 행이 보이도록 같이 펼쳐준다.
   useEffect(() => {
-    if (!selected && summaries.length > 0) setSelected(summaries[0].traceId);
-  }, [summaries, selected]);
+    if (selected || works.length === 0) return;
+    const first = works[0];
+    const firstTrace = first.traces[0];
+    if (!firstTrace) return;
+    setSelected(firstTrace.traceId);
+    if (first.traces.length > 1) setExpandedWorks(new Set([first.workId]));
+  }, [works, selected]);
 
   const runList = (f: TraceFilter) => {
     setSelected(null);
     setDetailRows([]);
+    setExpandedWorks(new Set());
     loadList(f);
+  };
+
+  // 묶음 행 클릭 = 펼침/접힘. 펼칠 때는 첫 TRACE 를 골라 오른쪽 상세를 바로 띄운다.
+  const toggleWork = (w: WorkSummary) => {
+    const opening = !expandedWorks.has(w.workId);
+    setExpandedWorks((prev) => {
+      const next = new Set(prev);
+      if (opening) next.add(w.workId);
+      else next.delete(w.workId);
+      return next;
+    });
+    if (opening && w.traces.length > 0) setSelected(w.traces[0].traceId);
   };
 
   const onSubmit = (e: React.FormEvent) => {
@@ -204,8 +283,8 @@ export default function Page() {
     runList(next);
   };
 
-  const errorCount = summaries.filter((s) => s.status === "error").length;
-  const failCount = summaries.filter((s) => s.status === "fail").length;
+  const errorCount = works.filter((w) => w.status === "error").length;
+  const failCount = works.filter((w) => w.status === "fail").length;
 
   return (
     <>
@@ -218,7 +297,7 @@ export default function Page() {
           <div className="panel-header">
             <span className="title">Traces</span>
             <span className="meta">
-              {summaries.length.toLocaleString()} 건
+              {works.length.toLocaleString()} 건
               {errorCount > 0 && <>  ·  <span style={{ color: "var(--err)" }}>오류 {errorCount}</span></>}
               {failCount > 0 && <>  ·  <span style={{ color: "var(--fail)" }}>실패 {failCount}</span></>}
             </span>
@@ -363,48 +442,39 @@ export default function Page() {
                     <div className="load-error"><span aria-hidden>⚠</span>{listErr}</div>
                   </td></tr>
                 )}
-                {!listLoading && !listErr && summaries.length === 0 && (
+                {!listLoading && !listErr && works.length === 0 && (
                   <tr><td colSpan={5} className="muted" style={{ padding: 16 }}>조건에 맞는 TRACE 가 없습니다.</td></tr>
                 )}
-                {summaries.map((s) => (
-                  <tr
-                    key={s.traceId}
-                    className={selected === s.traceId ? "active" : ""}
-                    onClick={() => setSelected(s.traceId)}
-                  >
-                    <td className="mono strong">{s.traceId}</td>
-                    <td>{s.userId ?? "—"}</td>
-                    <td className="mono">{fmtTs(s.firstRecvTm)}</td>
-                    <td>
-                      <span
-                        className="layer-dots"
-                        title={`${s.layerCount} / ${LAYER_ORDER.length} layers · ${s.layers.join(", ") || "—"}`}
-                      >
-                        {LAYER_ORDER.map((l) => {
-                          const present = s.layers.includes(l);
-                          return (
-                            <span
-                              key={l}
-                              className={"layer-dot" + (present ? " on" : "")}
-                              style={present ? { background: LAYER_COLOR[l], borderColor: LAYER_COLOR[l] } : undefined}
-                              aria-label={`${l} ${present ? "present" : "missing"}`}
-                            />
-                          );
-                        })}
-                        <span className="layer-dots-count">{s.layerCount}/{LAYER_ORDER.length}</span>
-                      </span>
-                    </td>
-                    <td>
-                      {s.status === "error"
-                        ? <span className="pill err"><span className="dot" />ERROR</span>
-                        : s.status === "fail"
-                          ? <span className="pill fail"><span className="dot" />FAIL</span>
-                          : s.status === "ok"
-                            ? <span className="pill ok"><span className="dot" />OK</span>
-                            : <span className="pill warn"><span className="dot" />PARTIAL</span>}
-                    </td>
-                  </tr>
-                ))}
+                {works.map((w) => {
+                  // TRACE 1건짜리 묶음(대부분)은 펼칠 게 없으니 지금까지의 목록 행 그대로 둔다.
+                  if (w.traces.length <= 1) {
+                    const only = w.traces[0];
+                    return only ? traceRow(only, selected === only.traceId, () => setSelected(only.traceId)) : null;
+                  }
+                  const open = expandedWorks.has(w.workId);
+                  return (
+                    <Fragment key={w.workId}>
+                      <tr className={"work-row" + (open ? " open" : "")} onClick={() => toggleWork(w)}>
+                        <td className="strong">
+                          <span className="work-caret" aria-hidden>{open ? "▾" : "▸"}</span>
+                          <span className="mono">{w.chamberId ?? w.workId}</span>
+                          <span className="work-chips">
+                            {w.traces.map((t) => (
+                              <span key={t.traceId} className="work-chip">{t.actionLabel ?? "?"}</span>
+                            ))}
+                          </span>
+                        </td>
+                        <td>{workUserLabel(w)}</td>
+                        <td className="mono">{fmtTs(w.firstRecvTm)}</td>
+                        <td><span className="work-count">{w.traces.length}건</span></td>
+                        <td>{statusPill(w.status)}</td>
+                      </tr>
+                      {open && w.traces.map((t) =>
+                        traceRow(t, selected === t.traceId, () => setSelected(t.traceId), true)
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

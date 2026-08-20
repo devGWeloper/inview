@@ -378,6 +378,54 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
 .trace-list td.mono { font-family: var(--mono); font-size: 14px; color: var(--text-2); }
 .trace-list td.strong { font-weight: 500; color: var(--text); }
 
+/* ---- [TEMP][WORK_GROUP] 묶음(현장 작업 1건) 행 ----
+   목록 1행 = 묶음. TRACE 1건짜리 묶음은 위의 일반 행 그대로 그려지고,
+   여러 건인 묶음만 아래 요약 행 + 펼친 자식 행(.work-child)으로 나온다. */
+.trace-list tbody tr.work-row {
+  background: var(--surface-2);
+}
+.trace-list tbody tr.work-row:hover { background: var(--surface-3); }
+.work-caret {
+  display: inline-block;
+  width: 14px;
+  margin-right: 2px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.work-chips {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.work-chip {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+.work-child .work-chip { margin-right: 8px; }
+.work-count {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+/* 자식 TRACE 행 — 묶음에 속해 있다는 걸 들여쓰기와 좌측 선으로 표시 */
+.trace-list tbody tr.work-child > td:first-child {
+  padding-left: 30px;
+  box-shadow: inset 2px 0 0 0 var(--border-strong);
+}
+.trace-list tbody tr.work-child.active > td:first-child {
+  box-shadow: none;
+}
+
 /* layer presence dots (list 컬럼) */
 .layer-dots {
   display: inline-flex; align-items: center; gap: 4px;

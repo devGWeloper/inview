@@ -2,6 +2,7 @@ import { LAYER_ORDER, LayerKey, TraceFilter, TraceRow } from "./types";
 import { logger } from "./logger";
 import { AppEnv, LayerDbConfig, loadConfig } from "./config";
 import { ACTION_FAIL_PHRASES } from "./tempStatus"; // TEMP(ONEOIS 미연결): 액션(시즈닝/AutoQual 취소·실행) 성공 판정에 사용
+import { WorkSourceRow } from "./workGroup"; // TEMP(WORK_GROUP): 묶음 산출용 행 형태
 
 export type { AppEnv } from "./config";
 
@@ -210,6 +211,74 @@ export async function fetchTraceIdsBy(
     return ids;
   } catch (e) {
     logger.error("fetchTraceIdsBy failed", { layer, column, ms: Date.now() - t0, err: String(e) });
+    return [];
+  } finally {
+    if (conn) {
+      try { await conn.close(); } catch { /* ignore */ }
+    }
+  }
+}
+
+/**
+ * [TEMP][WORK_GROUP] 묶음 산출은 GAIA 로만 할 수 있다.
+ * 챔버 값이 담긴 건 MCP 로 인계한 파라미터(SEND_MSG_CTN)뿐인데, CUBE 는 자연어만
+ * 갖고 있고 MCP/ONEOIS 는 액션 구분(ACTION_TYP)을 기록하지 않는다.
+ */
+const WORK_GROUP_LAYER: LayerKey = "GAIA";
+
+/**
+ * 한 번에 읽는 묶음 산출용 행 상한. 최신 쪽이 남도록 RECV_TM DESC 로 자르므로,
+ * 상한에 걸리면 창의 가장 오래된 묶음이 앞부분을 잃을 수 있다 (기간 경계와 같은 성격).
+ */
+const WORK_GROUP_MAX_ROWS = 5000;
+
+/**
+ * [TEMP][WORK_GROUP] 묶음 산출에 필요한 GAIA 행만 가볍게 읽는다.
+ * 호출부가 화면 기간보다 앞뒤로 윈도우(기본 8시간)만큼 넓힌 범위를 넘겨야
+ * 경계에 걸친 묶음이 갈라지지 않는다 (route.ts 참고).
+ */
+export async function fetchWorkGroupRows(
+  fromIso: string,
+  toIso: string
+): Promise<WorkSourceRow[]> {
+  const cfg = readConfig(WORK_GROUP_LAYER);
+  if (!cfg) return [];
+  const oracle = await getOracle();
+  if (!oracle) return [];
+
+  const sql = `
+    SELECT TRACE_ID, ACTION_TYP,
+           TO_CHAR(RECV_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS RECV_TM,
+           SEND_MSG_CTN
+      FROM BIZ_AIACTIONTXN_HIS
+     WHERE RECV_TM >= TO_TIMESTAMP(:dateFrom, 'YYYY-MM-DD"T"HH24:MI:SS')
+       AND RECV_TM <= TO_TIMESTAMP(:dateTo,   'YYYY-MM-DD"T"HH24:MI:SS')
+     ORDER BY RECV_TM DESC
+     FETCH FIRST ${WORK_GROUP_MAX_ROWS} ROWS ONLY`;
+
+  let conn: Awaited<ReturnType<typeof oracle.getConnection>> | undefined;
+  const t0 = Date.now();
+  try {
+    conn = await oracle.getConnection(cfg);
+    const result = await conn.execute(
+      sql,
+      { dateFrom: fromIso, dateTo: toIso },
+      { outFormat: oracle.OBJECT }
+    );
+    const rows = ((result.rows ?? []) as Record<string, unknown>[]).map((r) => {
+      const read = (k: string) => (r[k] ?? r[k.toLowerCase()] ?? null) as string | null;
+      return {
+        traceId: String(read("TRACE_ID") ?? ""),
+        actionTyp: read("ACTION_TYP"),
+        recvTm: read("RECV_TM"),
+        sendMsgCtn: read("SEND_MSG_CTN"),
+      };
+    });
+    logger.info("fetchWorkGroupRows ok", { rows: rows.length, ms: Date.now() - t0 });
+    return rows;
+  } catch (e) {
+    // 실패해도 목록은 떠야 한다 — 빈 배열이면 모든 TRACE 가 1건짜리 묶음으로 보인다(= 기존 화면).
+    logger.error("fetchWorkGroupRows failed", { ms: Date.now() - t0, err: String(e) });
     return [];
   } finally {
     if (conn) {

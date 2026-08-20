@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchAllRows, fetchTraceIdsBy, fetchWorkGroupRows, connectedLayerCount, getAppEnv } from "@/lib/db";
+import { fetchAllRows, fetchRecentTraceIds, fetchTraceIdsBy, fetchWorkGroupRows, connectedLayerCount, getAppEnv } from "@/lib/db";
 import { LAYER_ORDER, LayerKey, TraceFilter, TraceStatus, TraceSummary, TraceRow, WorkSummary } from "@/lib/types";
 import { logger, reqContext } from "@/lib/logger";
 import { classifyPendingByCubeResp } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
@@ -26,6 +26,23 @@ function classify(rows: TraceRow[], allComplete: boolean): TraceStatus {
     sawError = true;
   }
   return sawError ? "error" : "fail";
+}
+
+/**
+ * 에러 조건(errCd / onlyError)은 **트레이스 단위**로 판정한다.
+ * 행 단위 SQL WHERE 로 걸면 에러가 없는 다른 레이어 행이 통째로 빠져,
+ * 실제로는 전 레이어를 거친 트레이스인데 LAYERS 점이 하나만 켜진 것처럼 보인다.
+ * (stats route 가 userId/actionTyp 를 트레이스 단위로 거르는 것과 같은 원칙)
+ */
+function keepErrorMatchingTraces(rows: TraceRow[], filter: TraceFilter): TraceRow[] {
+  if (!filter.errCd && !filter.onlyError) return rows;
+  const needle = filter.errCd ? filter.errCd.toUpperCase() : null;
+  const hit = new Set<string>();
+  for (const r of rows) {
+    if (!r.errCd) continue;
+    if (needle === null || r.errCd.toUpperCase().includes(needle)) hit.add(r.traceId);
+  }
+  return rows.filter((r) => hit.has(r.traceId));
 }
 
 function summarize(rows: TraceRow[]): TraceSummary[] {
@@ -175,7 +192,6 @@ export async function GET(req: NextRequest) {
     // 1) 기록 레이어 DB 에서 조건에 맞는 최근 TRACE_ID 확정(드롭다운 옵션 출처와 동일 DB:
     //    FAC_ID=MCP(/api/facs), ACTION_TYP=GAIA(/api/action-types))
     // 2) 그 ID 들의 전 레이어 행을 traceIds IN 으로 조회 (두 필터 동시 사용 시 교집합)
-    let rows: TraceRow[];
     const idFilters: Array<[LayerKey, "FAC_ID" | "ACTION_TYP" | "USER_ID", string]> = [];
     if (filter.facId) idFilters.push(["MCP", "FAC_ID", filter.facId]);
     if (filter.actionTyp) idFilters.push(["GAIA", "ACTION_TYP", filter.actionTyp]);
@@ -183,20 +199,27 @@ export async function GET(req: NextRequest) {
     // 트레이스가 깨진다. 진입 레이어(CUBE) USER_ID 로 TRACE_ID 를 먼저 확정하는 2단계로 처리한다.
     if (filter.userId) idFilters.push([LAYER_ORDER[0], "USER_ID", filter.userId]);
 
-    if (idFilters.length > 0) {
+    // 1단계 — 보여줄 TRACE_ID 확정. 상한(limit)은 반드시 여기서 트레이스 단위로 건다.
+    let traceIds: string[];
+    if (filter.traceId) {
+      traceIds = [filter.traceId];
+    } else if (idFilters.length > 0) {
       const idSets = await Promise.all(
         idFilters.map(([layer, column, value]) => fetchTraceIdsBy(layer, column, value, filter))
       );
-      const traceIds = idSets.reduce((acc, set) => {
+      traceIds = idSets.reduce((acc, set) => {
         const s = new Set(set);
         return acc.filter((id) => s.has(id));
       });
-      rows = traceIds.length > 0
-        ? await fetchAllRows({ ...filter, facId: undefined, actionTyp: undefined, userId: undefined, traceIds, limit: undefined })
-        : [];
     } else {
-      rows = await fetchAllRows(filter);
+      traceIds = await fetchRecentTraceIds(filter);
     }
+
+    // 2단계 — 그 TRACE 들의 전 레이어 행을 통째로 읽는다. 여기서는 행 단위 필터를 걸지 않는다:
+    // 무엇을 찾을지는 1단계가 이미 정했고, 찾은 트레이스는 있는 그대로 보여줘야
+    // LAYERS 점이 실제 도달한 레이어와 일치한다.
+    let rows: TraceRow[] = traceIds.length > 0 ? await fetchAllRows({ traceIds }) : [];
+    rows = keepErrorMatchingTraces(rows, filter);
 
     const summaries = summarize(rows);
     const works = await buildWorks(summaries);

@@ -22,6 +22,17 @@ TraceX is a single-page **AI Action Transaction trace viewer** built on Next.js 
    - `GET /api/traces/[traceId]` — detail view, returns the raw rows across layers
 2. Route handlers in `src/app/api/traces/` delegate to `src/lib/db.ts`.
 3. `db.ts` fans out **one query per layer** in parallel (`Promise.all` over `LAYER_ORDER`), each using its own connection config read from the YAML loader in `src/lib/config.ts` (see "Config files" below).
+   - ⚠️ **목록 조회는 반드시 2단계** — 자르는 단위가 "행" 이면 안 되고 **"트레이스"** 여야 한다.
+     ① `fetchRecentTraceIds(filter)` 가 레이어별 `GROUP BY TRACE_ID` 로 최근 TRACE_ID 를 뽑아 **합집합** 상위 N 을 확정하고
+     ② `fetchAllRows({ traceIds })` 가 **행 필터 없이** 그 트레이스의 전 레이어 행을 통째로 읽는다.
+     레이어별로 `FETCH FIRST N` 을 따로 걸어 합치면 같은 N 행이라도 커버하는 시간대가 레이어마다 달라
+     (라우팅 실패는 MCP 미도달 → MCP 행이 적고, GAIA 는 멀티콜로 행이 많다) 목록 아래쪽이
+     **한 레이어 행만 들어온 트레이스**로 채워지고 LAYERS 점이 그 레이어 하나만 켜진다. 같은 이유로
+     행 단위 필터(`errCd`/`onlyError`/기간)를 2단계에 걸면 안 된다 — 에러 조건은 route 의
+     `keepErrorMatchingTraces()` 가 **트레이스 단위**로 판정한다. FAC/ACTION_TYP/USER_ID 는 기존대로
+     `fetchTraceIdsBy()` 가 1단계를 맡는다.
+   - Oracle `ORDER BY <ts> DESC` 의 기본은 **NULLS FIRST** 라, RECV_TM 이 빈 멀티콜 2번째 행이 상한을 먼저 먹는다.
+     행수 상한이 붙는 정렬에는 `DESC NULLS LAST` 를 명시한다.
 4. `/api/traces` groups rows by `TRACE_ID` and computes `allComplete` (requires `layerSet.size === LAYER_ORDER.length` and every row `SEND_COMPLT_YN='Y'`) and `hasError`. `lastSendTm` in `TraceSummary` is the max of all `sendTm` and `respTm` values.
 5. `/api/traces` then hands those summaries to `buildWorks()`, which groups them into **works** via `src/lib/workGroup.ts` and back-fills the sibling traces of every matched work. See "Work grouping" below.
 6. `TraceTimeline` groups rows by layer and renders them. Single-call layers show **recv | send | resp** in a 3-column layout; multi-call layers show the upstream recv once at the top, then numbered `Call #N` items each with a **send | resp** pair.

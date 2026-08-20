@@ -29,6 +29,13 @@ function readConfig(layer: LayerKey): LayerDbConfig | null {
   return loadConfig().layers[layer] ?? null;
 }
 
+/** SQL 로 내려보내는 행수 상한을 유한한 정수로 고정 (Number("abc")=NaN 유입 방지) */
+function clampLimit(v: unknown, dflt: number, max = 500): number {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return dflt;
+  return Math.max(1, Math.min(Math.floor(n), max));
+}
+
 export function connectedLayerCount(): number {
   return LAYER_ORDER.filter((l) => readConfig(l) !== null).length;
 }
@@ -119,11 +126,17 @@ async function queryLayer(layer: LayerKey, filter: TraceFilter): Promise<TraceRo
     where.push("ERR_CD IS NOT NULL");
   }
 
+  // ⚠️ 여기의 limit 은 "행" 상한이라 트레이스 단위로는 잘리는 지점이 레이어마다 다르다.
+  // 목록 조회는 fetchRecentTraceIds()로 TRACE_ID 를 먼저 확정한 뒤 traceIds 로 부르는 게 원칙.
+  // (RECV_TM DESC 는 Oracle 기본이 NULLS FIRST 라, 멀티콜 2번째 행처럼 RECV_TM 이 빈 행이
+  //  한도를 먼저 먹는다 — NULLS LAST 로 최신 행부터 남긴다)
+  const rowLimit = filter.limit === undefined ? null : clampLimit(filter.limit, 200);
+  if (rowLimit !== null) binds.rowLimit = rowLimit;
   const sql =
     `SELECT ${SELECT_COLUMNS} FROM BIZ_AIACTIONTXN_HIS` +
     (where.length ? " WHERE " + where.join(" AND ") : "") +
-    " ORDER BY RECV_TM DESC" +
-    (filter.limit ? ` FETCH FIRST ${Math.max(1, Math.min(filter.limit, 500))} ROWS ONLY` : "");
+    " ORDER BY RECV_TM DESC NULLS LAST" +
+    (rowLimit !== null ? " FETCH FIRST :rowLimit ROWS ONLY" : "");
 
   let conn: Awaited<ReturnType<typeof oracle.getConnection>> | undefined;
   const t0 = Date.now();
@@ -186,7 +199,8 @@ export async function fetchTraceIdsBy(
     where.push("RECV_TM <= TO_TIMESTAMP(:dateTo, 'YYYY-MM-DD\"T\"HH24:MI:SS')");
     binds.dateTo = filter.dateTo;
   }
-  const limit = Math.max(1, Math.min(filter.limit ?? 200, 500));
+  const limit = clampLimit(filter.limit, 200);
+  binds.rowLimit = limit;
 
   const sql = `
     SELECT TRACE_ID FROM (
@@ -194,9 +208,9 @@ export async function fetchTraceIdsBy(
         FROM BIZ_AIACTIONTXN_HIS
        WHERE ${where.join(" AND ")}
        GROUP BY TRACE_ID
-       ORDER BY LAST_RECV DESC
+       ORDER BY LAST_RECV DESC NULLS LAST
     )
-    FETCH FIRST ${limit} ROWS ONLY`;
+    FETCH FIRST :rowLimit ROWS ONLY`;
 
   let conn: Awaited<ReturnType<typeof oracle.getConnection>> | undefined;
   const t0 = Date.now();
@@ -217,6 +231,98 @@ export async function fetchTraceIdsBy(
       try { await conn.close(); } catch { /* ignore */ }
     }
   }
+}
+
+/**
+ * 목록 조회 1단계: 조건에 맞는 "최근 TRACE_ID" 를 확정한다.
+ *
+ * ⚠️ 레이어별로 행수 상한(FETCH FIRST)을 따로 걸고 합치면 안 된다. 같은 200행이라도
+ * 레이어마다 커버하는 시간대가 달라서(라우팅 실패는 MCP 까지 못 가 MCP 행이 적고,
+ * GAIA 는 멀티콜로 행이 많다) 목록 아래쪽에는 "한 레이어 행만 들어온 트레이스"가 깔린다.
+ * 그러면 LAYERS 점이 그 레이어 하나만 켜져 실제로는 전 레이어에 데이터가 있는데도
+ * 빠진 것처럼 보인다. 그래서 자르는 단위를 행이 아니라 **트레이스**로 바꾼다.
+ *
+ * 각 레이어에서 조건에 맞는 최근 트레이스 목록을 뽑아 **합집합**으로 모으고(에러는 어느
+ * 레이어에서 나든 그 트레이스가 대상이다) 최근순 상위 limit 건만 남긴다. 2단계에서
+ * 이 ID 들의 전 레이어 행을 통째로(행 필터 없이) 읽으면 모든 행의 레이어 점이 채워진다.
+ *
+ * 정렬 키는 레이어별 MAX(RECV_TM). 어떤 레이어에서 RECV_TM 이 전부 비어도 다른 레이어
+ * 값으로 순서가 잡히고, 전 레이어가 다 비면(사실상 없음) 순서를 못 매겨 제외된다.
+ */
+export async function fetchRecentTraceIds(
+  filter: Pick<TraceFilter, "dateFrom" | "dateTo" | "errCd" | "onlyError" | "limit">
+): Promise<string[]> {
+  const limit = clampLimit(filter.limit, 200);
+
+  const perLayer = await Promise.all(
+    LAYER_ORDER.map(async (layer): Promise<Array<[string, string]>> => {
+      const cfg = readConfig(layer);
+      if (!cfg) return [];
+      const oracle = await getOracle();
+      if (!oracle) return [];
+
+      const where: string[] = [];
+      const binds: Record<string, unknown> = { rowLimit: limit };
+      if (filter.errCd) {
+        where.push("UPPER(ERR_CD) LIKE '%' || UPPER(:errCd) || '%'");
+        binds.errCd = filter.errCd;
+      }
+      if (filter.onlyError) where.push("ERR_CD IS NOT NULL");
+      if (filter.dateFrom) {
+        where.push("RECV_TM >= TO_TIMESTAMP(:dateFrom, 'YYYY-MM-DD\"T\"HH24:MI:SS')");
+        binds.dateFrom = filter.dateFrom;
+      }
+      if (filter.dateTo) {
+        where.push("RECV_TM <= TO_TIMESTAMP(:dateTo, 'YYYY-MM-DD\"T\"HH24:MI:SS')");
+        binds.dateTo = filter.dateTo;
+      }
+
+      const sql = `
+        SELECT TRACE_ID,
+               TO_CHAR(MAX(RECV_TM), 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS LAST_RECV
+          FROM BIZ_AIACTIONTXN_HIS
+         ${where.length ? "WHERE " + where.join(" AND ") : ""}
+         GROUP BY TRACE_ID
+         ORDER BY MAX(RECV_TM) DESC NULLS LAST
+         FETCH FIRST :rowLimit ROWS ONLY`;
+
+      let conn: Awaited<ReturnType<typeof oracle.getConnection>> | undefined;
+      const t0 = Date.now();
+      try {
+        conn = await oracle.getConnection(cfg);
+        const result = await conn.execute(sql, binds, { outFormat: oracle.OBJECT });
+        const rows = (result.rows ?? []) as Record<string, unknown>[];
+        const out = rows
+          .map((r) => {
+            const read = (k: string) => (r[k] ?? r[k.toLowerCase()] ?? null) as string | null;
+            return [read("TRACE_ID"), read("LAST_RECV")] as [string | null, string | null];
+          })
+          .filter((p): p is [string, string] => !!p[0] && !!p[1]);
+        logger.info("fetchRecentTraceIds ok", { layer, ids: out.length, ms: Date.now() - t0 });
+        return out;
+      } catch (e) {
+        logger.error("fetchRecentTraceIds failed", { layer, ms: Date.now() - t0, err: String(e) });
+        return [];
+      } finally {
+        if (conn) {
+          try { await conn.close(); } catch { /* ignore */ }
+        }
+      }
+    })
+  );
+
+  // 합집합 — 같은 트레이스가 여러 레이어에서 잡히면 가장 늦은 시각으로 정렬한다
+  const lastByTrace = new Map<string, string>();
+  for (const pairs of perLayer) {
+    for (const [traceId, lastRecv] of pairs) {
+      const prev = lastByTrace.get(traceId);
+      if (prev === undefined || prev.localeCompare(lastRecv) < 0) lastByTrace.set(traceId, lastRecv);
+    }
+  }
+  return Array.from(lastByTrace.entries())
+    .sort((a, b) => b[1].localeCompare(a[1]))
+    .slice(0, limit)
+    .map(([traceId]) => traceId);
 }
 
 /**

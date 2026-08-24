@@ -4541,22 +4541,15 @@ button.tbd-row:not(:disabled):hover {
 .rs-stats b { font-size: 13px; font-weight: 700; color: var(--text); }
 .rs-stats-sub { font-size: 11.5px; color: var(--text-muted); }
 
+
 /* ─────────────────────────────────────────────────────────────────────────────
    1TICK — 분당 TPM/RPM 모니터 (Tokens 탭)
-   초과 판정이 정각 분이 아니라 "임의의 연속 60초" 라는 점이 화면의 전제라,
-   기준선/초과는 전부 --err 톤 하나로 통일해 눈이 한 규칙으로 읽게 한다.
+   화면은 게이지 → 추이 → 초과한 순간 3단. 초과는 전부 --err 톤 하나로만 표시한다.
    ───────────────────────────────────────────────────────────────────────────── */
 
-/* 프리셋 줄에서 1TICK 만 성격이 다르다(기간이 아니라 모드 전환) — 살짝 구분 */
-.preset-btn.tick {
-  font-family: var(--mono);
-  letter-spacing: 0.3px;
-}
-.preset-btn.tick.active {
-  background: var(--err);
-  border-color: var(--err);
-  color: #fff;
-}
+/* 프리셋 줄에서 1TICK 만 성격이 다르다(기간이 아니라 모드 전환) */
+.preset-btn.tick { font-family: var(--mono); letter-spacing: 0.3px; }
+.preset-btn.tick.active { background: var(--err); border-color: var(--err); color: #fff; }
 
 .tick-bar {
   display: flex;
@@ -4564,40 +4557,10 @@ button.tbd-row:not(:disabled):hover {
   justify-content: space-between;
   gap: 14px;
   flex-wrap: wrap;
-  padding: 12px 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 11px;
 }
-.tick-bar-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-.tick-badge {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
-  color: #fff;
-  background: var(--err);
-  padding: 3px 8px;
-  border-radius: 5px;
-}
-.tick-bar-desc {
-  font-size: 13px;
-  color: var(--text-3);
-}
-.tick-bar-desc b { color: var(--text); font-weight: 700; }
-.tick-bar-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
+.tick-bar-range { font-size: 13px; color: var(--text-3); }
+.tick-bar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
-/* 메트릭(TPM/RPM) · 창 길이 세그먼트 토글 */
 .tick-seg {
   display: inline-flex;
   background: var(--surface-3);
@@ -4610,13 +4573,11 @@ button.tbd-row:not(:disabled):hover {
   border: none;
   background: transparent;
   color: var(--text-3);
-  font-family: var(--mono);
   font-size: 12.5px;
   font-weight: 700;
-  padding: 5px 11px;
+  padding: 5px 12px;
   border-radius: 6px;
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
 }
 .tick-seg-btn:hover { color: var(--text); }
 .tick-seg-btn.active {
@@ -4645,33 +4606,127 @@ button.tbd-row:not(:disabled):hover {
   font-size: 13px;
   line-height: 1.55;
 }
-.tick-notice.warn {
-  border-left-color: var(--warn);
-  background: var(--warn-soft);
-}
+.tick-notice.warn { border-left-color: var(--warn); background: var(--warn-soft); }
 .tick-notice a { color: var(--accent); font-weight: 600; }
 
 .tick-empty {
-  padding: 22px 8px;
+  padding: 26px 8px;
   text-align: center;
   color: var(--text-muted);
   font-size: 13px;
 }
-.tick-empty.ok { color: var(--ok); font-weight: 600; }
+.tick-empty.ok { color: var(--ok); font-weight: 700; font-size: 14px; }
 
-/* 범례 중 클릭 대상이 아닌 항목 (1TICK 은 시리즈 토글이 없다 — 두 선의 대비가 요점) */
+/* ── 게이지 카드 (TPM / RPM) — 클릭하면 아래 차트·목록이 그 지표로 바뀐다 ── */
+.tick-gauges {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 700px) { .tick-gauges { grid-template-columns: 1fr; } }
+
+.tick-gauge {
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 16px 20px 15px;
+  cursor: pointer;
+  transition: border-color 0.14s, box-shadow 0.14s;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.tick-gauge:hover { border-color: var(--border-strong); }
+.tick-gauge.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.tick-gauge.over.selected {
+  border-color: var(--err);
+  box-shadow: 0 0 0 3px var(--err-soft);
+}
+
+.tick-gauge-top { display: flex; align-items: center; gap: 9px; }
+.tick-gauge-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: var(--text-3);
+}
+.tick-gauge-state {
+  font-size: 11.5px;
+  font-weight: 700;
+  border-radius: 5px;
+  padding: 2px 8px;
+  color: var(--ok);
+  background: var(--ok-soft);
+}
+.tick-gauge.over .tick-gauge-state { color: var(--err); background: var(--err-soft); }
+
+.tick-gauge-val {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  line-height: 1;
+  color: var(--text);
+}
+.tick-gauge.over .tick-gauge-val { color: var(--err); }
+.tick-gauge-unit {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
+.tick-gauge-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.tick-gauge-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--ok);
+  transition: width 0.35s ease;
+}
+.tick-gauge.over .tick-gauge-bar i { background: var(--err); }
+
+.tick-gauge-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.tick-gauge-pct { font-family: var(--mono); font-weight: 700; color: var(--text-2); }
+.tick-gauge.over .tick-gauge-pct { color: var(--err); }
+.tick-gauge-cnt {
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--err);
+  background: var(--err-soft);
+  border-radius: 5px;
+  padding: 2px 8px;
+}
+
+/* 범례 항목 중 클릭 대상이 아닌 것 (1TICK 차트는 시리즈 토글이 없다) */
 .ts-legend-item.static { cursor: default; background: transparent; }
 .ts-legend-item.static:hover { background: transparent; }
 .legend-swatch.dashed {
   background-image: repeating-linear-gradient(90deg, currentColor 0 3px, transparent 3px 6px);
 }
 
-/* ── 초과 구간 목록 ── */
-.tick-seg-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+/* ── 초과한 순간 목록 ── */
+.tick-seg-list { display: flex; flex-direction: column; gap: 8px; }
 .tick-seg-item {
   border: 1px solid var(--border);
   border-left: 3px solid var(--err);
@@ -4683,9 +4738,9 @@ button.tbd-row:not(:disabled):hover {
 .tick-seg-head {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 13px;
   width: 100%;
-  padding: 11px 14px;
+  padding: 12px 15px;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -4699,9 +4754,6 @@ button.tbd-row:not(:disabled):hover {
   font-size: 14px;
   font-weight: 700;
   color: var(--text);
-  display: inline-flex;
-  align-items: baseline;
-  gap: 7px;
 }
 .tick-seg-dur {
   font-size: 11.5px;
@@ -4709,45 +4761,30 @@ button.tbd-row:not(:disabled):hover {
   color: var(--text-muted);
   background: var(--surface-3);
   border-radius: 4px;
-  padding: 1px 6px;
+  padding: 2px 7px;
 }
 .tick-seg-peak {
+  margin-left: auto;
   display: inline-flex;
   align-items: baseline;
-  gap: 5px;
-  margin-left: auto;
-}
-.tick-seg-peak-val {
+  gap: 6px;
   font-family: var(--mono);
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--err);
-  letter-spacing: -0.4px;
 }
-.tick-seg-peak-unit { font-size: 11.5px; color: var(--text-muted); }
+.tick-seg-peak b { font-size: 17px; font-weight: 700; color: var(--err); letter-spacing: -0.4px; }
+.tick-seg-slash { font-size: 12.5px; color: var(--text-muted); }
 .tick-seg-over {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
   color: var(--err);
   background: var(--err-soft);
   border-radius: 5px;
-  padding: 3px 8px;
+  padding: 3px 9px;
+  min-width: 52px;
+  text-align: center;
 }
-.tick-seg-at {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.tick-seg-body {
-  border-top: 1px solid var(--border);
-  padding: 12px 14px 14px;
-}
-.tick-win-sum {
-  font-size: 12.5px;
-  color: var(--text-3);
-  margin-bottom: 9px;
-}
+.tick-seg-body { border-top: 1px solid var(--border); padding: 12px 15px 14px; }
+.tick-win-sum { font-size: 12.5px; color: var(--text-3); margin-bottom: 9px; }
 .tick-win-sum b { color: var(--text); font-weight: 700; }
 
 .token-recent.tick-calls td.mono { font-family: var(--mono); font-size: 12.5px; }

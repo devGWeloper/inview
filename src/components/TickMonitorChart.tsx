@@ -2,11 +2,9 @@
 
 import { useMemo } from "react";
 import {
-  Bar,
+  Area,
+  AreaChart,
   Brush,
-  Cell,
-  ComposedChart,
-  Line,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -15,18 +13,16 @@ import {
 } from "recharts";
 import { TickMinute } from "@/lib/types";
 
-// 1TICK 모니터 차트 — 분 격자 위에 두 가지를 겹쳐 그린다.
-//   막대(연회색) = 정각 분 합계. 참고용이며 **초과 판정 기준이 아니다**.
-//   선(굵게)     = 그 분에 시작하는 60초 창의 최대값 = 실제 TPM/RPM.
-//   점선         = 한도(/admin 에서 설정). 선이 이 위로 올라간 분이 진짜 초과.
-// 막대와 선이 다르게 나오는 분이 바로 "정각 기준으로는 안 보이던 초과" 다.
+// 1TICK 모니터 차트 — 1분 격자에 값 하나만 그린다.
+//   면/선 = 그 분에서 가장 몰린 연속 60초의 값 = 실제 TPM/RPM (초과 판정값).
+//   점선  = 한도(/admin 에서 설정). 면이 이 위로 올라간 분이 초과.
+// ⚠️ 정각 분 합계(TickMinute.fixed*)는 판정에 안 쓰이므로 **그리지 않는다** —
+//    한 화면에 판정값과 비판정값을 같이 두면 어느 게 기준인지 읽는 사람이 혼란스럽다.
 
 export type TickMetric = "tpm" | "rpm";
 
 const ROLL_COLOR = "#2563eb";
 const ROLL_OVER_COLOR = "#b42318";
-const FIXED_COLOR = "#cbd5e1";
-const FIXED_OVER_COLOR = "#f0b4ae";
 
 export function fmtCompact(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1) + "M";
@@ -36,27 +32,40 @@ export function fmtCompact(n: number): string {
 
 /** 'YYYY-MM-DDTHH:MM:SS' → 'HH:MM' */
 const hhmm = (ts: string) => ts.slice(11, 16);
-/** 'YYYY-MM-DDTHH:MM:SS' → 'HH:MM:SS' (초 단위 창 시작 시각 표시용) */
+/** 'YYYY-MM-DDTHH:MM:SS' → 'HH:MM:SS' */
 const hhmmss = (ts: string) => ts.slice(11, 19);
+
+/**
+ * 60초 구간을 '시작 ~ 끝' 으로 적는다 (예: "09:16:30 ~ 09:17:30").
+ * 끝 시각을 직접 보여준다 — "+60s" 같은 표기는 한 번 더 계산해야 읽힌다.
+ */
+export function windowLabel(startTs: string | null): string | null {
+  if (!startTs) return null;
+  const ms = Date.parse(startTs);
+  if (!Number.isFinite(ms)) return null;
+  const end = new Date(ms + 60_000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${hhmmss(startTs)} ~ ${pad(end.getHours())}:${pad(end.getMinutes())}:${pad(end.getSeconds())}`;
+}
 
 type Row = {
   ts: string;
   tick: string;
-  fixed: number;
   roll: number;
-  rollAt: string | null;
+  /** roll 을 만든 60초 구간의 시작~끝 (예: "09:16:30 ~ 09:17:30"). 값이 0 이면 null */
+  window: string | null;
   over: boolean;
 };
 
 export function toRows(minutes: TickMinute[], metric: TickMetric, limit: number): Row[] {
   return minutes.map((m) => {
     const roll = metric === "tpm" ? m.rollTokens : m.rollCalls;
+    const at = metric === "tpm" ? m.rollTokensAt : m.rollCallsAt;
     return {
       ts: m.ts,
       tick: hhmm(m.ts),
-      fixed: metric === "tpm" ? m.fixedTokens : m.fixedCalls,
       roll,
-      rollAt: metric === "tpm" ? m.rollTokensAt : m.rollCallsAt,
+      window: windowLabel(at),
       over: limit > 0 && roll > limit,
     };
   });
@@ -83,17 +92,12 @@ function TickTooltip({
           <span className="ts-tooltip-key">{metric.toUpperCase()}</span>
           <span className="ts-tooltip-val">{row.roll.toLocaleString()} {unit}</span>
         </div>
-        {row.rollAt && (
+        {row.window && (
           <div className="ts-tooltip-row two-col">
-            <span className="ts-tooltip-key">구간</span>
-            <span className="ts-tooltip-val">{hhmmss(row.rollAt)} ~ +60s</span>
+            <span className="ts-tooltip-key">가장 몰린 60초</span>
+            <span className="ts-tooltip-val">{row.window}</span>
           </div>
         )}
-        <div className="ts-tooltip-row">
-          <span className="ts-tooltip-swatch" style={{ background: FIXED_COLOR }} />
-          <span className="ts-tooltip-key">분 합계</span>
-          <span className="ts-tooltip-val">{row.fixed.toLocaleString()} {unit}</span>
-        </div>
         {pct !== null && (
           <div className="ts-tooltip-row total">
             <span className="ts-tooltip-key">한도</span>
@@ -129,10 +133,6 @@ export function TickMonitorChart({
           <span className="legend-swatch" style={{ background: ROLL_COLOR }} />
           {metric.toUpperCase()}
         </span>
-        <span className="ts-legend-item static">
-          <span className="legend-swatch" style={{ background: FIXED_COLOR }} />
-          분 합계
-        </span>
         {limit > 0 && (
           <span className="ts-legend-item static">
             <span className="legend-swatch dashed" style={{ background: ROLL_OVER_COLOR }} />
@@ -145,7 +145,13 @@ export function TickMonitorChart({
 
       <div className="ts-chart">
         <ResponsiveContainer width="100%" height={340}>
-          <ComposedChart data={data} margin={{ top: 14, right: 18, bottom: 0, left: 0 }}>
+          <AreaChart data={data} margin={{ top: 14, right: 18, bottom: 0, left: 0 }}>
+            <defs>
+              <linearGradient id="tick-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={ROLL_COLOR} stopOpacity={0.42} />
+                <stop offset="100%" stopColor={ROLL_COLOR} stopOpacity={0.04} />
+              </linearGradient>
+            </defs>
             <XAxis
               dataKey="tick"
               tick={{ fill: "var(--text-2)", fontSize: 12, fontWeight: 600, fontFamily: "var(--mono)" }}
@@ -166,13 +172,8 @@ export function TickMonitorChart({
             />
             <Tooltip
               content={<TickTooltip metric={metric} limit={limit} />}
-              cursor={{ fill: "var(--accent)", fillOpacity: 0.06 }}
+              cursor={{ stroke: "var(--accent)", strokeDasharray: "3 3", strokeOpacity: 0.4 }}
             />
-            <Bar dataKey="fixed" name="분 합계" barSize={7} radius={[2, 2, 0, 0]} isAnimationActive={false}>
-              {data.map((d, i) => (
-                <Cell key={i} fill={d.over ? FIXED_OVER_COLOR : FIXED_COLOR} />
-              ))}
-            </Bar>
             {limit > 0 && (
               <ReferenceLine
                 y={limit}
@@ -189,12 +190,13 @@ export function TickMonitorChart({
                 }}
               />
             )}
-            <Line
+            <Area
               type="monotone"
               dataKey="roll"
               name={metric.toUpperCase()}
               stroke={ROLL_COLOR}
               strokeWidth={2.1}
+              fill="url(#tick-grad)"
               isAnimationActive={false}
               dot={(props: { cx?: number; cy?: number; index?: number }) => {
                 const d = data[props.index ?? -1];
@@ -226,7 +228,7 @@ export function TickMonitorChart({
                 tickFormatter={() => ""}
               />
             )}
-          </ComposedChart>
+          </AreaChart>
         </ResponsiveContainer>
       </div>
     </div>

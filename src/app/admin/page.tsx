@@ -19,6 +19,9 @@ function AdminEditor() {
   const [fteActs, setFteActs] = useState<{ action: string; minutes: string }[]>([]);
   const [fteDefText, setFteDefText] = useState("");
   const [fteAnnText, setFteAnnText] = useState("");
+  // LLM 사용량 한도(TPM/RPM) 편집용 — 0/빈칸 = 미설정
+  const [tpmText, setTpmText] = useState("");
+  const [rpmText, setRpmText] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -33,6 +36,8 @@ function AdminEditor() {
       .map((a) => ({ action: a.action, minutes: String(a.minutes) })));
     setFteDefText(String(p.fteDefaultMinutes));
     setFteAnnText(String(p.fteAnnualMinutes));
+    setTpmText(p.tpmLimit > 0 ? String(p.tpmLimit) : "");
+    setRpmText(p.rpmLimit > 0 ? String(p.rpmLimit) : "");
   }, []);
 
   useEffect(() => {
@@ -127,11 +132,28 @@ function AdminEditor() {
       setMsg({ kind: "err", text: "FTE 계산식 상수(기본 분·연간 분)는 0보다 큰 숫자여야 합니다." });
       return;
     }
+    // 사용량 한도: 빈칸 = 미설정(0). 음수/비숫자는 거부한다 —
+    // 잘못된 값이 1TICK 모니터의 초과 기준선으로 그려지면 오판을 부른다.
+    const parseLimit = (text: string): number | null => {
+      if (text.trim() === "") return 0;
+      const n = Number(text);
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    };
+    const tpmLimit = parseLimit(tpmText);
+    const rpmLimit = parseLimit(rpmText);
+    if (tpmLimit === null || rpmLimit === null) {
+      setSaving(false);
+      setMsg({ kind: "err", text: "사용량 한도(TPM/RPM)는 0 이상의 숫자이거나 빈칸(미설정)이어야 합니다." });
+      return;
+    }
     try {
       const data = await apiJson<{ profile: AgentProfile }>("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...profile, skills, fteActionMinutes, fteDefaultMinutes, fteAnnualMinutes }),
+        body: JSON.stringify({
+          ...profile, skills, fteActionMinutes, fteDefaultMinutes, fteAnnualMinutes,
+          tpmLimit, rpmLimit,
+        }),
       });
       applyProfile(data.profile);
       setMsg({ kind: "ok", text: "저장되었습니다." });
@@ -215,6 +237,22 @@ function AdminEditor() {
             </Field>
             <Field label="1 FTE 연간 분 (기본 65,984)">
               <input value={fteAnnText} onChange={(e) => setFteAnnText(e.target.value)} placeholder="예: 65984" inputMode="numeric" />
+            </Field>
+          </div>
+        </fieldset>
+
+        <fieldset className="admin-section">
+          <legend>LLM 사용량 한도 (TPM / RPM)</legend>
+          <p className="admin-hint admin-hint-top">
+            Tokens 탭의 <b>1TICK</b> 모니터가 이 값을 기준선으로 씁니다. 연속 60초 기준으로 판정하며,
+            빈칸이면 기준선 없이 추이만 표시합니다.
+          </p>
+          <div className="admin-grid admin-fte-consts">
+            <Field label="TPM 한도 — 분당 토큰 (빈칸 = 미설정)">
+              <input value={tpmText} onChange={(e) => setTpmText(e.target.value)} placeholder="예: 200000" inputMode="numeric" />
+            </Field>
+            <Field label="RPM 한도 — 분당 호출 수 (빈칸 = 미설정)">
+              <input value={rpmText} onChange={(e) => setRpmText(e.target.value)} placeholder="예: 60" inputMode="numeric" />
             </Field>
           </div>
         </fieldset>

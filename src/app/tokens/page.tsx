@@ -7,10 +7,13 @@ import { TokenBreakdown } from "@/components/TokenBreakdown";
 import { TokenStatsCards } from "@/components/TokenStatsCards";
 import { QuestionsTable } from "@/components/QuestionsTable";
 import { TopList } from "@/components/TopList";
-import { TokenFilter, TokenRow, TokenStatsResponse } from "@/lib/types";
+import { TickMonitor, TickWindowMin } from "@/components/TickMonitor";
+import { AgentProfile, TickStatsResponse, TokenFilter, TokenRow, TokenStatsResponse } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 
-type Preset = "1h" | "6h" | "24h" | "7d" | "30d" | "custom";
+// "1tick" 은 다른 프리셋과 성격이 다르다 — 기간을 고르는 게 아니라 화면 자체를
+// 분당 TPM/RPM 모니터로 바꾼다(격자도 응답 형태도 다르므로 /api/tokens/tick 을 쓴다).
+type Preset = "1h" | "6h" | "24h" | "7d" | "30d" | "custom" | "1tick";
 
 const PRESETS: { key: Preset; label: string; hours: number }[] = [
   { key: "1h",  label: "1H",  hours: 1   },
@@ -24,6 +27,17 @@ function toLocalInput(ms: number): string {
   const d = new Date(ms);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
+ * 초까지 살린 로컬 시각 문자열.
+ * ⚠️ 1TICK 은 toLocalInput(분 정밀) + ":00" 를 쓰면 안 된다 — 현재 분이 통째로 잘려
+ *    방금 난 버스트가 화면에 안 잡힌다.
+ */
+function toLocalSec(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 function fmtRange(from: string | null, to: string | null): string {
@@ -40,6 +54,11 @@ export default function TokensPage() {
   const [customTo, setCustomTo] = useState("");
 
   const [stats, setStats] = useState<TokenStatsResponse | null>(null);
+  // 1TICK 모니터 전용 상태 (창 길이 / 자동 새로고침 / 응답 / 프로필의 TPM·RPM 한도)
+  const [tickWin, setTickWin] = useState<TickWindowMin>(60);
+  const [tickAuto, setTickAuto] = useState(false);
+  const [tick, setTick] = useState<TickStatsResponse | null>(null);
+  const [limits, setLimits] = useState<{ tpm: number; rpm: number }>({ tpm: 0, rpm: 0 });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   // 셀렉트 옵션은 첫 응답의 byNode/byModel 에서 도출(필터로 좁혀져도 옵션은 유지)
@@ -87,7 +106,56 @@ export default function TokensPage() {
     }
   }, []);
 
+  // 1TICK 조회 — 창 길이(분)만큼 "지금까지" 를 초 정밀로 잡아 /api/tokens/tick 을 부른다.
+  // over 로 방금 바뀐 필터 값을 넘길 수 있다(상태 반영 전 클릭/선택 대응).
+  const loadTick = useCallback(
+    async (win: TickWindowMin, over?: { userId?: string; nodeNm?: string; modelNm?: string }) => {
+      setLoading(true);
+      setErr(null);
+      try {
+        const now = Date.now();
+        const q = new URLSearchParams({
+          dateFrom: toLocalSec(now - win * 60_000),
+          dateTo: toLocalSec(now),
+        });
+        const u = over && "userId" in over ? over.userId : userId;
+        const n = over && "nodeNm" in over ? over.nodeNm : nodeNm;
+        const m = over && "modelNm" in over ? over.modelNm : modelNm;
+        if (u) q.set("userId", u);
+        if (n) q.set("nodeNm", n);
+        if (m) q.set("modelNm", m);
+        const data = await apiJson<TickStatsResponse>(`/api/tokens/tick?${q.toString()}`, { cache: "no-store" });
+        setTick(data);
+      } catch (e) {
+        setErr(errMessage(e, "1TICK 모니터를 불러오지 못했습니다."));
+        setTick(null);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [userId, nodeNm, modelNm]
+  );
+
   useEffect(() => { load(computeFilter()); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+
+  // TPM/RPM 한도는 프로필(/admin 편집)에서 온다. 실패해도 무해 — 한도 미설정으로 본다.
+  useEffect(() => {
+    let alive = true;
+    apiJson<{ profile: AgentProfile }>("/api/profile", { cache: "no-store" })
+      .then((d) => {
+        if (!alive || !d.profile) return;
+        setLimits({ tpm: d.profile.tpmLimit ?? 0, rpm: d.profile.rpmLimit ?? 0 });
+      })
+      .catch(() => { /* 한도 없이도 추이는 보여준다 */ });
+    return () => { alive = false; };
+  }, []);
+
+  // 자동 새로고침 (1TICK 모드에서만). 창이 계속 앞으로 밀리므로 매번 새로 계산해 부른다.
+  useEffect(() => {
+    if (preset !== "1tick" || !tickAuto) return;
+    const id = setInterval(() => loadTick(tickWin), 30_000);
+    return () => clearInterval(id);
+  }, [preset, tickAuto, tickWin, loadTick]);
 
   // 질문 행 펼침: traceId 로만 그 질문의 호출별 행을 가져온다.
   // 화면 필터(기간/노드/모델)를 같이 보내지 않는 이유: 한 질문을 펼치면 그 질문이 거친 호출
@@ -101,11 +169,16 @@ export default function TokensPage() {
 
   const onApply = (e: React.FormEvent) => {
     e.preventDefault();
-    load(computeFilter());
+    if (preset === "1tick") loadTick(tickWin);
+    else load(computeFilter());
   };
 
   const onPresetClick = (k: Preset) => {
     setPreset(k);
+    if (k === "1tick") {
+      loadTick(tickWin);
+      return;
+    }
     if (k !== "custom") {
       const p = PRESETS.find((x) => x.key === k)!;
       const now = Date.now();
@@ -131,12 +204,23 @@ export default function TokensPage() {
     load({ ...computeFilter(), modelNm: next || undefined });
   };
 
+  /** NODE/MODEL/USER 필터 변경 — 현재 모드에 맞는 쪽을 다시 조회한다 */
+  const reloadWith = (over: { userId?: string; nodeNm?: string; modelNm?: string }) => {
+    if (preset === "1tick") loadTick(tickWin, over);
+    else load({ ...computeFilter(), ...over });
+  };
+
+  const onTickWin = (w: TickWindowMin) => {
+    setTickWin(w);
+    loadTick(w);
+  };
+
   const hasFilter = !!(userId || nodeNm || modelNm);
   const clearFilters = () => {
     setUserId("");
     setNodeNm("");
     setModelNm("");
-    load({ ...computeFilter(), userId: undefined, nodeNm: undefined, modelNm: undefined });
+    reloadWith({ userId: undefined, nodeNm: undefined, modelNm: undefined });
   };
 
   return (
@@ -145,8 +229,12 @@ export default function TokensPage() {
         <div className="dash-title">
           <div className="dash-title-main">Token Usage</div>
           <div className="dash-title-sub">
-            {stats ? fmtRange(stats.range.from, stats.range.to) : "—"}
-            <span className="dash-title-note"> · GAIA LLM 호출 기준</span>
+            {preset === "1tick"
+              ? tick ? fmtRange(tick.range.from, tick.range.to) : "—"
+              : stats ? fmtRange(stats.range.from, stats.range.to) : "—"}
+            <span className="dash-title-note">
+              {preset === "1tick" ? " · TPM/RPM" : " · GAIA LLM 호출 기준"}
+            </span>
           </div>
         </div>
         <form className="dash-filter" onSubmit={onApply}>
@@ -161,6 +249,14 @@ export default function TokensPage() {
                 {p.label}
               </button>
             ))}
+            <button
+              type="button"
+              className={"preset-btn tick" + (preset === "1tick" ? " active" : "")}
+              onClick={() => onPresetClick("1tick")}
+              title="분당 TPM/RPM 모니터"
+            >
+              1TICK
+            </button>
             <button
               type="button"
               className={"preset-btn" + (preset === "custom" ? " active" : "")}
@@ -186,7 +282,7 @@ export default function TokensPage() {
           <select
             className="user-input user-select"
             value={nodeNm}
-            onChange={(e) => { const v = e.target.value; setNodeNm(v); load({ ...computeFilter(), nodeNm: v || undefined }); }}
+            onChange={(e) => { const v = e.target.value; setNodeNm(v); reloadWith({ nodeNm: v || undefined }); }}
             aria-label="NODE"
           >
             <option value="">NODE (전체)</option>
@@ -195,7 +291,7 @@ export default function TokensPage() {
           <select
             className="user-input user-select"
             value={modelNm}
-            onChange={(e) => { const v = e.target.value; setModelNm(v); load({ ...computeFilter(), modelNm: v || undefined }); }}
+            onChange={(e) => { const v = e.target.value; setModelNm(v); reloadWith({ modelNm: v || undefined }); }}
             aria-label="MODEL"
           >
             <option value="">MODEL (전체)</option>
@@ -211,7 +307,21 @@ export default function TokensPage() {
       {loading && <div className="dash-banner loading">집계 중…</div>}
       {err && <div className="dash-banner err">불러오기 실패: {err}</div>}
 
-      {stats && (
+      {preset === "1tick" && tick && (
+        <TickMonitor
+          stats={tick}
+          tpmLimit={limits.tpm}
+          rpmLimit={limits.rpm}
+          windowMin={tickWin}
+          onWindowMin={onTickWin}
+          auto={tickAuto}
+          onAuto={setTickAuto}
+          loading={loading}
+          onRefresh={() => loadTick(tickWin)}
+        />
+      )}
+
+      {preset !== "1tick" && stats && (
         <>
           <TokenStatsCards stats={stats} />
 

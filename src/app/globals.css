@@ -4540,3 +4540,227 @@ button.tbd-row:not(:disabled):hover {
 }
 .rs-stats b { font-size: 13px; font-weight: 700; color: var(--text); }
 .rs-stats-sub { font-size: 11.5px; color: var(--text-muted); }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   1TICK — 분당 TPM/RPM 모니터 (Tokens 탭)
+   초과 판정이 정각 분이 아니라 "임의의 연속 60초" 라는 점이 화면의 전제라,
+   기준선/초과는 전부 --err 톤 하나로 통일해 눈이 한 규칙으로 읽게 한다.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* 프리셋 줄에서 1TICK 만 성격이 다르다(기간이 아니라 모드 전환) — 살짝 구분 */
+.preset-btn.tick {
+  font-family: var(--mono);
+  letter-spacing: 0.3px;
+}
+.preset-btn.tick.active {
+  background: var(--err);
+  border-color: var(--err);
+  color: #fff;
+}
+
+.tick-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+}
+.tick-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.tick-badge {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: #fff;
+  background: var(--err);
+  padding: 3px 8px;
+  border-radius: 5px;
+}
+.tick-bar-desc {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.tick-bar-desc b { color: var(--text); font-weight: 700; }
+.tick-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* 메트릭(TPM/RPM) · 창 길이 세그먼트 토글 */
+.tick-seg {
+  display: inline-flex;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.tick-seg-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 5px 11px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.tick-seg-btn:hover { color: var(--text); }
+.tick-seg-btn.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.08);
+}
+.tick-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  cursor: pointer;
+  user-select: none;
+}
+.tick-auto input { accent-color: var(--accent); cursor: pointer; }
+
+.tick-notice {
+  padding: 11px 15px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.tick-notice.warn {
+  border-left-color: var(--warn);
+  background: var(--warn-soft);
+}
+.tick-notice a { color: var(--accent); font-weight: 600; }
+
+.tick-empty {
+  padding: 22px 8px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.tick-empty.ok { color: var(--ok); font-weight: 600; }
+
+/* 범례 중 클릭 대상이 아닌 항목 (1TICK 은 시리즈 토글이 없다 — 두 선의 대비가 요점) */
+.ts-legend-item.static { cursor: default; background: transparent; }
+.ts-legend-item.static:hover { background: transparent; }
+.legend-swatch.dashed {
+  background-image: repeating-linear-gradient(90deg, currentColor 0 3px, transparent 3px 6px);
+}
+
+/* ── 초과 구간 목록 ── */
+.tick-seg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tick-seg-item {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--err);
+  border-radius: 9px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.tick-seg-item.open { background: var(--surface); box-shadow: 0 1px 3px rgba(17, 24, 39, 0.06); }
+.tick-seg-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 11px 14px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  flex-wrap: wrap;
+}
+.tick-seg-head:hover { background: var(--surface-3); }
+.tick-seg-caret { color: var(--text-muted); font-size: 12px; width: 12px; }
+.tick-seg-time {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.tick-seg-dur {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-3);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.tick-seg-peak {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-left: auto;
+}
+.tick-seg-peak-val {
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--err);
+  letter-spacing: -0.4px;
+}
+.tick-seg-peak-unit { font-size: 11.5px; color: var(--text-muted); }
+.tick-seg-over {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--err);
+  background: var(--err-soft);
+  border-radius: 5px;
+  padding: 3px 8px;
+}
+.tick-seg-at {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.tick-seg-body {
+  border-top: 1px solid var(--border);
+  padding: 12px 14px 14px;
+}
+.tick-win-sum {
+  font-size: 12.5px;
+  color: var(--text-3);
+  margin-bottom: 9px;
+}
+.tick-win-sum b { color: var(--text); font-weight: 700; }
+
+.token-recent.tick-calls td.mono { font-family: var(--mono); font-size: 12.5px; }
+.token-recent.tick-calls td.dim { color: var(--text-muted); }
+.token-recent.tick-calls td.strong { font-weight: 700; color: var(--text); }
+.tick-call-flag {
+  display: inline-block;
+  margin-left: 6px;
+  font-family: var(--sans);
+  font-size: 10.5px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.tick-call-flag.timeout { color: var(--err); background: var(--err-soft); }
+.tick-call-flag.error { color: var(--fail); background: var(--fail-soft); }

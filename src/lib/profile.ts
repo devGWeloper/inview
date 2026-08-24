@@ -63,6 +63,13 @@ export function normalizeProfile(raw: unknown): AgentProfile {
     fteActionMinutes = DEFAULT_PROFILE.fteActionMinutes.map((a) => ({ ...a }));
   }
 
+  // 사용량 한도(TPM/RPM): 0 = 미설정을 허용해야 하므로 posNum 이 아닌 별도 보정.
+  //   음수/비숫자는 0(미설정)으로 떨어뜨린다 — 잘못된 값이 기준선으로 그려지지 않게.
+  const nonNegNum = (v: unknown, d: number): number => {
+    const n = typeof v === "string" && v.trim() !== "" ? Number(v) : v;
+    return typeof n === "number" && Number.isFinite(n) && n >= 0 ? n : d;
+  };
+
   return {
     name:         str("name", DEFAULT_PROFILE.name),
     nickname:     str("nickname", DEFAULT_PROFILE.nickname),
@@ -73,6 +80,8 @@ export function normalizeProfile(raw: unknown): AgentProfile {
     // 구버전의 단일 건당 분(fteMinutesPerCase)은 기본 분으로 마이그레이션
     fteDefaultMinutes: posNum(r.fteDefaultMinutes ?? r.fteMinutesPerCase, DEFAULT_PROFILE.fteDefaultMinutes),
     fteAnnualMinutes:  posNum(r.fteAnnualMinutes, DEFAULT_PROFILE.fteAnnualMinutes),
+    tpmLimit:          nonNegNum(r.tpmLimit, DEFAULT_PROFILE.tpmLimit),
+    rpmLimit:          nonNegNum(r.rpmLimit, DEFAULT_PROFILE.rpmLimit),
     tagline:      str("tagline", DEFAULT_PROFILE.tagline),
     avatar:       str("avatar", DEFAULT_PROFILE.avatar),
     avatarImage:  str("avatarImage", DEFAULT_PROFILE.avatarImage),

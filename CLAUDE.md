@@ -99,6 +99,38 @@ The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTI
   - **타임아웃 추적은 Tokens 탭이 아니라 `/timeouts` 탭이 담당한다** (아래 "Timeout 탭" 참고).
   - The Tokens 탭 has two halves: **현황**(KPI/추이 — `TokenStatsCards`/`TokenChart`, LLM 속도 추이 차트 `TokenLatencyChart`, 노드별/모델별 리더보드 카드 `TokenBreakdown` — `byNode`/`byModel` 를 각각 별도 카드(노드=파랑, 모델=보라)로 렌더, 순위 배지 + 큰 값 + 1위 대비 상대 바 + 비중%, 토큰/호출/토큰·호출/속도 공유 메트릭 토글, 행 클릭 = 노드/모델 필터. **노드×모델 교차 집계**(`TokenDimStat.sub`, 별도 `GROUP BY NODE_NM, MODEL_NM` 쿼리)로 각 노드가 실제 쓴 모델 구성(역방향도)을 행 안에 칩+비중% 로 노출 — 한 질문이 여러 노드/모델을 거치므로(예: actionRouterNode=qwen3.6 → SeasoningNode=qwen3.5) "노드=모델 1개" 로 오해하지 않게 하는 장치) and **질문별 토큰**(`QuestionsTable`). A "질문" = one `TRACE_ID`; 한 질문의 호출은 라우터→실행 노드처럼 **여러 노드/모델을 거칠 수 있어** `questions` 는 대표값(MAX) 대신 거쳐간 노드/모델 **전부**를 내린다(`nodes[]`/`models[]`, `LISTAGG ... ON OVERFLOW TRUNCATE` 후 JS 중복 제거, 첫 호출 순) — 표에는 칩으로 나열. `fetchTokenStats` returns `questions` (grouped by `TRACE_ID`, null-trace rows treated as one-call-per-question, **최신 LAST_TM desc 상위 500건** — 토큰순 로드였을 때 최근 질문이 잘려 보이는 착시가 있어 최신순으로 변경). 집계 쿼리들은 `run()` 헬퍼로 **쿼리별 격리 실행**되어 한 쿼리가 SQL 에러여도 그 섹션만 비고 나머지는 정상, 로그에 `fetchTokenStats [섹션명] query failed` + ORA 코드가 남는다. **질의 = 질문의 대표 정보** 관점: 한 질문의 호출들은 같은 `QUERY_CTN` 을 공유하는 게 보통이라, `questions` 가 **원본 질의**(`queryCtn` — 가장 이른 non-null 호출의 QUERY_CTN, `MIN ... KEEP (DENSE_RANK FIRST ORDER BY NVL2(QUERY_CTN,0,1), CALL_TM)`)를 질문 단위로 내리고 표의 질문 셀은 **질의(크게) + TRACE_ID(작게) 2줄**로 그린다. `QuestionsTable` 은 **컬럼별 필터**(질문(질의+TRACE_ID)/USER 텍스트, NODE/MODEL 셀렉트 — 로드된 상위 질문 범위 내 클라이언트 필터) + **헤더 클릭 정렬**(LAST_TM/IN/OUT/TOTAL/CALLS, 재클릭 = 방향 토글, 기본 = LAST_TM desc) 구조. Passing `?traceId=` narrows everything and fills `calls` (per-call rows, incl. `queryCtn`/`latencyMs`) used to expand a question inline. ⚠️ **`calls` 쿼리만은 `TRACE_ID` 단독 조회**다 — 기간/노드/모델 필터를 걸지 않는다. 질문을 펼치는 목적은 그 질문이 실제로 거친 호출 **전부**(라우터→실행 노드)를 보는 것이고, 나머지 필터는 "질문을 찾는" 조건일 뿐이다. 예전엔 창을 그대로 적용한 데다 클라이언트가 **펼침 시점의 `Date.now()`로 창을 다시 계산**해서, 화면을 띄워두고 시간이 흐르면 같은 질문의 호출이 1건/2건으로 잘려 보였다(프리셋 창이 앞으로 밀림). 그래서 `fetchCalls` 도 `traceId` 만 보낸다. 대신 표의 `CALLS`(기간 내 집계)보다 상세가 많을 수 있어 `CallsDetail` 이 "조회 조건 밖 N건 포함" 배지로 차이를 밝힌다 — 펼침(`CallsDetail`)은 **원본 질의 블록**(액센트 보더, 전체 노출 — 280자 초과 시만 3줄 접힘+더 보기 `QueryText`)을 헤드라인으로 두고, 아래에 **호출 타임라인**: 요약 스트립(호출 수 · 노드 흐름 · 총 토큰 · 첫→마지막 구간) + 시간순 `#N` 레일 + 호출 카드(노드→모델 · ⏱응답시간 · 직전 호출과의 간격 · 토큰 바). 호출 카드의 쿼리는 **원본과 다를 때만**(공백 정규화 비교) "이 호출의 쿼리" 로 다시 표시. **any** trace-linked question 에서 가능(호출 1건이어도). `QUERY_CTN` 은 `calls` 쿼리와 `questions` 의 원본 질의 집계에서만 SELECT 한다.
 
+### 1TICK — 분당 TPM/RPM 모니터 (Tokens 탭 프리셋)
+
+사내 LLM 제약이 **TPM/RPM(분당 토큰·호출)** 이라 초과 여부를 화면에서 확인해야 하는데, Tokens 탭의
+기존 추이는 5분/1시간/1일 격자라 분당 판정이 불가능했다. 그래서 프리셋 줄에 **`1TICK`** 을 추가했다 —
+기간을 고르는 다른 프리셋과 달리 **본문을 모니터 뷰로 통째로 전환**한다(격자·응답 형태가 달라서).
+
+- ⚠️ **정각 분 버킷은 판정 기준이 못 된다.** 제약은 "임의의 연속 60초" 기준이라, 12:01:13~12:02:12 에
+  몰린 버스트는 정각 격자에선 두 칸으로 쪼개져 어느 칸도 한도를 안 넘는 것처럼 보인다(실제로는 초과).
+  그래서 **초 단위 SQL 집계 위에서 슬라이딩 60초 윈도우의 최대값**을 구한다. 윈도우 시작을 "호출이 있던 초"
+  로만 잡아도 실수 t 전체의 최대와 같으므로(합은 구간별 상수, 어떤 시작점의 창이든 그 안 첫 호출 시각에서
+  시작하는 창이 같은 호출을 모두 포함) **근사가 아니라 정확한 최대**다.
+- **집계** `src/lib/tickStats.ts` `fetchTickStats()` → `GET /api/tokens/tick` → `TickMonitor`.
+  대상은 `TRX_TOKEN_DET`(앱 자체 DB=GAIA) 하나뿐이고 필터 규칙은 `tokens.ts` 의 `buildWhere()` 를
+  **재사용**한다(두 화면의 조회 범위 해석이 갈리면 같은 조건인데 다른 수치가 나온다). lazy-oracledb-swallow
+  + 쿼리별 `run()` 격리. 초 단위 집계는 호출이 있던 초만 행이 나와 1시간이어도 ≤3600행.
+  - `rollupTick()` 은 **순수 함수**로 분리돼 있다(DB 무관) — 경계 조건(정확히 60초 간격은 창 밖, 빈 입력,
+    같은 초 다건) 검증이 여기 하나로 끝난다.
+  - 응답의 `fixed*` = 정각 분 합계(참고용 막대), `roll*` = 그 분에 시작하는 60초 창의 최대(판정값).
+    `calls` 는 드릴다운용으로 최근 `TICK_CALL_LIMIT`(3000)건까지 — 넘으면 `truncated=true` 로 화면이 알린다.
+- **한도(TPM/RPM)는 `AgentProfile.tpmLimit`/`rpmLimit`** — FTE 계산식 상수와 같은 패턴으로 `/admin` 에서
+  편집하고 프로필 JSON 에 저장된다. **0 = 미설정**이라 `normalizeProfile` 은 여기만 `posNum` 이 아닌
+  `nonNegNum` 으로 보정한다(음수/비숫자 → 0). 미설정이면 기준선·초과 판정 없이 추이만 그린다.
+- **화면** `TickMonitor.tsx` / 차트 `TickMonitorChart.tsx` (`tick-*`): 상단 바(TPM↔RPM 토글 · 창 15/60/180분 ·
+  자동 30초 새로고침) · KPI 4(Peak TPM/RPM + 한도 대비 % · 초과 구간 수 · 호출) · 추이 차트 ·
+  **초과 구간 목록**(연속 초과 분을 구간으로 병합, 행을 열면 그 구간 피크 60초 창의 호출 전부 = 초과 원인).
+  - 차트는 recharts `ComposedChart` — 막대(정각 분 합계, 참고) + 선(롤링 60초 최대, 판정값) + 한도 점선.
+    초과한 분만 선에 점을 찍는다(촘촘한 격자에서 점을 다 찍으면 선이 안 읽힌다).
+  - ⚠️ 조회 시각은 `toLocalSec()`(초 정밀)로 만든다 — 다른 프리셋처럼 분 정밀 + `":00"` 을 쓰면
+    현재 분이 통째로 잘려 방금 난 버스트가 안 잡힌다.
+  - 기존 USER/NODE/MODEL 필터는 그대로 적용된다(`reloadWith()` 가 현재 모드에 맞는 쪽을 다시 조회).
+  - **1TICK 이 아닐 때 Tokens 탭은 기존 경로 그대로다** — 기존 화면 로직은 바뀌지 않았다.
+
 ### Timeout 탭 — `/timeouts` (ADMIN 전용)
 
 LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에러 한 줄" 로 뭉뚱그려져

@@ -69,8 +69,12 @@ function bucketExpr(g: Granularity): string {
   return `TRUNC(CALL_TM, 'HH24') + FLOOR(TO_NUMBER(TO_CHAR(CALL_TM, 'MI')) / 5) * 5 / 1440`;
 }
 
-/** TokenFilter → WHERE 절 + 바인드. 시간 컬럼은 CALL_TM 기준. */
-function buildWhere(filter: TokenFilter): { where: string; binds: Record<string, unknown> } {
+/**
+ * TokenFilter → WHERE 절 + 바인드. 시간 컬럼은 CALL_TM 기준.
+ * 1TICK 모니터(tickStats.ts)도 같은 필터 규칙을 써야 해서 export 한다 —
+ * 두 화면의 "조회 범위" 해석이 갈리면 같은 조건인데 다른 수치가 나온다.
+ */
+export function buildWhere(filter: TokenFilter): { where: string; binds: Record<string, unknown> } {
   const where: string[] = [];
   const binds: Record<string, unknown> = {};
   if (filter.dateFrom) {

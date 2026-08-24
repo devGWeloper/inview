@@ -284,6 +284,13 @@ export interface AgentProfile {
   fteDefaultMinutes: number;
   /** FTE 계산식: 1 FTE(1인 1년)에 해당하는 연간 분(分). ADMIN 에서 편집 가능 (기본 65,984) */
   fteAnnualMinutes: number;
+  /**
+   * LLM 사용량 한도 — TPM(분당 토큰). Tokens 탭 1TICK 모니터의 초과 판정 기준선.
+   * 0 = 미설정(기준선/초과 판정 없이 추이만 표시). ADMIN 에서 편집.
+   */
+  tpmLimit: number;
+  /** LLM 사용량 한도 — RPM(분당 호출). 0 = 미설정. ADMIN 에서 편집 */
+  rpmLimit: number;
   /** 한 줄 소개 */
   tagline: string;
   /** 아바타 이모지 (avatarImage 가 없을 때 폴백) */
@@ -309,6 +316,8 @@ export const DEFAULT_PROFILE: AgentProfile = {
   ],
   fteDefaultMinutes: 5,
   fteAnnualMinutes: 65984,
+  tpmLimit: 0,
+  rpmLimit: 0,
   tagline: "쉬지 않고 일하는 우리 팀의 AI 에이전트",
   avatar: "🧑‍🍳",
   avatarImage: "",
@@ -782,3 +791,83 @@ export interface TimeoutReason {
   timeout: number;
   lastAt: string | null;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1TICK — 분당 TPM/RPM 모니터 (Tokens 탭의 "1TICK" 프리셋)
+//
+// ⚠️ 정각 분 버킷만으로는 TPM/RPM 초과를 판정할 수 없다. 사내 제약은 "임의의 연속 60초"
+//    기준이라, 12:01:13~12:02:12 에 몰린 버스트는 정각 버킷에선 두 칸으로 쪼개져
+//    어느 칸도 한도를 안 넘는 것처럼 보인다(실제로는 초과). 그래서 이 화면은
+//    **초 단위 집계 위에서 슬라이딩 60초 윈도우의 최대값**을 따로 계산해 같이 그린다.
+//      - fixed*  = 정각 분 합계 (참고용 막대)
+//      - roll*   = 그 분에 시작하는 60초 윈도우 중 최대값 (초과 판정의 실제 기준)
+//    한도(tpmLimit/rpmLimit)는 AgentProfile 에서 온다 (/admin 편집).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 1TICK 조회 필터 — TokenFilter 의 시간/차원 필터와 동일 규칙 (traceId 없음) */
+export interface TickFilter {
+  dateFrom?: string;
+  dateTo?: string;
+  userId?: string;
+  nodeNm?: string;
+  modelNm?: string;
+}
+
+/** 분 1칸. 빈 분도 0 으로 채워 내려간다(차트 격자를 균일하게 유지). */
+export interface TickMinute {
+  /** 분 시작 시각 (ISO 형태, TZ 없음) */
+  ts: string;
+  /** 정각 분 [ts, ts+60s) 합계 — 참고용 */
+  fixedTokens: number;
+  fixedCalls: number;
+  fixedInputTokens: number;
+  fixedOutputTokens: number;
+  /** 이 분 안에서 시작하는 60초 윈도우 중 토큰 최대치 (= 그 시점 실제 TPM) */
+  rollTokens: number;
+  /** rollTokens 를 만든 윈도우의 시작 시각 (초 단위 ISO). 값이 0 이면 null */
+  rollTokensAt: string | null;
+  /** 이 분 안에서 시작하는 60초 윈도우 중 호출 수 최대치 (= 그 시점 실제 RPM) */
+  rollCalls: number;
+  /** rollCalls 를 만든 윈도우의 시작 시각 (초 단위 ISO). 값이 0 이면 null */
+  rollCallsAt: string | null;
+}
+
+/** 기간 전체의 롤링 피크 1건 */
+export interface TickPeak {
+  value: number;
+  /** 피크 윈도우 시작 시각 (초 단위 ISO). 데이터가 없으면 null */
+  at: string | null;
+}
+
+/** 드릴다운용 호출 1건 — "왜 초과났나" 를 보려고 초과 윈도우 안의 호출을 나열한다 */
+export interface TickCall {
+  callTm: string | null;
+  traceId: string | null;
+  nodeNm: string | null;
+  modelNm: string | null;
+  userId: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  latencyMs: number | null;
+  statCd: string | null;
+  errCtn: string | null;
+}
+
+export interface TickStatsResponse {
+  range: { from: string | null; to: string | null };
+  /** 분 격자 (빈 분 포함, 오름차순) */
+  minutes: TickMinute[];
+  /** 기간 전체 롤링 60초 피크 */
+  peakTpm: TickPeak;
+  peakRpm: TickPeak;
+  /** 기간 내 총 호출/총 토큰 (KPI 용) */
+  totals: { calls: number; totalTokens: number };
+  /** 드릴다운용 호출 목록 (callTm asc). 상한을 넘으면 잘리고 truncated=true */
+  calls: TickCall[];
+  /** calls 가 상한(TICK_CALL_LIMIT)에 걸려 잘렸는지 */
+  truncated: boolean;
+}
+
+/** 롤링 윈도우 길이(초). TPM/RPM 의 "per minute" 정의 그대로 60초. */
+export const TICK_WINDOW_SEC = 60;

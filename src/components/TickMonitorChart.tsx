@@ -14,7 +14,7 @@ import {
 import { TickMinute } from "@/lib/types";
 
 // 1TICK 모니터 차트 — 1분 격자에 값 하나만 그린다.
-//   면/선 = 그 분에서 가장 몰린 연속 60초의 값 = 실제 TPM/RPM (초과 판정값).
+//   면/선 = 그 분의 TPM/RPM (= 그 분 안에서 값이 가장 큰 연속 60초. 초과 판정값).
 //   점선  = 한도(/admin 에서 설정). 면이 이 위로 올라간 분이 초과.
 // ⚠️ 정각 분 합계(TickMinute.fixed*)는 판정에 안 쓰이므로 **그리지 않는다** —
 //    한 화면에 판정값과 비판정값을 같이 두면 어느 게 기준인지 읽는 사람이 혼란스럽다.
@@ -52,7 +52,7 @@ type Row = {
   ts: string;
   tick: string;
   roll: number;
-  /** roll 을 만든 60초 구간의 시작~끝 (예: "09:16:30 ~ 09:17:30"). 값이 0 이면 null */
+  /** 이 값이 측정된 60초 구간 (예: "09:16:30 ~ 09:17:30"). 값이 0 이면 null */
   window: string | null;
   over: boolean;
 };
@@ -85,19 +85,14 @@ function TickTooltip({
   const pct = limit > 0 ? Math.round((row.roll / limit) * 100) : null;
   return (
     <div className="ts-tooltip">
-      <div className="ts-tooltip-head">{row.ts.slice(0, 16).replace("T", " ")}</div>
+      {/* 제목이 곧 이 값이 측정된 60초 구간 — 별도 라벨을 두지 않는다 */}
+      <div className="ts-tooltip-head">{row.window ?? row.ts.slice(0, 16).replace("T", " ")}</div>
       <div className="ts-tooltip-body">
         <div className="ts-tooltip-row">
           <span className="ts-tooltip-swatch" style={{ background: row.over ? ROLL_OVER_COLOR : ROLL_COLOR }} />
           <span className="ts-tooltip-key">{metric.toUpperCase()}</span>
           <span className="ts-tooltip-val">{row.roll.toLocaleString()} {unit}</span>
         </div>
-        {row.window && (
-          <div className="ts-tooltip-row two-col">
-            <span className="ts-tooltip-key">가장 몰린 60초</span>
-            <span className="ts-tooltip-val">{row.window}</span>
-          </div>
-        )}
         {pct !== null && (
           <div className="ts-tooltip-row total">
             <span className="ts-tooltip-key">한도</span>

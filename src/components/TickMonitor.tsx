@@ -13,7 +13,7 @@ import { TickMetric, TickMonitorChart, fmtCompact, windowLabel } from "@/compone
 //   ② 언제 넘었나?  → 추이 차트 (게이지를 클릭해 TPM/RPM 전환 — 별도 토글을 두지 않는다)
 //   ③ 왜 넘었나?    → 초과한 순간 목록. 행을 열면 그 60초의 호출이 전부 나온다.
 //
-// 값은 전부 "그 분에서 가장 몰린 연속 60초" 기준이다(서버 tickStats.ts 계산).
+// 표시되는 TPM/RPM 은 전부 "그 분 안에서 값이 가장 큰 연속 60초" 다(서버 tickStats.ts 계산).
 // 정각 분 합계는 판정에 안 쓰이므로 화면에 그리지 않는다 — 판정값과 비판정값을
 // 나란히 두면 어느 게 기준인지 읽는 사람이 헷갈린다.
 
@@ -131,8 +131,7 @@ export function TickMonitor({
 
       {noLimit && (
         <div className="tick-notice">
-          한도가 없어 사용량만 표시합니다.
-          {" "}<Link href="/admin" prefetch={false}>관리자 페이지</Link>에서 TPM/RPM 한도를 설정하세요.
+          한도 미설정 · <Link href="/admin" prefetch={false}>관리자 페이지</Link>에서 설정
         </div>
       )}
 
@@ -153,7 +152,6 @@ export function TickMonitor({
         <div className="dash-card-head">
           <div className="dash-card-title-group">
             <span className="dash-card-title">{metric.toUpperCase()} 추이</span>
-            <span className="dash-card-sub">1분마다 · 그 분에서 가장 몰린 60초 값</span>
           </div>
           <div className="dash-card-aux">
             <span className={"aux-pill" + (limit > 0 && peak.value > limit ? " err" : "")}>
@@ -171,12 +169,11 @@ export function TickMonitor({
         <div className="dash-card-head">
           <div className="dash-card-title-group">
             <span className="dash-card-title">{metric.toUpperCase()} 초과한 순간</span>
-            <span className="dash-card-sub">행을 열면 그 60초 안의 호출이 나옵니다</span>
           </div>
         </div>
         <div className="dash-card-body">
           {limit <= 0 ? (
-            <div className="tick-empty">{metric.toUpperCase()} 한도가 설정되지 않았습니다.</div>
+            <div className="tick-empty">한도 미설정</div>
           ) : segments.length === 0 ? (
             <div className="tick-empty ok">✓ 초과 없음</div>
           ) : (
@@ -205,7 +202,7 @@ export function TickMonitor({
                     {open && (
                       <div className="tick-seg-body">
                         {inWin.length === 0 ? (
-                          <div className="tick-empty">호출 상세를 불러오지 못했습니다.</div>
+                          <div className="tick-empty">—</div>
                         ) : (
                           <>
                             <div className="tick-win-sum">
@@ -226,8 +223,7 @@ export function TickMonitor({
 
       {stats.truncated && (
         <div className="tick-notice warn">
-          호출이 많아 최근 것만 불러왔습니다. 오래된 구간은 호출 목록이 비어 있을 수 있으니
-          조회 범위를 좁히거나 필터를 거세요.
+          호출이 많아 최근 것만 표시됩니다.
         </div>
       )}
     </>

@@ -243,15 +243,11 @@ function AdminEditor() {
 
         <fieldset className="admin-section">
           <legend>LLM 사용량 한도 (TPM / RPM)</legend>
-          <p className="admin-hint admin-hint-top">
-            Tokens 탭의 <b>1TICK</b> 모니터가 이 값을 기준선으로 씁니다. 연속 60초 기준으로 판정하며,
-            빈칸이면 기준선 없이 추이만 표시합니다.
-          </p>
           <div className="admin-grid admin-fte-consts">
-            <Field label="TPM 한도 — 분당 토큰 (빈칸 = 미설정)">
+            <Field label="TPM (분당 토큰)">
               <input value={tpmText} onChange={(e) => setTpmText(e.target.value)} placeholder="예: 200000" inputMode="numeric" />
             </Field>
-            <Field label="RPM 한도 — 분당 호출 수 (빈칸 = 미설정)">
+            <Field label="RPM (분당 호출)">
               <input value={rpmText} onChange={(e) => setRpmText(e.target.value)} placeholder="예: 60" inputMode="numeric" />
             </Field>
           </div>

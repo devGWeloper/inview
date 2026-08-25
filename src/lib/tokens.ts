@@ -1,4 +1,4 @@
-import { getAppDbConfig } from "./config";
+import { getAgentDbConfig } from "./config";
 import { logger } from "./logger";
 import {
   TokenBucket,
@@ -20,7 +20,7 @@ import {
 import { SQL_ERR_PRED, SQL_OK_PRED } from "./tokenStatus";
 
 // GAIA LLM 호출별 토큰 사용량(TRX_TOKEN_DET) 집계.
-// 앱 자체 DB(= GAIA, config.ts APP_DB_LAYER)에서만 조회한다(BIZ 테이블처럼 fan-out 안 함).
+// filter.agentId 가 가리키는 에이전트의 GAIA DB 에서만 조회한다(BIZ 테이블처럼 fan-out 안 함).
 // 행이 많을 수 있어 JS 전수 집계 대신 SQL GROUP BY 로 집계한다.
 
 // oracledb 는 next.config 의 serverComponentsExternalPackages 로 빠져 있어 lazy import.
@@ -135,7 +135,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     emptyBucket(isoNoTz(k))
   );
 
-  const cfg = getAppDbConfig();
+  const cfg = getAgentDbConfig(filter.agentId);
   if (!cfg) return emptyStats(filter, g, emptyBuckets);
   const oracle = await getOracle();
   if (!oracle) return emptyStats(filter, g, emptyBuckets);

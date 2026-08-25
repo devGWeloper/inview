@@ -2,7 +2,7 @@
 // 세션 토큰 (서명 쿠키).
 //
 // 형식:  base64url(JSON payload) + "." + base64url(HMAC-SHA256)
-// payload = { sub: 사번, name, role, exp(초) }
+// payload = { sub: 사번, name, role, agentId?(결속 에이전트), exp(초) }
 //
 // ⚠️ Edge 미들웨어와 Node 라우트 핸들러 양쪽에서 쓰므로 Web Crypto(globalThis.crypto
 //    .subtle)만 사용한다. Node 전용 'crypto' 모듈이나 Buffer 를 import 하지 말 것.
@@ -42,6 +42,16 @@ export interface SessionPayload {
   sub: string; // 사번
   name: string;
   role: Role;
+  /**
+   * 접근 가능 에이전트 id (TRX_USER_MAS.AGENT_ID). 없으면 전 에이전트 접근.
+   *
+   * ⚠️ optional 인 이유가 두 가지다 —
+   *   ① 계정에 결속이 없다(NULL = 운영자/기존 계정)
+   *   ② 이 필드가 생기기 **전에 발급된 쿠키**에는 아예 키가 없다
+   *  둘 다 "제한 없음" 으로 같게 읽어야 한다. 없다고 검증을 실패시키면 기존 로그인이
+   *  전부 끊긴다 (verifySession 참고).
+   */
+  agentId?: string;
   exp: number; // 만료 시각 (Unix epoch 초)
 }
 
@@ -89,7 +99,15 @@ async function importKey(): Promise<CryptoKey> {
 /** payload 를 서명해 세션 토큰 문자열을 만든다. */
 export async function signSession(input: Omit<SessionPayload, "exp"> & { exp?: number }): Promise<string> {
   const exp = input.exp ?? Math.floor(Date.now() / 1000) + SESSION_TTL_SEC;
-  const payload: SessionPayload = { sub: input.sub, name: input.name, role: input.role, exp };
+  // agentId 가 없으면 JSON.stringify 가 키째 빼므로, 결속 없는 계정의 토큰은
+  // 이 필드가 생기기 전과 동일한 모양을 유지한다.
+  const payload: SessionPayload = {
+    sub: input.sub,
+    name: input.name,
+    role: input.role,
+    agentId: input.agentId || undefined,
+    exp,
+  };
   const body = strToB64url(JSON.stringify(payload));
   const key = await importKey();
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
@@ -117,9 +135,12 @@ export async function verifySession(token: string | undefined | null): Promise<S
     const name = typeof parsed.name === "string" ? parsed.name : "";
     const role = parsed.role;
     const exp = typeof parsed.exp === "number" ? parsed.exp : 0;
+    // ⚠️ agentId 는 **없어도 정상**이다 (결속 없는 계정 · 이 필드 이전에 발급된 쿠키).
+    //    필수로 다루면 배포 직후 기존 세션이 전부 로그아웃된다.
+    const agentId = typeof parsed.agentId === "string" && parsed.agentId ? parsed.agentId : undefined;
     if (!sub || !isRole(role)) return null;
     if (exp < Math.floor(Date.now() / 1000)) return null; // 만료
-    return { sub, name, role, exp };
+    return { sub, name, role, agentId, exp };
   } catch {
     return null;
   }

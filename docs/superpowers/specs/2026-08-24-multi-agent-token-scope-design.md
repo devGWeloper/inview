@@ -180,7 +180,7 @@ agents:
 - `TRX_USER_MAS` 에 **`AGENT_ID VARCHAR2(50)`** 추가 (nullable)
   - `NULL` = 전 에이전트 접근 (기존 계정 · 운영자)
   - 값 있음 = 그 에이전트만
-- `sql/alter_trx_user_mas_agent_id.sql` (ADM 계정 실행)
+- `sql/migrations/2026-08-24_add_user_agent_id.sql` (ADM 계정 실행)
 - `users.ts` 의 `SELECT_COLS`/`UserAccount`/`CreateUserInput`/INSERT/UPDATE 에 반영.
   **컬럼 미존재 내성**을 `fetchTokenStats` 의 `hasStatus` 패턴으로 넣어, ALTER 전에도
   앱이 정상 동작하게 한다 (ALTER · 배포 순서 자유)

@@ -1,4 +1,4 @@
-import { getAppDbConfig } from "./config";
+import { getAgentDbConfig } from "./config";
 import { logger } from "./logger";
 import { SQL_ERR_PRED, SQL_TIMEOUT_PRED } from "./tokenStatus";
 import {
@@ -55,6 +55,12 @@ export interface TimeoutFilter {
   nodeNm?: string;
   /** 특정 모델로 좁히기 (노드와 조합 가능) */
   modelNm?: string;
+  /**
+   * 어느 에이전트의 TRX_TOKEN_DET 를 볼지 (config.yml agents[].id).
+   * ⚠️ WHERE 절 조건이 아니라 **커넥션 선택**이다 — 에이전트는 행이 아니라 DB 단위로 갈린다.
+   * 생략 = 기본 에이전트.
+   */
+  agentId?: string;
 }
 
 const num = (v: unknown): number => {
@@ -130,7 +136,7 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
     timeout: 0,
   }));
 
-  const cfg = getAppDbConfig();
+  const cfg = getAgentDbConfig(filter.agentId);
   if (!cfg) return emptyStats(filter, g, emptyBuckets, false);
   const oracle = await getOracle();
   if (!oracle) return emptyStats(filter, g, emptyBuckets, false);

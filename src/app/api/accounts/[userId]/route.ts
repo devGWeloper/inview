@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/current";
-import { updateUser, deleteUser, getUser, UpdateUserInput } from "@/lib/users";
+import { updateUser, deleteUser, getUser, UpdateUserInput, validateAgentId } from "@/lib/users";
 import { isRole, roleAtLeast } from "@/lib/roles";
 import { logger, reqContext } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** 계정 수정 (BR 이상). ADMIN 대상·ADMIN 승격은 ADMIN 만 가능(권한 상향 방지). */
+/** 계정 수정 (BR 이상). ADMIN 대상·ADMIN 승격·에이전트 결속 변경은 ADMIN 만 가능(권한 상향 방지). */
 export async function PUT(req: NextRequest, { params }: { params: { userId: string } }) {
   const ctx = reqContext(req);
   const guard = await requireRole("BR");
@@ -36,6 +36,17 @@ export async function PUT(req: NextRequest, { params }: { params: { userId: stri
       input.role = body.role;
     }
     if (body.useYn !== undefined) input.useYn = body.useYn === "N" ? "N" : "Y";
+    if (body.agentId !== undefined) {
+      // 에이전트 결속은 ADMIN 만 바꿀 수 있다. ⚠️ NULL = 전 에이전트라 결속 해제도 상향이다
+      // — 그래서 값 지정/해제를 가리지 않고 키가 오면 막는다.
+      if (!actorIsAdmin) {
+        return NextResponse.json({ error: "에이전트 결속은 운영자만 변경할 수 있습니다." }, { status: 403 });
+      }
+      // config.yml 에 없는 id 를 저장하면 그 계정은 아무것도 조회하지 못한다 — 여기서 막는다.
+      const checked = validateAgentId(body.agentId);
+      if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
+      input.agentId = checked.value;
+    }
 
     // 본인 계정을 스스로 강등/비활성화하는 실수 방지
     if (targetId === guard.session.sub) {

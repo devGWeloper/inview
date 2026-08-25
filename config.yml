@@ -30,3 +30,25 @@ layers:
     user: ""
     password: ""
     connectString: ""
+
+# ============================================================
+# agents — Tokens / Timeout 화면이 볼 수 있는 AI 에이전트 목록
+#
+#   각 에이전트는 자기 GAIA DB 의 TRX_TOKEN_DET 를 갖는다.
+#   BIZ_AIACTIONTXN_HIS 기반 화면(Traces/Dashboard/Report/Improvement)은
+#   기본(default: true) 에이전트 전용이며 위 layers 를 그대로 쓴다.
+#
+#   - id       : 불변 키. ?agent=<id> / TRX_USER_MAS.AGENT_ID 에서 이 값을 쓴다
+#   - default  : 기본 에이전트 1개. db 를 생략하면 layers.GAIA 를 재사용한다
+#   - tpmLimit / rpmLimit : 1TICK 모니터의 기준선. 0 = 미설정(추이만 표시)
+#
+#   이 섹션을 통째로 지우면 layers.GAIA 를 쓰는 단일 에이전트로 동작한다(하위호환).
+# ============================================================
+
+agents:
+  - id: leeoksu
+    name: 이억수 TL
+    avatar: "🧑‍🍳"
+    default: true
+    tpmLimit: 0
+    rpmLimit: 0

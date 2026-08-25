@@ -79,13 +79,48 @@ For layers that make multiple downstream calls in one trace (e.g. GAIA → MCP t
 
 `src/lib/config.ts` loads YAML at startup (cached): if `config.dev.yml` exists it's used and `appEnv='dev'`, otherwise `config.yml` is used and `appEnv='prd'`. Both files are committed to the repo. `deploy.sh` deletes `config.dev.yml` on prd deploys so the loader picks `config.yml`. The schema is `{ layers: { <LAYER>: { user, password, connectString } } }`. `loadConfig()` strips any layer entry missing one of the three credential fields, so partially-filled layers behave like "not configured" and return empty rows from `queryLayer`.
 
+### 멀티 에이전트 — Tokens / Timeout 만 에이전트별 (⚠️ config.yml `agents:`)
+
+이 앱은 원래 이억수 에이전트 하나를 전제로 만들어졌지만, 다른 팀 에이전트도 **Tokens / Timeout
+두 화면만** 쓴다. 두 화면의 출처는 `TRX_TOKEN_DET` 하나이고 에이전트마다 GAIA DB 가 다르다.
+
+- **정의는 `config.yml` 의 `agents:`** — `{ id, name, avatar, default, db, tpmLimit, rpmLimit }`.
+  `id` 가 전 계층의 키다 (`?agent=<id>`, `localStorage["tracex.agent"]`, `TRX_USER_MAS.AGENT_ID`).
+  ⚠️ **계정별 접근 제한이 있다** — 계정에 결속(`AGENT_ID`)이 있으면 그 에이전트만 고를 수 있고
+  다른 에이전트 조회는 **403** 이다. 결속이 없으면(NULL = 운영자·기존 계정) 종전대로 전부 고를 수 있다.
+  집행 지점은 조회 3라우트(`/api/tokens` · `/api/tokens/tick` · `/api/timeouts`)의 403 이고,
+  `/api/agents` 의 목록 필터는 표시용이다. ⚠️ 단 이건 **범위 분리용 편의이지 보안 경계가 아니다**
+  (BR 의 계정 생성·비번 초기화로 우회 가능 — 아래 "인증/인가 — 계정↔에이전트 결속" 참고).
+  기본 에이전트(`default: true`)가 `db` 를 생략하면 `layers.GAIA` 를 재사용한다.
+  **`agents:` 섹션이 없으면 `layers.GAIA` 를 쓰는 단일 에이전트를 합성**하므로 기존 배포가 그대로 돈다.
+- **로더는 `src/lib/config.ts`** — `listAgents()` / `getAgent(id)` / `getAgentDbConfig(id)` /
+  `defaultAgentId()` / `publicAgents()`. ⚠️ `AgentDef` 는 접속정보를 품으므로 서버 전용이고,
+  클라이언트로 내려가는 건 `publicAgents()` 가 만드는 `AgentInfo`(비밀 제거, `dbConfigured` 만) 뿐이다.
+- **에이전트별로 갈리는 모듈은 셋뿐**: `tokens.ts` · `timeouts.ts` · `tickStats.ts`. 셋 다
+  `getAppDbConfig()` 대신 `getAgentDbConfig(filter.agentId)` 로 커넥션을 고른다.
+  ⚠️ **agentId 는 WHERE 조건이 아니라 커넥션 선택이다** — 에이전트는 행이 아니라 DB 단위로 갈린다.
+  `buildWhere()` 는 손대지 않는다. `getAppDbConfig()` 는 앱 공통 테이블(`TRX_USER_MAS`,
+  `TRX_ERRMSG_COD`)용으로 그대로 남는다.
+- **라우트**: `GET /api/agents`(목록) + 기존 `/api/tokens`·`/api/tokens/tick`·`/api/timeouts` 의
+  `?agent=<id>`. ⚠️ **알 수 없는 id 는 400 이다** — 조용히 기본으로 폴백하면 남의 에이전트 수치를
+  자기 것으로 오독한다. 응답은 `agentId` 를 에코한다.
+- **화면**: `AgentScopeProvider`(`src/components/agents/`)가 선택 상태를 쥐고 `localStorage` 에
+  영속한다. 상단바 `AgentSelector`(에이전트 1개면 미렌더). **비기본 에이전트를 고르면 `TabNav` 가
+  Tokens/Timeout 만 남기고** 우측 칩도 링크 없는 정적 칩이 된다. ⚠️ **BIZ 계열 경로로 이동하면
+  기본 에이전트로 스냅백**한다 — 숨긴 화면에 남의 에이전트 컨텍스트가 걸린 상태를 만들지 않는다.
+  스냅백 effect 의 deps 는 **`[pathname]` 뿐**이다(agentId 를 넣으면 셀렉터로 고른 직후 되돌아간다).
+- **BIZ_AIACTIONTXN_HIS 기반 화면은 전부 기본 에이전트 전용**이다 — Traces / Dashboard / `/agent` /
+  `/report` / `/improvement` / `/event-fabs`.
+- **TPM/RPM 한도는 config 단일 소스**다. `AgentProfile.tpmLimit`/`rpmLimit` 과 `/admin` 의
+  "사용량 한도" 섹션은 제거됐다.
+
 ### App-owned DB — GAIA's DB doubles as it (⚠️ important)
 
 The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTIONTXN_HIS`). **No dedicated DB resource could be allocated, so GAIA's DB serves as the app's own DB.** This mapping lives in one place: `APP_DB_LAYER` (`= "GAIA"`) and `getAppDbConfig()` in `src/lib/config.ts` — if GAIA's DB moves, only that constant follows it. App-only tables are created **once, in that DB only** (unlike the per-layer BIZ table).
 
 - **`TRX_ERRMSG_COD`** — error-code → meaning master (`sql/create_trx_errmsg_cod.sql`, run on the app DB only). Columns `ERR_CD` (PK), `ERR_MSG_CTN`, `USE_YN`, audit dates. `ERR_CD` matches `BIZ_AIACTIONTXN_HIS.ERR_CD`.
 - Read path: `src/lib/errorCodes.ts` `loadErrorCodeMap()` (5-min in-memory cache, same lazy-`oracledb`-swallow pattern) → `GET /api/error-codes` → dashboard fetches once on mount and passes the map to the "주요 에러" `TopList` as `descriptions`, which surfaces the meaning in the hover tooltip. Missing table/driver/config ⇒ empty map ⇒ tooltip just shows the bare code (no breakage).
-- **`TRX_TOKEN_DET`** — GAIA LLM 호출별 토큰 사용량 상세 (`sql/create_trx_token_det.sql`, run on the app DB only). One row **per LLM call**, inserted by GAIA via `sql/dml_insert_token_det.sql`. Columns: `TOKEN_ID` (IDENTITY PK), `TRACE_ID` (nullable — present for action calls, used only for display not aggregation), `NODE_NM` (the GAIA node that made the call: `action`/`judge`/`setup_guide` … — **primary aggregation dimension**), `MODEL_NM` (GAIA 호출 LLM, 현재 사내 Qwen — 변경 가능), `USER_ID`, `INPUT_TOKENS`/`OUTPUT_TOKENS`/`TOTAL_TOKENS` (provider-neutral 명칭 — Qwen 등 OpenAI 호환 응답의 `prompt_tokens`/`completion_tokens` 를 매핑), `LATENCY_MS` (LLM 요청→응답 소요시간 ms, **nullable** — GAIA 가 측정해 적재; 없으면 집계에서 자동 제외), `QUERY_CTN` (LLM 에 실제로 들어간 쿼리/프롬프트 — `VARCHAR2(4000)`, **디버깅용, nullable**; 집계 대상 아님, 호출 펼침에서만 노출), `STAT_CD`/`ERR_CTN` (호출 결과 — 아래 "실패 호출" 참고), `CALL_TM`, `REG_DT`. Unlike `BIZ_AIACTIONTXN_HIS`, this is **not** replicated per layer.
+- **`TRX_TOKEN_DET`** — GAIA LLM 호출별 토큰 사용량 상세 (`sql/create_trx_token_det.sql`, run on the app DB only). One row **per LLM call**, inserted by GAIA via `sql/dml_insert_token_det.sql`. Columns: `TOKEN_ID` (IDENTITY PK), `TRACE_ID` (nullable — present for action calls, used only for display not aggregation), `NODE_NM` (the GAIA node that made the call: `action`/`judge`/`setup_guide` … — **primary aggregation dimension**), `MODEL_NM` (GAIA 호출 LLM, 현재 사내 Qwen — 변경 가능), `USER_ID`, `INPUT_TOKENS`/`OUTPUT_TOKENS`/`TOTAL_TOKENS` (provider-neutral 명칭 — Qwen 등 OpenAI 호환 응답의 `prompt_tokens`/`completion_tokens` 를 매핑), `LATENCY_MS` (LLM 요청→응답 소요시간 ms, **nullable** — GAIA 가 측정해 적재; 없으면 집계에서 자동 제외), `QUERY_CTN` (LLM 에 실제로 들어간 쿼리/프롬프트 — `VARCHAR2(4000)`, **디버깅용, nullable**; 집계 대상 아님, 호출 펼침에서만 노출), `STAT_CD`/`ERR_CTN` (호출 결과 — 아래 "실패 호출" 참고), `CALL_TM`, `REG_DT`. Unlike `BIZ_AIACTIONTXN_HIS`, this is **not** replicated per layer. 단, **에이전트마다 별도 DB** 에 있다 (위 "멀티 에이전트" 참고).
   - **⚠️ 실패 호출도 1행 적재한다 (`STAT_CD`/`ERR_CTN`)**. GAIA 가 `call_llm` 을 try/except 로 감싸 **성공은 `STAT_CD='OK'`, 실패(타임아웃 포함)는 `'ERROR'` + `ERR_CTN`(사유) + 토큰 0 + `LATENCY_MS`=예외까지의 경과시간**으로 남긴다. 성공만 적재하던 때는 실패한 노드의 행 자체가 없어 **"actionRouter 27s 통과 → Seasoning 90s 타임아웃" 의 뒷부분이 화면에서 통째로 사라졌고**, 지연 평균도 생존자 편향으로 낮게 나왔다. 타임아웃/일반오류 구분은 `STAT_CD` 가 아니라 **`ERR_CTN` 문구**로 한다 — 판정은 `src/lib/tokenStatus.ts` 의 `callStatus()` 한 곳(서버·클라이언트 공용, SQL 술어 `SQL_ERR_PRED`/`SQL_OK_PRED` 도 여기).
   - **컬럼 미존재 내성**: `fetchTokenStats` 는 시작 시 `SELECT STAT_CD, ERR_CTN ... WHERE 1=0` 로 **컬럼 존재를 탐지**(`hasStatus`)하고, 없으면(ALTER 전) 실패 관련 표현식을 전부 상수로 대체해 예전과 동일하게 동작한다(`errorNodes` 빈 배열, `statCd` null → `callStatus()` 가 'ok'). 덕분에 ALTER·GAIA 배포·앱 배포 순서가 자유롭다.
 - Read path: `src/lib/tokens.ts` `fetchTokenStats()` (same lazy-`oracledb`-swallow pattern; aggregates in **SQL `GROUP BY`** rather than JS since the table can be large) → `GET /api/tokens` → the **Tokens 탭** (`src/app/tokens/page.tsx`). Time-bucket helpers are shared with the stats route via `src/lib/timeBuckets.ts` (`pickGranularity`/`floorToBucket`/`isoNoTz`/`parseTs`/`enumerateBucketStarts`). Missing table/driver/config ⇒ empty stats (zeros) ⇒ page renders empty chart (no breakage).
@@ -118,9 +153,9 @@ The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTI
     같은 초 다건) 검증이 여기 하나로 끝난다.
   - 응답의 `fixed*` = 정각 분 합계(참고용 막대), `roll*` = 그 분에 시작하는 60초 창의 최대(판정값).
     `calls` 는 드릴다운용으로 최근 `TICK_CALL_LIMIT`(3000)건까지 — 넘으면 `truncated=true` 로 화면이 알린다.
-- **한도(TPM/RPM)는 `AgentProfile.tpmLimit`/`rpmLimit`** — FTE 계산식 상수와 같은 패턴으로 `/admin` 에서
-  편집하고 프로필 JSON 에 저장된다. **0 = 미설정**이라 `normalizeProfile` 은 여기만 `posNum` 이 아닌
-  `nonNegNum` 으로 보정한다(음수/비숫자 → 0). 미설정이면 기준선·초과 판정 없이 추이만 그린다.
+- **한도(TPM/RPM)는 `config.yml` 의 `agents[].tpmLimit`/`rpmLimit`** 이다. **0 = 미설정**이며
+  `config.ts` 의 `normalizeLimit` 이 음수/비숫자를 0 으로 떨군다. 미설정이면 기준선·초과 판정 없이
+  추이만 그린다.
 - **화면** `TickMonitor.tsx` / 차트 `TickMonitorChart.tsx` (`tick-*`) — 위에서 아래로 **세 가지만** 답한다:
   ① **게이지 2장**(TPM/RPM: 값 + 한도 대비 막대 + %) ② **추이 차트** ③ **초과한 순간 목록**
   (연속 초과 분을 구간으로 병합, 행을 열면 그 구간 피크 60초의 호출 전부 = 초과 원인).
@@ -248,7 +283,25 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
 전 화면 로그인 필수. 사번(USER_ID)으로 로그인하고 3단계 권한(**ADMIN 운영자 > BR 상위 > DEV 개발자**)으로 접근을 가른다. 기존 하드코딩 `ADMIN_PASSWORD`/`AdminGate`(sessionStorage 게이트)는 **완전히 제거**되고 세션 기반 인증으로 대체됐다.
 
 - **권한 단일 소스 `src/lib/roles.ts`** (클라이언트·Edge 미들웨어·서버 공용 — Node 전용 모듈 import 금지). `Role`, `ROLE_LABEL`, `roleAtLeast(role,min)`, 그리고 **경로→최소권한 매핑 `ROUTE_RULES`**(`requiredRoleForPath`). 접근 범위가 바뀌면 여기만 고친다. 현재: `/admin`=ADMIN, `/accounts`·`/api/accounts`·`/report`·`/improvement`·`/event-fabs`=BR, 그 외=인증만 되면 DEV. **계정 관리는 BR 이상**이되 권한 상향 방지 가드가 API 에 있다 — ADMIN 계정 생성/수정/삭제/초기화·ADMIN 승격은 **ADMIN 만**(BR 은 BR/DEV 만 다룰 수 있고 UI 도 ADMIN 옵션·행 버튼을 가림).
-- **계정 저장소 `TRX_USER_MAS`** (`sql/create_trx_user_mas.sql`, **앱 자체 DB=GAIA 에서만 1회 실행**, ADM 소유 + GRANT + PUBLIC SYNONYM — 다른 앱 테이블과 동일 패턴). 컬럼: USER_ID(사번,PK)/USER_NM/WORK_CTN(업무)/ROLE_CD/PWD_HASH/PWD_SALT/USE_YN/MUST_CHG_YN/LAST_LOGIN_DT/감사일시. `src/lib/users.ts` 가 CRUD·로그인검증·시드를 담당(lazy-`oracledb`-swallow, DB 불가 시 `available=false`).
+- **계정 저장소 `TRX_USER_MAS`** (`sql/create_trx_user_mas.sql`, **앱 자체 DB=GAIA 에서만 1회 실행**, ADM 소유 + GRANT + PUBLIC SYNONYM — 다른 앱 테이블과 동일 패턴). 컬럼: USER_ID(사번,PK)/USER_NM/WORK_CTN(업무)/ROLE_CD/PWD_HASH/PWD_SALT/USE_YN/MUST_CHG_YN/**AGENT_ID**/LAST_LOGIN_DT/감사일시. `src/lib/users.ts` 가 CRUD·로그인검증·시드를 담당(lazy-`oracledb`-swallow, DB 불가 시 `available=false`).
+  - **계정↔에이전트 결속 `AGENT_ID`** (`sql/migrations/2026-08-24_add_user_agent_id.sql`) — **NULL = 전 에이전트**(기존 계정·운영자), 값이 있으면 `config.yml` 의 그 `agents[].id` 하나만.
+    로그인 시 세션 payload(`SessionPayload.agentId`)에 실려 ① `/api/agents` 목록 필터(표시용)
+    ② 조회 3라우트(`/api/tokens`·`/api/tokens/tick`·`/api/timeouts`)의 **403 판정**(실제 집행)에 쓰인다.
+    판정 순서는 **400(없는 에이전트) → 403(내 것이 아님) → DB 조회** 다 — 권한 밖 요청은 커넥션을 열기 전에 끊는다.
+    ⚠️ **결속 변경은 다음 로그인부터 적용된다** — 세션 클레임이고 쿠키는 고정 7일 만료(갱신 없음)라
+    살아 있는 세션은 최대 7일간 옛 결속으로 돈다. `ROLE_CD` 도 같은 방식이다(`/api/auth/me` 는 계정을 되읽지 않는다).
+    ⚠️ **이건 조회 범위를 나누는 편의 장치이지 보안 경계가 아니다.** BR 은 여전히 계정을 **생성**하고
+    (초기 비밀번호 = 사번) 비-ADMIN 계정의 **비밀번호를 초기화**할 수 있으므로, 결속 없는 계정을 만들어
+    그것으로 로그인하면 결속을 우회할 수 있다. 막으려면 역할 모델 수준의 결정(예: 계정 관리를 ADMIN 전용으로)이 필요하다.
+    ⚠️ `users.ts` 가 **컬럼 존재를 탐지**하므로 ALTER 전에도 **읽기·결속과 무관한 계정 저장**은 그대로 동작한다
+    (전원 NULL = 제한 없음). 다만 **결속을 쓰려는 요청은 조용히 무시하지 않고 실패**한다 —
+    `createUser`/`updateUser` 가 `agentId` 키를 받았는데 컬럼이 없으면 마이그레이션 파일명을 담아 throw 한다
+    (저장했다고 믿게 두지 않는다). 그래서 호출부는 **결속을 바꿀 때만** 키를 보낸다.
+    ⚠️ **변경 권한은 ADMIN 만** — `/api/accounts` 의 POST/PUT 이 `agentId` 키가 오면 비-ADMIN 을 403 으로 막는다
+    (NULL 이 최대 범위라 **결속 해제도 상향**이다). 저장 값은 `validateAgentId()`(`users.ts`)가 config 의 실제
+    id 인지 검증한다 — 없는 id 를 저장하면 그 계정은 목록이 비고 403 만 받는 막다른 길이 된다.
+    ⚠️ 그래도 결속이 설정에서 사라진 경우를 대비해 `AgentScopeProvider.scopeWarning` → `AgentScopeWarning`
+    (상단바 아래 안내 띠)이 이유를 화면에 밝힌다.
   - **최초 관리자 시드**: 테이블이 비면 로그인/목록 조회 시 `ensureSeedAdmin` 이 기본 운영자(USER_ID=`admin`/PW=`admin1234`/ADMIN)를 1회 생성. **최초 로그인 후 즉시 변경**(강제되진 않음 — 아래 TEMP 절).
 - **비밀번호**: 평문 저장 금지. `src/lib/auth/password.ts` 가 Node 내장 `crypto` scrypt 로 해시(외부 의존성 없음 — 배포가 src 복붙이라 native dep 회피). 변경은 사용자 메뉴의 `ChangePasswordModal` 에서 **자율**로만 한다 (강제 변경은 아래 TEMP 절 참고).
 - **세션**: `src/lib/auth/session.ts` 서명 쿠키(`trx_session`, httpOnly, **7일** — `SESSION_TTL_SEC` 한 곳. 슬라이딩 갱신 없음 = 로그인 시각 기준 고정 만료). 형식 `base64url(payload).HMAC-SHA256`, **Web Crypto(`crypto.subtle`)만 사용**해 Edge 미들웨어·Node 라우트 공용. 비밀키 `AUTH_SECRET`(미설정 시 개발용 폴백 — **운영 배포 시 반드시 환경변수 설정**). 쿠키 `secure` 는 기본 off(사내 HTTP 배포에서 로그인 막힘 방지) — HTTPS 면 `AUTH_COOKIE_SECURE=true`. 옵션은 `sessionCookieOptions()` 한 곳.

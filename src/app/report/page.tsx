@@ -445,7 +445,9 @@ function ReportContent() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [tok, setTok] = useState<TokenStatsResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  // ⚠️ 두 조회의 실패를 따로 쥔다 — 한쪽이 실패해도 다른 쪽 섹션은 그대로 보여야 한다.
+  const [statsErr, setStatsErr] = useState<string | null>(null);
+  const [tokErr, setTokErr] = useState<string | null>(null);
   const [profile, setProfile] = useState<AgentProfile | null>(null);
   const [errorCodeMap, setErrorCodeMap] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState(false);
@@ -470,22 +472,31 @@ function ReportContent() {
 
   const load = useCallback(async (from: string, to: string) => {
     setLoading(true);
-    setErr(null);
-    try {
-      const q = new URLSearchParams({ dateFrom: from, dateTo: to });
-      const [sData, tData] = await Promise.all([
-        apiJson<StatsResponse>(`/api/stats?${q.toString()}`, { cache: "no-store" }),
-        apiJson<TokenStatsResponse>(`/api/tokens?${q.toString()}`, { cache: "no-store" }),
-      ]);
-      setStats(sData);
-      setTok(tData);
-    } catch (e) {
-      setErr(errMessage(e, "리포트 데이터를 불러오지 못했습니다."));
-      setStats(null);
-      setTok(null);
-    } finally {
-      setLoading(false);
-    }
+    setStatsErr(null);
+    setTokErr(null);
+    const q = new URLSearchParams({ dateFrom: from, dateTo: to });
+    // ⚠️ 두 조회는 서로 독립이다 — 하나의 try 로 묶어 두면 한쪽 실패가 다른 쪽 섹션까지
+    //    지워 리포트가 통째로 빈다. 실제로 갈리는 경우가 있다: 에이전트에 결속된 계정은
+    //    /api/tokens 가 403 이다(BIZ 기반인 /api/stats 는 정상).
+    await Promise.all([
+      (async () => {
+        try {
+          setStats(await apiJson<StatsResponse>(`/api/stats?${q.toString()}`, { cache: "no-store" }));
+        } catch (e) {
+          setStatsErr(errMessage(e, "Action Agent 실적을 불러오지 못했습니다."));
+          setStats(null);
+        }
+      })(),
+      (async () => {
+        try {
+          setTok(await apiJson<TokenStatsResponse>(`/api/tokens?${q.toString()}`, { cache: "no-store" }));
+        } catch (e) {
+          setTokErr(errMessage(e, "LLM 토큰 실적을 불러오지 못했습니다."));
+          setTok(null);
+        }
+      })(),
+    ]);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -665,7 +676,8 @@ function ReportContent() {
       </div>
 
       {loading && <div className="dash-banner loading">집계 중…</div>}
-      {err && <div className="dash-banner err">불러오기 실패: {err}</div>}
+      {statsErr && <div className="dash-banner err">Action Agent 실적 불러오기 실패: {statsErr}</div>}
+      {tokErr && <div className="dash-banner err">LLM 토큰 불러오기 실패: {tokErr}</div>}
 
       {stats && (
         <>

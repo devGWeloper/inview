@@ -10,6 +10,13 @@ export async function GET(_req: NextRequest) {
   if (!session) return NextResponse.json({ user: null });
 
   return NextResponse.json({
-    user: { userId: session.sub, name: session.name, role: session.role },
+    // agentId 는 결속 없음(운영자·기존 계정)이면 null 이다. 화면은 이 값으로
+    // "config 에 없는 에이전트에 묶인 계정" 안내를 띄운다(AgentScopeProvider).
+    user: {
+      userId: session.sub,
+      name: session.name,
+      role: session.role,
+      agentId: session.agentId ?? null,
+    },
   });
 }

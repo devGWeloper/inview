@@ -24,6 +24,12 @@
 --     ※ TEMP: 강제 변경 흐름은 현재 임시로 꺼져 있어 앱이 MUST_CHG_YN 을 항상 'N' 으로만
 --       쓴다(컬럼/제약은 되살릴 때를 위해 그대로 둔다). CLAUDE.md TEMP 절 참고.
 --
+--   [에이전트 결속] AGENT_ID 는 그 계정이 볼 수 있는 에이전트(config.yml agents[].id) 다.
+--     NULL = 전 에이전트 접근(기본). 로그인 시 세션 payload 에 실린다 (src/lib/users.ts).
+--     ⚠️ 앱은 이 컬럼이 없어도 동작하지만(존재를 탐지해 전원 NULL 취급) 그 상태에서는
+--       계정별 제한이 사라지므로, **새 환경은 반드시 이 컬럼이 있는 상태로 만들 것**.
+--       이미 운영 중인 DB 는 아래 [MIGRATION] 섹션 참고.
+--
 --   [최초 관리자 시드] 테이블이 비어 있으면 앱이 최초 로그인/계정목록 조회 시
 --     기본 운영자 계정을 1건 자동 생성한다 (src/lib/users.ts ensureSeedAdmin):
 --       USER_ID='admin' / 비밀번호='admin1234' / ROLE_CD='ADMIN'
@@ -39,6 +45,7 @@ CREATE TABLE TRX_USER_MAS (
     PWD_SALT      VARCHAR2(64)   NOT NULL,                   -- 비밀번호 솔트 (hex, 계정별 난수)
     USE_YN        CHAR(1)        DEFAULT 'Y' NOT NULL,       -- 사용 여부 (N=비활성/로그인 차단)
     MUST_CHG_YN   CHAR(1)        DEFAULT 'N' NOT NULL,       -- 비번 강제 변경 (TEMP: 현재 미사용, 항상 N)
+    AGENT_ID      VARCHAR2(50),                              -- 접근 가능 에이전트 id (NULL=전체, config.yml agents[].id)
     LAST_LOGIN_DT TIMESTAMP,                                 -- 최근 로그인 일시
     REG_DT        TIMESTAMP      DEFAULT SYSTIMESTAMP,       -- 등록 일시
     UPD_DT        TIMESTAMP      DEFAULT SYSTIMESTAMP,       -- 최근 수정 일시
@@ -58,6 +65,7 @@ COMMENT ON COLUMN TRX_USER_MAS.PWD_HASH      IS '비밀번호 scrypt 해시 (hex
 COMMENT ON COLUMN TRX_USER_MAS.PWD_SALT      IS '비밀번호 솔트 (hex, 계정별 난수)';
 COMMENT ON COLUMN TRX_USER_MAS.USE_YN        IS '사용 여부 (Y/N)';
 COMMENT ON COLUMN TRX_USER_MAS.MUST_CHG_YN   IS '비밀번호 강제 변경 플래그 (현재 미사용 - 항상 N)';
+COMMENT ON COLUMN TRX_USER_MAS.AGENT_ID      IS '접근 가능 에이전트 id (NULL=전체, config.yml agents[].id)';
 COMMENT ON COLUMN TRX_USER_MAS.LAST_LOGIN_DT IS '최근 로그인 일시';
 COMMENT ON COLUMN TRX_USER_MAS.REG_DT        IS '등록 일시';
 COMMENT ON COLUMN TRX_USER_MAS.UPD_DT        IS '최근 수정 일시';
@@ -76,8 +84,20 @@ CREATE PUBLIC SYNONYM TRX_USER_MAS FOR IDMSADM2.TRX_USER_MAS;
 -- ============================================================================
 -- [확인 쿼리]
 -- ============================================================================
--- SELECT USER_ID, USER_NM, ROLE_CD, USE_YN, MUST_CHG_YN FROM TRX_USER_MAS ORDER BY REG_DT;
+-- SELECT USER_ID, USER_NM, ROLE_CD, USE_YN, MUST_CHG_YN,
+--        NVL(AGENT_ID, '(전체)') AS AGENT_ID
+--   FROM TRX_USER_MAS ORDER BY REG_DT;
 -- SELECT ROLE_CD, COUNT(*) FROM TRX_USER_MAS GROUP BY ROLE_CD;
+
+-- ============================================================================
+-- [MIGRATION] 이미 운영 중인 TRX_USER_MAS 에 AGENT_ID 를 사후 추가할 때
+--   → 전용 파일이 있다: sql/migrations/2026-08-24_add_user_agent_id.sql
+--     (앱 자체 DB 에서 1회, IDMSADM2 로 실행. 아래는 그 요약)
+--   앱은 컬럼이 없어도 죽지 않고 "전원 제한 없음" 으로 동작하므로 ALTER 와 배포 순서는 자유다.
+-- ============================================================================
+-- ALTER TABLE TRX_USER_MAS ADD (AGENT_ID VARCHAR2(50));
+-- COMMENT ON COLUMN TRX_USER_MAS.AGENT_ID IS '접근 가능 에이전트 id (NULL=전체, config.yml agents[].id)';
+-- COMMIT;
 
 -- ============================================================================
 -- [ROLLBACK] — IDMSADM2 로 실행 (시노님 → 테이블 순)

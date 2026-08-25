@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TokenChart } from "@/components/TokenChart";
 import { TokenLatencyChart, fmtDuration } from "@/components/TokenLatencyChart";
 import { TokenBreakdown } from "@/components/TokenBreakdown";
@@ -8,8 +8,9 @@ import { TokenStatsCards } from "@/components/TokenStatsCards";
 import { QuestionsTable } from "@/components/QuestionsTable";
 import { TopList } from "@/components/TopList";
 import { TickMonitor, TickWindowMin } from "@/components/TickMonitor";
-import { AgentProfile, TickStatsResponse, TokenFilter, TokenRow, TokenStatsResponse } from "@/lib/types";
+import { TickStatsResponse, TokenFilter, TokenRow, TokenStatsResponse } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
+import { useAgentScope } from "@/components/agents/AgentScopeProvider";
 
 // "1tick" 은 다른 프리셋과 성격이 다르다 — 기간을 고르는 게 아니라 화면 자체를
 // 분당 TPM/RPM 모니터로 바꾼다(격자도 응답 형태도 다르므로 /api/tokens/tick 을 쓴다).
@@ -46,6 +47,7 @@ function fmtRange(from: string | null, to: string | null): string {
 }
 
 export default function TokensPage() {
+  const { agentId, agent, isDefault, ready } = useAgentScope();
   const [preset, setPreset] = useState<Preset>("30d");
   const [userId, setUserId] = useState("");
   const [nodeNm, setNodeNm] = useState("");
@@ -54,16 +56,21 @@ export default function TokensPage() {
   const [customTo, setCustomTo] = useState("");
 
   const [stats, setStats] = useState<TokenStatsResponse | null>(null);
-  // 1TICK 모니터 전용 상태 (창 길이 / 자동 새로고침 / 응답 / 프로필의 TPM·RPM 한도)
+  // 1TICK 모니터 전용 상태 (창 길이 / 자동 새로고침 / 응답 (한도는 config 의 agents[] 에서 온다))
   const [tickWin, setTickWin] = useState<TickWindowMin>(60);
   const [tickAuto, setTickAuto] = useState(false);
   const [tick, setTick] = useState<TickStatsResponse | null>(null);
-  const [limits, setLimits] = useState<{ tpm: number; rpm: number }>({ tpm: 0, rpm: 0 });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   // 셀렉트 옵션은 첫 응답의 byNode/byModel 에서 도출(필터로 좁혀져도 옵션은 유지)
   const [nodeOptions, setNodeOptions] = useState<string[]>([]);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
+
+  // 응답 도착 시점의 "현재 선택된 에이전트" 를 읽기 위한 ref. state 는 비동기라 클로저에 갇힌
+  // 값(요청을 보낼 때의 agentId)과 다를 수 있다 — 응답이 늦게 도착했을 때 그 사이 에이전트가
+  // 바뀌었는지는 이 ref 로만 정확히 판정된다.
+  const agentIdRef = useRef(agentId);
+  agentIdRef.current = agentId;
 
   const computeFilter = useCallback((): TokenFilter => {
     const base: TokenFilter = {
@@ -84,32 +91,48 @@ export default function TokensPage() {
   }, [preset, customFrom, customTo, userId, nodeNm, modelNm]);
 
   const load = useCallback(async (f: TokenFilter) => {
+    const requestFor = agentId; // 이 요청이 향한 에이전트 (응답 도착 시점의 선택과 비교할 기준)
     setLoading(true);
     setErr(null);
     try {
       const q = new URLSearchParams();
+      if (agentId) q.set("agent", agentId);
       if (f.dateFrom) q.set("dateFrom", f.dateFrom);
       if (f.dateTo) q.set("dateTo", f.dateTo);
       if (f.userId) q.set("userId", f.userId);
       if (f.nodeNm) q.set("nodeNm", f.nodeNm);
       if (f.modelNm) q.set("modelNm", f.modelNm);
       const data = await apiJson<TokenStatsResponse>(`/api/tokens?${q.toString()}`, { cache: "no-store" });
+      // ⚠️ 응답이 도착했을 때 이미 다른 에이전트로 전환돼 있으면 폐기한다 — 그대로 반영하면
+      //    방금 바뀐 이름 아래 이전 에이전트의 수치가 얹히는 오귀속이 된다. 서버가 echo 한
+      //    agentId 로 판정한다 (스펙 §3).
+      //    ⚠️ 양쪽 다 "모름" 은 불일치가 아니라 통과다 — data.agentId 가 없으면(구버전 라우트가
+      //    echo 를 안 하는 경우) 이 요청이 향했던 agentId(requestFor)로 대신 채우고,
+      //    agentIdRef.current 자체가 비어 있으면(/api/agents 조회 실패로 agentId="" 인 상태)
+      //    비교할 "현재 선택"이 없으니 무조건 통과시킨다. 엄격 비교만 쓰면 이 두 경우에
+      //    매번 폐기돼 화면이 설명 없이 빈다 — 고치려던 버그보다 더 나쁜 회귀였다.
+      const echoed = data.agentId ?? requestFor;
+      if (agentIdRef.current && echoed !== agentIdRef.current) return;
       setStats(data);
       // 옵션 누적: 현재 응답의 차원 키를 합집합으로 유지 ('(none)' 제외)
       setNodeOptions((prev) => unionKeys(prev, asArray<{ key: string }>(data.byNode).map((d) => d.key)));
       setModelOptions((prev) => unionKeys(prev, asArray<{ key: string }>(data.byModel).map((d) => d.key)));
     } catch (e) {
+      if (agentIdRef.current !== requestFor) return; // 이미 전환된 뒤의 실패는 화면에 반영하지 않는다
       setErr(errMessage(e, "토큰 통계를 불러오지 못했습니다."));
       setStats(null);
     } finally {
-      setLoading(false);
+      // 최신 선택을 향한 요청일 때만 로딩을 내린다 — 아니면 전환 직후 새로 나간 요청이
+      // 아직 진행 중인데 배너가 먼저 꺼지는 깜빡임이 생긴다.
+      if (agentIdRef.current === requestFor) setLoading(false);
     }
-  }, []);
+  }, [agentId]);
 
   // 1TICK 조회 — 창 길이(분)만큼 "지금까지" 를 초 정밀로 잡아 /api/tokens/tick 을 부른다.
   // over 로 방금 바뀐 필터 값을 넘길 수 있다(상태 반영 전 클릭/선택 대응).
   const loadTick = useCallback(
     async (win: TickWindowMin, over?: { userId?: string; nodeNm?: string; modelNm?: string }) => {
+      const requestFor = agentId;
       setLoading(true);
       setErr(null);
       try {
@@ -118,6 +141,7 @@ export default function TokensPage() {
           dateFrom: toLocalSec(now - win * 60_000),
           dateTo: toLocalSec(now),
         });
+        if (agentId) q.set("agent", agentId);
         const u = over && "userId" in over ? over.userId : userId;
         const n = over && "nodeNm" in over ? over.nodeNm : nodeNm;
         const m = over && "modelNm" in over ? over.modelNm : modelNm;
@@ -125,30 +149,48 @@ export default function TokensPage() {
         if (n) q.set("nodeNm", n);
         if (m) q.set("modelNm", m);
         const data = await apiJson<TickStatsResponse>(`/api/tokens/tick?${q.toString()}`, { cache: "no-store" });
+        // ⚠️ /api/tokens 의 load() 와 동일 — 응답 도착 시점에 이미 다른 에이전트로 전환됐으면 폐기.
+        //    단, 양쪽 다 "모름" 은 통과 (data.agentId 없으면 requestFor 로 대체, 현재 선택
+        //    자체가 비어 있으면 무조건 통과) — 엄격 비교만 쓰면 /api/agents 조회 실패나 구버전
+        //    응답에서 화면이 설명 없이 계속 빈다.
+        const echoed = data.agentId ?? requestFor;
+        if (agentIdRef.current && echoed !== agentIdRef.current) return;
         setTick(data);
       } catch (e) {
+        if (agentIdRef.current !== requestFor) return;
         setErr(errMessage(e, "1TICK 모니터를 불러오지 못했습니다."));
         setTick(null);
       } finally {
-        setLoading(false);
+        if (agentIdRef.current === requestFor) setLoading(false);
       }
     },
-    [userId, nodeNm, modelNm]
+    [userId, nodeNm, modelNm, agentId]
   );
 
-  useEffect(() => { load(computeFilter()); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
-
-  // TPM/RPM 한도는 프로필(/admin 편집)에서 온다. 실패해도 무해 — 한도 미설정으로 본다.
+  // 최초 조회 + 에이전트 전환 시 재조회. ready 이전에는 agentId 가 비어 있어 조회하지 않는다.
+  // ⚠️ 에이전트가 바뀌면 필터(NODE/MODEL/USER)·드롭다운 옵션·렌더된 데이터를 모두 비운다:
+  //    - 필터를 안 비우면 이전 에이전트에서만 유효하던 값이 새 에이전트에 그대로 걸려
+  //      "이 에이전트는 사용량이 없다" 로 오독된다(Fix 3).
+  //    - 데이터를 안 비우면 새 이름이 붙은 헤더 아래 이전 에이전트의 수치가 잠깐이라도
+  //      그대로 남아 보인다(Fix 2) — "집계 중…" 배너만으론 부족하다.
+  //    setUserId 등은 상태 갱신이 비동기라 이번 tick 의 필터 인자엔 반영되지 않으므로
+  //    load/loadTick 에는 override 로 명시해서 넘긴다.
   useEffect(() => {
-    let alive = true;
-    apiJson<{ profile: AgentProfile }>("/api/profile", { cache: "no-store" })
-      .then((d) => {
-        if (!alive || !d.profile) return;
-        setLimits({ tpm: d.profile.tpmLimit ?? 0, rpm: d.profile.rpmLimit ?? 0 });
-      })
-      .catch(() => { /* 한도 없이도 추이는 보여준다 */ });
-    return () => { alive = false; };
-  }, []);
+    if (!ready) return;
+    setUserId("");
+    setNodeNm("");
+    setModelNm("");
+    setNodeOptions([]);
+    setModelOptions([]);
+    setStats(null);
+    setTick(null);
+    if (preset === "1tick") {
+      loadTick(tickWin, { userId: undefined, nodeNm: undefined, modelNm: undefined });
+    } else {
+      load({ ...computeFilter(), userId: undefined, nodeNm: undefined, modelNm: undefined });
+    }
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [ready, agentId]);
 
   // 자동 새로고침 (1TICK 모드에서만). 창이 계속 앞으로 밀리므로 매번 새로 계산해 부른다.
   useEffect(() => {
@@ -163,9 +205,10 @@ export default function TokensPage() {
   // 화면을 띄운 뒤 시간이 흐른 만큼 창이 밀려 같은 질문의 호출이 잘려 보였다.
   const fetchCalls = useCallback(async (traceId: string): Promise<TokenRow[]> => {
     const query = new URLSearchParams({ traceId });
+    if (agentId) query.set("agent", agentId);
     const data = await apiJson<TokenStatsResponse>(`/api/tokens?${query.toString()}`, { cache: "no-store" });
     return asArray<TokenRow>(data.calls);
-  }, []);
+  }, [agentId]);
 
   const onApply = (e: React.FormEvent) => {
     e.preventDefault();
@@ -233,7 +276,8 @@ export default function TokensPage() {
               ? tick ? fmtRange(tick.range.from, tick.range.to) : "—"
               : stats ? fmtRange(stats.range.from, stats.range.to) : "—"}
             <span className="dash-title-note">
-              {preset === "1tick" ? " · TPM/RPM" : " · GAIA LLM 호출 기준"}
+              {preset === "1tick" ? " · TPM/RPM" : " · LLM 호출 기준"}
+              {!isDefault && agent ? ` · ${agent.name}` : ""}
             </span>
           </div>
         </div>
@@ -306,12 +350,22 @@ export default function TokensPage() {
 
       {loading && <div className="dash-banner loading">집계 중…</div>}
       {err && <div className="dash-banner err">불러오기 실패: {err}</div>}
+      {agent && !agent.dbConfigured && (
+        <div className="dash-banner err">
+          {/* config.yml 에 agents: 섹션이 없으면 config.ts 가 layers.GAIA 로 기본 에이전트 1개를
+              합성한다 — 이 경우 고칠 곳은 "agents 항목"이 아니라 layers.GAIA 라 두 경우를 모두
+              가리키는 문구로 안내한다. */}
+          {agent.name} 의 DB 접속 정보가 설정되지 않았습니다 — config.yml 에서 agents 섹션이 있다면
+          해당 에이전트의 db 항목을, 없다면 layers.GAIA 를 확인하세요.
+          (빈 화면은 &ldquo;사용량 0&rdquo; 이 아닙니다)
+        </div>
+      )}
 
       {preset === "1tick" && tick && (
         <TickMonitor
           stats={tick}
-          tpmLimit={limits.tpm}
-          rpmLimit={limits.rpm}
+          tpmLimit={agent?.tpmLimit ?? 0}
+          rpmLimit={agent?.rpmLimit ?? 0}
           windowMin={tickWin}
           onWindowMin={onTickWin}
           auto={tickAuto}

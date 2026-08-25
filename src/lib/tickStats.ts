@@ -1,4 +1,4 @@
-import { getAppDbConfig } from "./config";
+import { getAgentDbConfig } from "./config";
 import { logger } from "./logger";
 import { buildWhere } from "./tokens";
 import {
@@ -25,7 +25,7 @@ import { isoNoTz, parseTs } from "./timeBuckets";
 //    (요지: 합은 구간별 상수이고, 어떤 시작점의 윈도우든 그 안 첫 호출 시각에서
 //     시작하는 윈도우가 같은 호출을 모두 포함한다). 즉 근사가 아니라 **정확한 최대**다.
 //
-// 앱 자체 DB(= GAIA, config.ts APP_DB_LAYER)의 TRX_TOKEN_DET 만 본다. 다른 모듈과 같은
+// filter.agentId 에이전트의 TRX_TOKEN_DET 만 본다. 다른 모듈과 같은
 // lazy-oracledb-swallow 패턴 — 드라이버/설정이 없으면 빈 격자를 돌려주고 화면은 정상 동작.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -183,7 +183,7 @@ export async function fetchTickStats(filter: TickFilter): Promise<TickStatsRespo
   // 임의로 넓은 범위가 와도 분 격자가 폭발하지 않도록 클램프 (뒤쪽 = 최신 유지)
   if ((toMs - fromMs) / MIN_MS > TICK_MAX_MINUTES) fromMs = toMs - TICK_MAX_MINUTES * MIN_MS;
 
-  const cfg = getAppDbConfig();
+  const cfg = getAgentDbConfig(filter.agentId);
   if (!cfg) return emptyStats(filter, fromMs, toMs);
   const oracle = await getOracle();
   if (!oracle) return emptyStats(filter, fromMs, toMs);

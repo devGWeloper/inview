@@ -7,6 +7,7 @@ import { AgentProfile } from "@/lib/types";
 import { Role, roleAtLeast } from "@/lib/roles";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiJson } from "@/lib/apiClient";
+import { useAgentScope } from "@/components/agents/AgentScopeProvider";
 
 /**
  * 분석 성격의 탭 묶음 (세그먼트 컨트롤). Agent 는 성격이 달라 별도 칩으로 분리.
@@ -18,18 +19,24 @@ const ANALYSIS_TABS: ReadonlyArray<{
   label: string;
   icon: () => JSX.Element;
   minRole?: Role;
+  /** 에이전트별로 갈리는 탭인가 (TRX_TOKEN_DET 기반). 비기본 에이전트에서도 남는다 */
+  agentScoped?: boolean;
 }> = [
   { href: "/", label: "Traces", icon: TracesIcon },
   { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
-  { href: "/tokens", label: "Tokens", icon: TokensIcon },
-  { href: "/timeouts", label: "Timeout", icon: TimeoutIcon, minRole: "ADMIN" },
+  { href: "/tokens", label: "Tokens", icon: TokensIcon, agentScoped: true },
+  { href: "/timeouts", label: "Timeout", icon: TimeoutIcon, minRole: "ADMIN", agentScoped: true },
 ];
 
 /** 분석 탭 세그먼트 그룹 (Traces / Dashboard / Tokens / Timeout). 상단바 가운데. */
 export function TabNav() {
   const path = usePathname();
   const { user } = useAuth();
-  const tabs = ANALYSIS_TABS.filter((t) => !t.minRole || (user && roleAtLeast(user.role, t.minRole)));
+  const { isDefault } = useAgentScope();
+  // 비기본 에이전트는 BIZ_AIACTIONTXN_HIS 기반 화면을 쓰지 않는다 — 탭 자체를 감춘다.
+  const tabs = ANALYSIS_TABS
+    .filter((t) => isDefault || t.agentScoped)
+    .filter((t) => !t.minRole || (user && roleAtLeast(user.role, t.minRole)));
   return (
     <nav className="tabnav" aria-label="primary">
       <div className="tabnav-group" role="tablist">
@@ -71,6 +78,27 @@ export function AgentNavChip() {
       .catch(() => {});
     return () => { alive = false; };
   }, []);
+
+  const { agent, isDefault } = useAgentScope();
+
+  // 비기본 에이전트: /agent 프로필은 기본 에이전트(BIZ 기반 FTE 포함) 전용이라 링크하지 않는다.
+  if (!isDefault && agent) {
+    return (
+      <span className="nav-agent static" title={agent.name}>
+        <span className="nav-agent-photo" aria-hidden>
+          <span className="nav-agent-emoji">{agent.avatar}</span>
+        </span>
+        <span className="nav-agent-id">
+          <span className="nav-agent-name">{agent.name}</span>
+          <span className="nav-agent-status">
+            <span className="nav-agent-dot" />
+            <span className="nav-agent-live">근무중</span>
+            <span className="nav-agent-role">AI AGENT</span>
+          </span>
+        </span>
+      </span>
+    );
+  }
 
   const avatarImg = profile?.avatarImage?.trim() || "";
   const emoji = profile?.avatar || "🧑‍🍳";

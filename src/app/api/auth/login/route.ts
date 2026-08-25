@@ -19,10 +19,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.reason }, { status: 401 });
     }
 
+    // 계정의 에이전트 결속을 세션에 싣는다 (null = 결속 없음 → 필드 자체를 넣지 않는다).
     const token = await signSession({
       sub: result.user.userId,
       name: result.user.name,
       role: result.user.role,
+      agentId: result.user.agentId ?? undefined,
     });
 
     logger.info("login ok", { ...ctx, userId: result.user.userId, role: result.user.role });

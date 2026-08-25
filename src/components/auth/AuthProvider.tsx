@@ -9,6 +9,12 @@ export interface SessionUser {
   userId: string;
   name: string;
   role: Role;
+  /**
+   * 결속된 에이전트 id (TRX_USER_MAS.AGENT_ID). null/undefined = 전 에이전트.
+   * ⚠️ 세션 payload 를 그대로 비춘 값이라 **표시·진단용**이다 — 실제 차단은
+   *    조회 3라우트(/api/tokens · /api/tokens/tick · /api/timeouts)의 403 이 한다.
+   */
+  agentId?: string | null;
 }
 
 interface AuthContextValue {

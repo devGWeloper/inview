@@ -1178,7 +1178,7 @@ git commit -m "docs: 멀티 에이전트 구조 문서화"
 Task 1~6 을 실제로 돌려 본 뒤에 착수한다. 여기까지는 로그인한 사용자 누구나 셀렉터에서 아무 에이전트나 고를 수 있다.
 
 **Files:**
-- Create: `sql/alter_trx_user_mas_agent_id.sql`
+- Create: `sql/migrations/2026-08-24_add_user_agent_id.sql`
 - Modify: `src/lib/users.ts`
 - Modify: `src/lib/auth/session.ts`
 - Modify: `src/app/api/auth/login/route.ts`
@@ -1191,7 +1191,7 @@ Task 1~6 을 실제로 돌려 본 뒤에 착수한다. 여기까지는 로그인
 - Consumes: `listAgents()`, `getAgent()`, `publicAgents()` (Task 1)
 - Produces: `UserAccount.agentId: string | null`, `SessionPayload.agentId?: string`
 
-- [ ] **Step 1: `sql/alter_trx_user_mas_agent_id.sql` 작성**
+- [ ] **Step 1: `sql/migrations/2026-08-24_add_user_agent_id.sql` 작성**
 
 기존 `sql/create_trx_user_mas.sql` 의 헤더 주석·권한 섹션 형식을 그대로 따른다.
 
@@ -1328,7 +1328,7 @@ Expected: 모두 정상 동작하고 에이전트 열은 전부 `전체` 로 보
 
 - [ ] **Step 9: ALTER 후 동작 확인**
 
-앱 자체 DB(GAIA)에서 `sql/alter_trx_user_mas_agent_id.sql` 실행 → dev 서버 재시작.
+앱 자체 DB(GAIA)에서 `sql/migrations/2026-08-24_add_user_agent_id.sql` 실행 → dev 서버 재시작.
 
 1. 테스트 계정을 만들고 에이전트를 `검증용 미러` 로 지정
 2. 그 계정으로 로그인 → 셀렉터에 `검증용 미러` 하나만 보인다 (`agents.length < 2` 라 셀렉터 자체가 안 보일 수 있다 — 정상)
@@ -1338,7 +1338,7 @@ Expected: 모두 정상 동작하고 에이전트 열은 전부 `전체` 로 보
 - [ ] **Step 10: 커밋**
 
 ```bash
-git add sql/alter_trx_user_mas_agent_id.sql src/lib/users.ts src/lib/auth/session.ts src/app/api/auth/login/route.ts src/app/api/agents/route.ts src/app/api/tokens/route.ts src/app/api/tokens/tick/route.ts src/app/api/timeouts/route.ts src/components/auth/AuthProvider.tsx src/app/accounts/page.tsx
+git add sql/migrations/2026-08-24_add_user_agent_id.sql src/lib/users.ts src/lib/auth/session.ts src/app/api/auth/login/route.ts src/app/api/agents/route.ts src/app/api/tokens/route.ts src/app/api/tokens/tick/route.ts src/app/api/timeouts/route.ts src/components/auth/AuthProvider.tsx src/app/accounts/page.tsx
 git commit -m "feat(agents): 계정별 에이전트 결속 (TRX_USER_MAS.AGENT_ID)"
 ```
 
@@ -1363,3 +1363,66 @@ git add CLAUDE.md && git commit -m "docs: 계정별 에이전트 결속 문서�
 - **`config.yml` 에 `agents:` 섹션을 추가해야** 다중 에이전트가 동작한다. 추가하지 않으면 기존과 동일하게 단일 에이전트로 동작한다(무해).
 - **`config.dev.yml` 의 `agents:` 는 개발 검증용**이다. `deploy.sh` 가 prd 배포에서 이 파일을 지우므로 운영에는 영향이 없다.
 - Task 7 은 **DB ALTER 를 동반**한다. 앱은 컬럼 없이도 동작하므로 ALTER 와 배포 순서는 자유다.
+
+---
+
+## 사내 환경 검증 체크리스트 (⚠️ 이 브랜치는 한 번도 실행되지 않았다)
+
+개발 머신에 DB 접속정보가 없어(`config.dev.yml` 의 layers 4개 모두 빈 값) **로그인 자체가 불가능**했다.
+계정이 GAIA DB 의 `TRX_USER_MAS` 에 있고 미들웨어가 비로그인 API 를 401 로 막기 때문이다.
+따라서 전 구간 검증이 **정적 검증(`tsc --noEmit` / `npm run build`) + 코드 리뷰**로만 이뤄졌다.
+아래는 실제 DB 가 붙은 환경에서 처음 해봐야 할 것들 — **위험도 순**이다.
+
+### 1. `AGENT_ID` 컬럼 탐지가 실제 Oracle 에서 동작하는가 (최우선)
+
+결속 기능 전체가 `SELECT AGENT_ID FROM TRX_USER_MAS WHERE 1 = 0` 이 **파싱 단계에서 ORA-00904 를
+던지고**, 그 문자열이 `String(e).includes("ORA-00904")` 에 걸린다는 전제 위에 있다
+(`src/lib/users.ts`). 드라이버가 메시지를 감싸거나 지역화하면 매 로그인마다 경고가 찍히고,
+**더 나쁘게는 전원이 "결속 없음" 으로 처리된다**(fail-open).
+
+- [ ] ALTER **전**에 한 번 로그인 → 서버 로그에 `hasAgentCol` 경고가 **없어야** 한다
+- [ ] `sql/migrations/2026-08-24_add_user_agent_id.sql` 실행
+- [ ] **앱 재시작 없이** 다시 로그인 → `/accounts` 에 에이전트 열이 뜨고 편집이 가능해야 한다
+      (탐지는 `true` 만 캐시하므로 다음 호출에서 잡히는 게 정상)
+
+### 2. 같은 DB 를 가리키는 두 에이전트가 같은 수치를 내는가
+
+커넥션 선택 경로가 타입만 맞는 게 아니라 실제로 옳다는 **유일한 직접 증거**다.
+
+- [ ] `config.dev.yml` 의 `agent-mirror` 의 `db` 3필드를 `layers.GAIA` 와 **동일하게** 채운다
+- [ ] Tokens 탭에서 `이억수 TL` → 30D 조회, 총 토큰/호출 수를 적는다
+- [ ] `검증용 미러` 로 전환 → 재조회가 자동으로 일어나고 **수치가 동일**해야 한다
+- [ ] Timeout 탭에서 반복
+- [ ] `미구성 에이전트` 로 전환 → 빈 화면 + 미구성 배너, 콘솔 에러 없음
+
+### 3. 하위호환 — `agents:` 섹션 없이 기동
+
+사내 배포가 가장 먼저 부딪히는 계약이고, 확인 비용이 가장 싸다.
+
+- [ ] `config.yml` 에서 `agents:` 섹션을 통째로 지우고 기동
+- [ ] 셀렉터가 **안 보이고**, 탭 4개가 전부 있고, Tokens/Timeout 이 `layers.GAIA` 를 읽어야 한다
+      (= 이 브랜치 이전과 화면이 동일)
+
+### 4. 결속 계정의 화면 (런타임에서만 드러나는 두 결함의 확인)
+
+- [ ] 테스트 계정 하나를 `검증용 미러` 에 결속하고 그 계정으로 로그인
+- [ ] 탭이 **Tokens / Timeout 만** 남아야 한다 (Traces·Dashboard 가 보이면 `isDefault` 판정 회귀)
+- [ ] 상단 칩이 그 에이전트 이름이고 클릭해도 `/agent` 로 가지 않아야 한다
+- [ ] 주소창으로 `/api/tokens?...&agent=<다른에이전트>` 직접 호출 → **403**
+- [ ] 운영자 계정(결속 없음)으로 로그인 → 셀렉터에 전부 보이고 전환 정상
+
+### 5. 전환 시 화면이 갈아끼워지는가
+
+- [ ] 조회가 느린 기간(30D)에서 에이전트를 전환 → 이전 에이전트의 KPI·표가 **새 이름 아래 남아 있으면 안 된다**
+- [ ] 전환 후 NODE/MODEL 필터가 초기화돼야 한다 (남아 있으면 "이 에이전트는 사용량 0" 으로 오독된다)
+
+### 6. 라우트 계약
+
+- [ ] `?agent=없는키` → **400**
+- [ ] `?agent=` (빈 값) / `?agent=%20` (공백) → 기본 에이전트로 정상 조회
+- [ ] 응답의 `agentId` 가 요청한 에이전트와 일치
+
+### 7. 기타
+
+- [ ] 기존 로그인 세션(이 브랜치 배포 **전**에 발급된 쿠키)이 로그아웃되지 않아야 한다
+- [ ] GAIA 미구성 배포에서는 이제 Tokens/Timeout 에 빨간 "DB 미구성" 배너가 뜬다 (이전엔 아무것도 안 떴다) — 의도된 변경

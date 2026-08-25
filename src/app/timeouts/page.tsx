@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fmtDuration } from "@/components/TokenLatencyChart";
 import { TimeoutTrendChart } from "@/components/TimeoutTrendChart";
 import { TimeoutModelHeatmap } from "@/components/TimeoutModelHeatmap";
 import { TimeoutDimStat, TimeoutItem, TimeoutReason, TimeoutStatsResponse } from "@/lib/types";
 import { callStatus } from "@/lib/tokenStatus";
 import { apiJson, errMessage } from "@/lib/apiClient";
+import { useAgentScope } from "@/components/agents/AgentScopeProvider";
 
 // Timeout 탭 — LLM 호출이 끊긴 지점을 그대로 본다.
 // 출처는 TRX_TOKEN_DET 의 실패 적재(STAT_CD='ERROR' + ERR_CTN + LATENCY_MS) 한 곳이며,
@@ -44,6 +45,7 @@ function fmtTs(ts: string | null): string {
 const pct = (n: number, total: number): string => (total > 0 ? ((n / total) * 100).toFixed(1) + "%" : "—");
 
 export default function TimeoutsPage() {
+  const { agentId, agent, isDefault, ready } = useAgentScope();
   const [mode, setMode] = useState<Mode>("7d");
   const [range, setRange] = useState<Range>(() => presetRange("7d"));
   const [customFrom, setCustomFrom] = useState("");
@@ -54,23 +56,49 @@ export default function TimeoutsPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // 응답 도착 시점의 "현재 선택된 에이전트" 를 읽기 위한 ref — tokens 페이지와 동일 패턴.
+  const agentIdRef = useRef(agentId);
+  agentIdRef.current = agentId;
+
   const load = useCallback(async (r: Range, nodeNm: string, modelNm: string) => {
+    const requestFor = agentId; // 이 요청이 향한 에이전트
     setLoading(true);
     setErr(null);
     try {
       const q = new URLSearchParams({ dateFrom: r.from, dateTo: r.to });
+      if (agentId) q.set("agent", agentId);
       if (nodeNm) q.set("nodeNm", nodeNm);
       if (modelNm) q.set("modelNm", modelNm);
-      setStats(await apiJson<TimeoutStatsResponse>(`/api/timeouts?${q.toString()}`, { cache: "no-store" }));
+      const data = await apiJson<TimeoutStatsResponse>(`/api/timeouts?${q.toString()}`, { cache: "no-store" });
+      // ⚠️ 응답 도착 시점에 이미 다른 에이전트로 전환됐으면 폐기한다 — tokens 페이지와 동일 이유.
+      //    단, 양쪽 다 "모름" 은 통과다 — data.agentId 가 없으면(구버전 라우트) requestFor 로
+      //    대체하고, agentIdRef.current 자체가 비어 있으면(/api/agents 조회 실패로 agentId=""
+      //    인 상태) 비교 대상이 없으니 무조건 통과시킨다. 엄격 비교만 쓰면 이 두 경우에 매번
+      //    폐기돼 헤더·필터는 뜨는데 데이터/에러/안내가 전부 없는 빈 화면이 된다.
+      const echoed = data.agentId ?? requestFor;
+      if (agentIdRef.current && echoed !== agentIdRef.current) return;
+      setStats(data);
     } catch (e) {
+      if (agentIdRef.current !== requestFor) return;
       setErr(errMessage(e, "타임아웃 집계를 불러오지 못했습니다."));
       setStats(null);
     } finally {
-      setLoading(false);
+      if (agentIdRef.current === requestFor) setLoading(false);
     }
-  }, []);
+  }, [agentId]);
 
-  useEffect(() => { load(range, node, model); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  // 최초 조회 + 에이전트 전환 시 재조회. ready 이전에는 agentId 가 비어 있어 조회하지 않는다.
+  // ⚠️ 에이전트가 바뀌면 노드/모델 필터와 렌더된 데이터를 비운다 — 이유는 tokens 페이지와 동일
+  //    (필터가 남으면 "이 에이전트는 사용량이 없다" 로 오독되고, 데이터가 남으면 새 이름 아래
+  //    이전 에이전트의 수치가 잠깐 남아 보인다).
+  useEffect(() => {
+    if (!ready) return;
+    setNode("");
+    setModel("");
+    setStats(null);
+    load(range, "", "");
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [ready, agentId]);
 
   const onPreset = (p: Preset) => {
     const r = presetRange(p);
@@ -105,7 +133,10 @@ export default function TimeoutsPage() {
           <div className="dash-title-main">Timeout</div>
           <div className="dash-title-sub">
             {stats ? fmtRange(stats.range.from, stats.range.to) : fmtRange(range.from, range.to)}
-            <span className="dash-title-note"> · LLM 호출 실패 적재 기준</span>
+            <span className="dash-title-note">
+              {" "}· LLM 호출 실패 적재 기준
+              {!isDefault && agent ? ` · ${agent.name}` : ""}
+            </span>
           </div>
         </div>
         <div className="dash-filter">
@@ -167,6 +198,16 @@ export default function TimeoutsPage() {
 
       {loading && <div className="dash-banner loading">집계 중…</div>}
       {err && <div className="dash-banner err">불러오기 실패: {err}</div>}
+      {agent && !agent.dbConfigured && (
+        <div className="dash-banner err">
+          {/* config.yml 에 agents: 섹션이 없으면 config.ts 가 layers.GAIA 로 기본 에이전트 1개를
+              합성한다 — 이 경우 고칠 곳은 "agents 항목"이 아니라 layers.GAIA 라 두 경우를 모두
+              가리키는 문구로 안내한다. */}
+          {agent.name} 의 DB 접속 정보가 설정되지 않았습니다 — config.yml 에서 agents 섹션이 있다면
+          해당 에이전트의 db 항목을, 없다면 layers.GAIA 를 확인하세요.
+          (빈 화면은 &ldquo;사용량 0&rdquo; 이 아닙니다)
+        </div>
+      )}
 
       {stats && !stats.available && (
         <div className="dash-banner">

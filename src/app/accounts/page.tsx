@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { ROLES, ROLE_LABEL, ROLE_DESC, Role } from "@/lib/roles";
-import { apiFetch, asArray, errMessage, SESSION_EXPIRED_MSG } from "@/lib/apiClient";
+import { apiFetch, apiJson, asArray, errMessage, SESSION_EXPIRED_MSG } from "@/lib/apiClient";
+import { AgentInfo, AgentsResponse } from "@/lib/types";
 
 interface Account {
   userId: string;
@@ -11,12 +12,26 @@ interface Account {
   work: string | null;
   role: Role;
   useYn: "Y" | "N";
+  /** 접근 가능 에이전트 id. null = 전체(제한 없음) */
+  agentId: string | null;
   lastLoginDt: string | null;
   regDt: string | null;
 }
 
 function fmt(ts: string | null): string {
   return ts ? ts.replace("T", " ").slice(0, 16) : "—";
+}
+
+/** 결속 에이전트 표기. 설정에 없는 id 는 원문을 그대로 보여 잘못된 값을 드러낸다. */
+function AgentCell({ agents, id }: { agents: AgentInfo[]; id: string | null }) {
+  if (!id) return <span className="acct-dim">전체</span>;
+  const found = agents.find((a) => a.id === id);
+  if (found) return <span>{found.avatar} {found.name}</span>;
+  return (
+    <span className="mono acct-agent-bad" title="config.yml 의 agents 에 없는 에이전트입니다 — 이 계정은 조회가 막힙니다">
+      {id} ⚠️
+    </span>
+  );
 }
 
 export default function AccountsPage() {
@@ -26,6 +41,11 @@ export default function AccountsPage() {
   const [reason, setReason] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
+  // 에이전트 목록 — 결속 선택지/표기용.
+  // ⚠️ /api/agents 는 **내 세션 범위**로 필터돼 내려온다. 결속을 다룰 수 있는 건 ADMIN 뿐이고
+  //    ADMIN 은 결속이 없어(전체) 목록도 전체로 온다. 못 읽으면 셀렉트를 비활성으로 둔다.
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [agentsLoaded, setAgentsLoaded] = useState(false);
 
   // 모달 상태
   const [editor, setEditor] = useState<{ mode: "create" | "edit"; acc?: Account } | null>(null);
@@ -55,6 +75,18 @@ export default function AccountsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    let alive = true;
+    apiJson<AgentsResponse>("/api/agents", { cache: "no-store" })
+      .then((d) => {
+        if (!alive) return;
+        setAgents(asArray<AgentInfo>(d.agents));
+        setAgentsLoaded(true);
+      })
+      .catch(() => { /* 못 읽으면 결속 선택을 비활성으로 둔다(빈 목록으로 덮어쓰지 않기 위함) */ });
+    return () => { alive = false; };
+  }, []);
+
   const filtered = users.filter((u) => {
     if (!q.trim()) return true;
     const t = q.trim().toLowerCase();
@@ -64,6 +96,11 @@ export default function AccountsPage() {
       (u.work ?? "").toLowerCase().includes(t)
     );
   });
+
+  // 에이전트가 하나뿐인 배포에서는 결속 열/선택을 감춘다 — 기존 화면과 같아야 한다.
+  // 단, 이미 결속된 계정이 있으면(설정이 줄었을 수도) 그 값은 반드시 보인다.
+  const showAgent = agents.length > 1 || users.some((u) => u.agentId);
+  const cols = showAgent ? 8 : 7;
 
   const counts = {
     total: users.length,
@@ -130,15 +167,16 @@ export default function AccountsPage() {
               <th>이름</th>
               <th>업무</th>
               <th>권한</th>
+              {showAgent && <th>에이전트</th>}
               <th>상태</th>
               <th>최근 로그인</th>
               <th className="acct-actions-h">관리</th>
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={7} className="acct-empty">불러오는 중…</td></tr>}
+            {loading && <tr><td colSpan={cols} className="acct-empty">불러오는 중…</td></tr>}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={7} className="acct-empty">계정이 없습니다.</td></tr>
+              <tr><td colSpan={cols} className="acct-empty">계정이 없습니다.</td></tr>
             )}
             {filtered.map((u) => (
               <tr key={u.userId} className={u.useYn === "N" ? "off" : ""}>
@@ -146,6 +184,7 @@ export default function AccountsPage() {
                 <td>{u.name}</td>
                 <td className="acct-work">{u.work || "—"}</td>
                 <td><span className={"acct-role role-" + u.role}>{ROLE_LABEL[u.role]}</span></td>
+                {showAgent && <td className="acct-agent"><AgentCell agents={agents} id={u.agentId} /></td>}
                 <td>
                   {u.useYn === "Y"
                     ? <span className="acct-badge on">활성</span>
@@ -179,6 +218,8 @@ export default function AccountsPage() {
           mode={editor.mode}
           acc={editor.acc}
           meRole={me?.role}
+          agents={agents}
+          agentsLoaded={agentsLoaded}
           onClose={() => setEditor(null)}
           onSaved={() => { setEditor(null); void load(); }}
         />
@@ -195,13 +236,18 @@ export default function AccountsPage() {
 
 // ── 생성 / 수정 모달 ──────────────────────────────────────────────────────
 function AccountEditor({
-  mode, acc, meRole, onClose, onSaved,
-}: { mode: "create" | "edit"; acc?: Account; meRole?: Role; onClose: () => void; onSaved: () => void }) {
+  mode, acc, meRole, agents, agentsLoaded, onClose, onSaved,
+}: {
+  mode: "create" | "edit"; acc?: Account; meRole?: Role;
+  agents: AgentInfo[]; agentsLoaded: boolean;
+  onClose: () => void; onSaved: () => void;
+}) {
   const [userId, setUserId] = useState(acc?.userId ?? "");
   const [name, setName] = useState(acc?.name ?? "");
   const [work, setWork] = useState(acc?.work ?? "");
   const [role, setRole] = useState<Role>(acc?.role ?? "DEV");
   const [useYn, setUseYn] = useState<"Y" | "N">(acc?.useYn ?? "Y");
+  const [agentId, setAgentId] = useState(acc?.agentId ?? "");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -211,24 +257,41 @@ function AccountEditor({
     (r) => r !== "ADMIN" || meRole === "ADMIN" || acc?.role === "ADMIN"
   );
 
+  // 에이전트 결속은 ADMIN 만 바꾼다 (NULL = 전 에이전트라 해제도 범위 확대다).
+  // ⚠️ 여기서 막는 건 편의일 뿐이고, 실제 차단은 /api/accounts 의 403 이다.
+  const canEditAgent = meRole === "ADMIN" && agentsLoaded;
+  // 에이전트가 하나뿐인 배포에선 필드를 감춘다. 단, 이미 결속이 있으면 보여 준다.
+  const showAgent = agents.length > 1 || !!acc?.agentId;
+  // 설정에서 사라진 결속이라도 선택 목록에 남겨야 저장 시 조용히 풀리지 않는다.
+  const agentOptions = acc?.agentId && !agents.some((a) => a.id === acc.agentId)
+    ? [...agents.map((a) => ({ id: a.id, label: `${a.avatar} ${a.name}` })),
+       { id: acc.agentId, label: `${acc.agentId} (설정에 없음)` }]
+    : agents.map((a) => ({ id: a.id, label: `${a.avatar} ${a.name}` }));
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
     setSaving(true);
     try {
+      // 결속을 바꿀 수 없는 사용자는 키 자체를 보내지 않는다 — 보내면 서버가 403 이다.
+      // ⚠️ **값이 바뀐 경우에만** 보낸다. 늘 보내면 결속과 무관한 수정까지 "결속을 쓰겠다" 는
+      //    요청이 되어, AGENT_ID 컬럼이 없는 ALTER 전 환경에서 저장이 통째로 실패한다.
+      const agentPatch = canEditAgent && agentId !== (acc?.agentId ?? "")
+        ? { agentId: agentId || null }
+        : {};
       let res: Response;
       if (mode === "create") {
         // 초기 비밀번호는 서버에서 사번으로 설정한다(별도 입력 없음).
         res = await apiFetch("/api/accounts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, name, work, role, useYn }),
+          body: JSON.stringify({ userId, name, work, role, useYn, ...agentPatch }),
         });
       } else {
         res = await apiFetch(`/api/accounts/${encodeURIComponent(acc!.userId)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, work, role, useYn }),
+          body: JSON.stringify({ name, work, role, useYn, ...agentPatch }),
         });
       }
       const data = await res.json().catch(() => ({}));
@@ -279,6 +342,23 @@ function AccountEditor({
             ))}
           </div>
         </div>
+
+        {showAgent && (
+          <label className="auth-field">
+            <span>에이전트</span>
+            <select value={agentId} disabled={!canEditAgent} onChange={(e) => setAgentId(e.target.value)}>
+              <option value="">전체 (제한 없음)</option>
+              {agentOptions.map((o) => (
+                <option key={o.id} value={o.id}>{o.label}</option>
+              ))}
+            </select>
+            <em className="auth-hint">
+              {canEditAgent
+                ? "고르면 그 에이전트의 Tokens · Timeout 만 조회할 수 있습니다. 전체는 제한 없음."
+                : "에이전트 결속은 운영자만 변경할 수 있습니다."}
+            </em>
+          </label>
+        )}
 
         {mode === "create" && (
           <div className="acct-initpw-note">

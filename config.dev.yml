@@ -25,3 +25,23 @@ layers:
     user: ""
     password: ""
     connectString: ""
+
+agents:
+  - id: leeoksu
+    name: 이억수 TL
+    avatar: "🧑‍🍳"
+    default: true
+    tpmLimit: 0
+    rpmLimit: 0
+  - id: agent-mirror
+    name: 검증용 미러
+    avatar: "🪞"
+    db:
+      user: ""            # ← layers.GAIA 와 동일한 값으로 채울 것
+      password: ""
+      connectString: ""
+    tpmLimit: 100000
+    rpmLimit: 30
+  - id: agent-nodb
+    name: 미구성 에이전트
+    avatar: "🚧"

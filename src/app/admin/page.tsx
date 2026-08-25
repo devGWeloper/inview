@@ -19,9 +19,6 @@ function AdminEditor() {
   const [fteActs, setFteActs] = useState<{ action: string; minutes: string }[]>([]);
   const [fteDefText, setFteDefText] = useState("");
   const [fteAnnText, setFteAnnText] = useState("");
-  // LLM 사용량 한도(TPM/RPM) 편집용 — 0/빈칸 = 미설정
-  const [tpmText, setTpmText] = useState("");
-  const [rpmText, setRpmText] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -36,8 +33,6 @@ function AdminEditor() {
       .map((a) => ({ action: a.action, minutes: String(a.minutes) })));
     setFteDefText(String(p.fteDefaultMinutes));
     setFteAnnText(String(p.fteAnnualMinutes));
-    setTpmText(p.tpmLimit > 0 ? String(p.tpmLimit) : "");
-    setRpmText(p.rpmLimit > 0 ? String(p.rpmLimit) : "");
   }, []);
 
   useEffect(() => {
@@ -132,27 +127,12 @@ function AdminEditor() {
       setMsg({ kind: "err", text: "FTE 계산식 상수(기본 분·연간 분)는 0보다 큰 숫자여야 합니다." });
       return;
     }
-    // 사용량 한도: 빈칸 = 미설정(0). 음수/비숫자는 거부한다 —
-    // 잘못된 값이 1TICK 모니터의 초과 기준선으로 그려지면 오판을 부른다.
-    const parseLimit = (text: string): number | null => {
-      if (text.trim() === "") return 0;
-      const n = Number(text);
-      return Number.isFinite(n) && n >= 0 ? n : null;
-    };
-    const tpmLimit = parseLimit(tpmText);
-    const rpmLimit = parseLimit(rpmText);
-    if (tpmLimit === null || rpmLimit === null) {
-      setSaving(false);
-      setMsg({ kind: "err", text: "사용량 한도(TPM/RPM)는 0 이상의 숫자이거나 빈칸(미설정)이어야 합니다." });
-      return;
-    }
     try {
       const data = await apiJson<{ profile: AgentProfile }>("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...profile, skills, fteActionMinutes, fteDefaultMinutes, fteAnnualMinutes,
-          tpmLimit, rpmLimit,
         }),
       });
       applyProfile(data.profile);
@@ -239,18 +219,7 @@ function AdminEditor() {
               <input value={fteAnnText} onChange={(e) => setFteAnnText(e.target.value)} placeholder="예: 65984" inputMode="numeric" />
             </Field>
           </div>
-        </fieldset>
-
-        <fieldset className="admin-section">
-          <legend>LLM 사용량 한도 (TPM / RPM)</legend>
-          <div className="admin-grid admin-fte-consts">
-            <Field label="TPM (분당 토큰)">
-              <input value={tpmText} onChange={(e) => setTpmText(e.target.value)} placeholder="예: 200000" inputMode="numeric" />
-            </Field>
-            <Field label="RPM (분당 호출)">
-              <input value={rpmText} onChange={(e) => setRpmText(e.target.value)} placeholder="예: 60" inputMode="numeric" />
-            </Field>
-          </div>
+          <p className="admin-hint">LLM 사용량 한도(TPM/RPM)는 config.yml 의 agents 항목에서 관리합니다.</p>
         </fieldset>
 
         <fieldset className="admin-section">

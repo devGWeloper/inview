@@ -284,13 +284,6 @@ export interface AgentProfile {
   fteDefaultMinutes: number;
   /** FTE 계산식: 1 FTE(1인 1년)에 해당하는 연간 분(分). ADMIN 에서 편집 가능 (기본 65,984) */
   fteAnnualMinutes: number;
-  /**
-   * LLM 사용량 한도 — TPM(분당 토큰). Tokens 탭 1TICK 모니터의 초과 판정 기준선.
-   * 0 = 미설정(기준선/초과 판정 없이 추이만 표시). ADMIN 에서 편집.
-   */
-  tpmLimit: number;
-  /** LLM 사용량 한도 — RPM(분당 호출). 0 = 미설정. ADMIN 에서 편집 */
-  rpmLimit: number;
   /** 한 줄 소개 */
   tagline: string;
   /** 아바타 이모지 (avatarImage 가 없을 때 폴백) */
@@ -316,8 +309,6 @@ export const DEFAULT_PROFILE: AgentProfile = {
   ],
   fteDefaultMinutes: 5,
   fteAnnualMinutes: 65984,
-  tpmLimit: 0,
-  rpmLimit: 0,
   tagline: "쉬지 않고 일하는 우리 팀의 AI 에이전트",
   avatar: "🧑‍🍳",
   avatarImage: "",
@@ -442,6 +433,12 @@ export interface TokenFilter {
   modelNm?: string;
   /** 특정 질문(TRACE_ID) 으로 좁히기. 설정 시 응답 calls 에 그 질문의 호출별 행이 채워진다. */
   traceId?: string;
+  /**
+   * 어느 에이전트의 TRX_TOKEN_DET 를 볼지 (config.yml agents[].id).
+   * ⚠️ WHERE 절 조건이 아니라 **커넥션 선택**이다 — 에이전트는 행이 아니라 DB 단위로 갈린다.
+   * 생략 = 기본 에이전트.
+   */
+  agentId?: string;
 }
 
 export interface TokenBucket {
@@ -501,6 +498,8 @@ export interface TokenStatsResponse {
   questions: TokenQuestion[];
   /** filter.traceId 가 지정됐을 때 그 질문의 호출별 행(callTm desc). 그 외엔 빈 배열 (행 펼침용) */
   calls: TokenRow[];
+  /** 이 응답이 어느 에이전트를 집계한 것인지 (라우트가 에코). 늦게 도착한 응답 폐기용 */
+  agentId?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -763,6 +762,8 @@ export interface TimeoutStatsResponse {
   modelTrend: TimeoutModelSeries[];
   /** 오류 사유 top N — ERR_CTN 앞머리로 클러스터링해 자주 나오는 문구를 세운다 */
   topReasons: TimeoutReason[];
+  /** 이 응답이 어느 에이전트를 집계한 것인지 (라우트가 에코). 늦게 도착한 응답 폐기용 */
+  agentId?: string;
 }
 
 /** 히트맵 셀 하나 — 특정 모델·특정 시간 버킷의 요청/실패/타임아웃 수 */
@@ -801,7 +802,7 @@ export interface TimeoutReason {
 //    **초 단위 집계 위에서 슬라이딩 60초 윈도우의 최대값**을 따로 계산해 같이 그린다.
 //      - fixed*  = 정각 분 합계 (참고용 막대)
 //      - roll*   = 그 분에 시작하는 60초 윈도우 중 최대값 (초과 판정의 실제 기준)
-//    한도(tpmLimit/rpmLimit)는 AgentProfile 에서 온다 (/admin 편집).
+//    한도(tpmLimit/rpmLimit)는 config.yml 의 agents[] 에서 온다 (단일 소스).
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** 1TICK 조회 필터 — TokenFilter 의 시간/차원 필터와 동일 규칙 (traceId 없음) */
@@ -811,6 +812,12 @@ export interface TickFilter {
   userId?: string;
   nodeNm?: string;
   modelNm?: string;
+  /**
+   * 어느 에이전트의 TRX_TOKEN_DET 를 볼지 (config.yml agents[].id).
+   * ⚠️ WHERE 절 조건이 아니라 **커넥션 선택**이다 — 에이전트는 행이 아니라 DB 단위로 갈린다.
+   * 생략 = 기본 에이전트.
+   */
+  agentId?: string;
 }
 
 /** 분 1칸. 빈 분도 0 으로 채워 내려간다(차트 격자를 균일하게 유지). */
@@ -867,7 +874,37 @@ export interface TickStatsResponse {
   calls: TickCall[];
   /** calls 가 상한(TICK_CALL_LIMIT)에 걸려 잘렸는지 */
   truncated: boolean;
+  /** 이 응답이 어느 에이전트를 집계한 것인지 (라우트가 에코). 늦게 도착한 응답 폐기용 */
+  agentId?: string;
 }
 
 /** 롤링 윈도우 길이(초). TPM/RPM 의 "per minute" 정의 그대로 60초. */
 export const TICK_WINDOW_SEC = 60;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 멀티 에이전트 — Tokens / Timeout 화면이 어느 에이전트의 TRX_TOKEN_DET 를 볼지.
+//
+// ⚠️ AgentInfo 는 브라우저로 내려간다. 접속정보(user/password/connectString)는
+//    절대 포함하지 않는다 — 구성 여부는 dbConfigured 로만 알린다.
+//    접속정보를 다루는 서버 전용 형태는 config.ts 의 AgentDef 다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AgentInfo {
+  /** 불변 키. URL(?agent=) · localStorage · TRX_USER_MAS.AGENT_ID 에서 이 값을 쓴다 */
+  id: string;
+  name: string;
+  /** 아바타 이모지 (셀렉터/상단바 칩용) */
+  avatar: string;
+  /** 기본 에이전트인가 (= BIZ 기반 화면까지 쓰는 에이전트) */
+  isDefault: boolean;
+  /** 1TICK 기준선. 0 = 미설정 */
+  tpmLimit: number;
+  rpmLimit: number;
+  /** config 에 DB 접속정보가 채워져 있는가. false 면 조회가 빈 통계로 돌아온다 */
+  dbConfigured: boolean;
+}
+
+export interface AgentsResponse {
+  agents: AgentInfo[];
+  defaultId: string;
+}

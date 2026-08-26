@@ -7,7 +7,7 @@ import { TokenBreakdown } from "@/components/TokenBreakdown";
 import { TokenStatsCards } from "@/components/TokenStatsCards";
 import { QuestionsTable } from "@/components/QuestionsTable";
 import { TopList } from "@/components/TopList";
-import { TickMonitor, TickWindowMin } from "@/components/TickMonitor";
+import { TickMode, TickMonitor, TickWindowMin } from "@/components/TickMonitor";
 import { TickStatsResponse, TokenFilter, TokenRow, TokenStatsResponse } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 import { useAgentScope } from "@/components/agents/AgentScopeProvider";
@@ -41,6 +41,24 @@ function toLocalSec(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
+/**
+ * 1TICK 이 조회할 구간.
+ *   live   — 지금까지 N분 (창이 계속 앞으로 밀린다)
+ *   custom — 사용자가 찍은 고정 구간. **과거 이력을 보는 유일한 경로**다.
+ */
+type TickReq =
+  | { mode: "live"; win: TickWindowMin }
+  | { mode: "custom"; from: string; to: string };
+
+/**
+ * datetime-local 값('YYYY-MM-DDTHH:MM')에 초를 채운다.
+ * 끝 시각엔 ':59' 를 붙여 **그 분을 통째로 포함**시킨다 — 분 격자 화면에서 마지막 칸이
+ * 조건상 잘려 비어 보이는 걸 막는다.
+ */
+function withSec(v: string, sec: "00" | "59"): string {
+  return v.length === 16 ? `${v}:${sec}` : v;
+}
+
 function fmtRange(from: string | null, to: string | null): string {
   if (!from || !to) return "—";
   return `${from.replace("T", " ").slice(0, 16)}  →  ${to.replace("T", " ").slice(0, 16)}`;
@@ -58,6 +76,12 @@ export default function TokensPage() {
   const [stats, setStats] = useState<TokenStatsResponse | null>(null);
   // 1TICK 모니터 전용 상태 (창 길이 / 자동 새로고침 / 응답 (한도는 config 의 agents[] 에서 온다))
   const [tickWin, setTickWin] = useState<TickWindowMin>(60);
+  const [tickMode, setTickMode] = useState<TickMode>("live");
+  const [tickFrom, setTickFrom] = useState("");
+  const [tickTo, setTickTo] = useState("");
+  // 서버가 24시간(TICK_MAX_MINUTES)으로 잘랐는지 — 잘린 걸 안 알리면 앞 구간이
+  // "그 시간엔 호출이 없었다" 로 오독된다.
+  const [tickClamped, setTickClamped] = useState(false);
   const [tickAuto, setTickAuto] = useState(false);
   const [tick, setTick] = useState<TickStatsResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -128,19 +152,25 @@ export default function TokensPage() {
     }
   }, [agentId]);
 
-  // 1TICK 조회 — 창 길이(분)만큼 "지금까지" 를 초 정밀로 잡아 /api/tokens/tick 을 부른다.
+  // 1TICK 조회 — live 면 창 길이(분)만큼 "지금까지" 를 초 정밀로, custom 이면 지정한 구간 그대로.
   // over 로 방금 바뀐 필터 값을 넘길 수 있다(상태 반영 전 클릭/선택 대응).
   const loadTick = useCallback(
-    async (win: TickWindowMin, over?: { userId?: string; nodeNm?: string; modelNm?: string }) => {
+    async (req: TickReq, over?: { userId?: string; nodeNm?: string; modelNm?: string }) => {
       const requestFor = agentId;
       setLoading(true);
       setErr(null);
       try {
-        const now = Date.now();
-        const q = new URLSearchParams({
-          dateFrom: toLocalSec(now - win * 60_000),
-          dateTo: toLocalSec(now),
-        });
+        let dateFrom: string;
+        let dateTo: string;
+        if (req.mode === "live") {
+          const now = Date.now();
+          dateFrom = toLocalSec(now - req.win * 60_000);
+          dateTo = toLocalSec(now);
+        } else {
+          dateFrom = withSec(req.from, "00");
+          dateTo = withSec(req.to, "59");
+        }
+        const q = new URLSearchParams({ dateFrom, dateTo });
         if (agentId) q.set("agent", agentId);
         const u = over && "userId" in over ? over.userId : userId;
         const n = over && "nodeNm" in over ? over.nodeNm : nodeNm;
@@ -156,16 +186,52 @@ export default function TokensPage() {
         const echoed = data.agentId ?? requestFor;
         if (agentIdRef.current && echoed !== agentIdRef.current) return;
         setTick(data);
+        // 요청한 시작 시각보다 응답의 시작이 뒤면 서버가 24시간으로 자른 것이다.
+        // (1분 여유 — 초 정규화 차이를 잘림으로 오인하지 않도록)
+        const want = Date.parse(dateFrom);
+        const got = data.range.from ? Date.parse(data.range.from) : NaN;
+        setTickClamped(Number.isFinite(want) && Number.isFinite(got) && got - want > 60_000);
       } catch (e) {
         if (agentIdRef.current !== requestFor) return;
         setErr(errMessage(e, "1TICK 모니터를 불러오지 못했습니다."));
         setTick(null);
+        setTickClamped(false);
       } finally {
         if (agentIdRef.current === requestFor) setLoading(false);
       }
     },
     [userId, nodeNm, modelNm, agentId]
   );
+
+  /** 지금 화면이 보고 있는 1TICK 구간 (필터 변경·에이전트 전환 재조회가 모드를 잃지 않도록) */
+  const tickReq = useCallback(
+    (): TickReq =>
+      tickMode === "custom" && tickFrom && tickTo
+        ? { mode: "custom", from: tickFrom, to: tickTo }
+        : { mode: "live", win: tickWin },
+    [tickMode, tickFrom, tickTo, tickWin]
+  );
+
+  /** custom 모드 입력 검증. 통과하면 null, 아니면 사용자에게 보일 사유. */
+  const tickRangeError = (): string | null => {
+    if (tickMode !== "custom") return null;
+    if (!tickFrom || !tickTo) return "시작·끝 시각을 모두 입력하세요.";
+    if (Date.parse(tickFrom) >= Date.parse(tickTo)) return "시작 시각이 끝 시각보다 앞서야 합니다.";
+    return null;
+  };
+
+  /**
+   * 1TICK 재조회 — 화면의 모든 1TICK 조회(조회 버튼 / 새로고침 / 필터 변경 / 직접 설정)는
+   * 이 한 곳을 지난다. 검증과 "현재 모드 유지" 를 한 군데로 모으기 위한 것이다.
+   */
+  const submitTick = (over?: { userId?: string; nodeNm?: string; modelNm?: string }) => {
+    const bad = tickRangeError();
+    if (bad) {
+      setErr(bad);
+      return;
+    }
+    loadTick(tickReq(), over);
+  };
 
   // 최초 조회 + 에이전트 전환 시 재조회. ready 이전에는 agentId 가 비어 있어 조회하지 않는다.
   // ⚠️ 에이전트가 바뀌면 필터(NODE/MODEL/USER)·드롭다운 옵션·렌더된 데이터를 모두 비운다:
@@ -185,19 +251,21 @@ export default function TokensPage() {
     setStats(null);
     setTick(null);
     if (preset === "1tick") {
-      loadTick(tickWin, { userId: undefined, nodeNm: undefined, modelNm: undefined });
+      loadTick(tickReq(), { userId: undefined, nodeNm: undefined, modelNm: undefined });
     } else {
       load({ ...computeFilter(), userId: undefined, nodeNm: undefined, modelNm: undefined });
     }
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [ready, agentId]);
 
-  // 자동 새로고침 (1TICK 모드에서만). 창이 계속 앞으로 밀리므로 매번 새로 계산해 부른다.
+  // 자동 새로고침 (1TICK 의 live 모드에서만). 창이 계속 앞으로 밀리므로 매번 새로 계산해 부른다.
+  // ⚠️ custom 에서는 돌리지 않는다 — 고정된 과거 구간을 다시 부를 이유가 없고,
+  //    라이브 갱신은 '지금' 으로 창을 다시 잡아 사용자가 지정한 구간을 덮어쓴다.
   useEffect(() => {
-    if (preset !== "1tick" || !tickAuto) return;
-    const id = setInterval(() => loadTick(tickWin), 30_000);
+    if (preset !== "1tick" || tickMode !== "live" || !tickAuto) return;
+    const id = setInterval(() => loadTick({ mode: "live", win: tickWin }), 30_000);
     return () => clearInterval(id);
-  }, [preset, tickAuto, tickWin, loadTick]);
+  }, [preset, tickMode, tickAuto, tickWin, loadTick]);
 
   // 질문 행 펼침: traceId 로만 그 질문의 호출별 행을 가져온다.
   // 화면 필터(기간/노드/모델)를 같이 보내지 않는 이유: 한 질문을 펼치면 그 질문이 거친 호출
@@ -212,14 +280,14 @@ export default function TokensPage() {
 
   const onApply = (e: React.FormEvent) => {
     e.preventDefault();
-    if (preset === "1tick") loadTick(tickWin);
+    if (preset === "1tick") submitTick();
     else load(computeFilter());
   };
 
   const onPresetClick = (k: Preset) => {
     setPreset(k);
     if (k === "1tick") {
-      loadTick(tickWin);
+      submitTick();
       return;
     }
     if (k !== "custom") {
@@ -249,14 +317,26 @@ export default function TokensPage() {
 
   /** NODE/MODEL/USER 필터 변경 — 현재 모드에 맞는 쪽을 다시 조회한다 */
   const reloadWith = (over: { userId?: string; nodeNm?: string; modelNm?: string }) => {
-    if (preset === "1tick") loadTick(tickWin, over);
+    if (preset === "1tick") submitTick(over);
     else load({ ...computeFilter(), ...over });
   };
 
   const onTickWin = (w: TickWindowMin) => {
+    setTickMode("live");
     setTickWin(w);
-    loadTick(w);
+    loadTick({ mode: "live", win: w });
   };
+
+  /** '직접 설정' 진입 — 현재 라이브 창을 초깃값으로 채워만 두고, 조회는 사용자가 누를 때 한다. */
+  const onTickCustomMode = () => {
+    setTickMode("custom");
+    if (!tickFrom || !tickTo) {
+      const now = Date.now();
+      setTickFrom(toLocalInput(now - tickWin * 60_000));
+      setTickTo(toLocalInput(now));
+    }
+  };
+
 
   const hasFilter = !!(userId || nodeNm || modelNm);
   const clearFilters = () => {
@@ -366,12 +446,20 @@ export default function TokensPage() {
           stats={tick}
           tpmLimit={agent?.tpmLimit ?? 0}
           rpmLimit={agent?.rpmLimit ?? 0}
+          mode={tickMode}
           windowMin={tickWin}
           onWindowMin={onTickWin}
+          customFrom={tickFrom}
+          customTo={tickTo}
+          onCustomFrom={setTickFrom}
+          onCustomTo={setTickTo}
+          onCustomMode={onTickCustomMode}
+          onCustomSubmit={() => submitTick()}
+          clamped={tickClamped}
           auto={tickAuto}
           onAuto={setTickAuto}
           loading={loading}
-          onRefresh={() => loadTick(tickWin)}
+          onRefresh={() => submitTick()}
         />
       )}
 

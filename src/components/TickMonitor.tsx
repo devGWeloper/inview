@@ -20,6 +20,25 @@ import { TickMetric, TickMonitorChart, fmtCompact, windowLabel } from "@/compone
 export const TICK_WINDOWS = [15, 60, 180] as const;
 export type TickWindowMin = typeof TICK_WINDOWS[number];
 
+/**
+ * 조회 방식.
+ *   live   — "지금까지 N분" (창이 계속 앞으로 밀린다. 자동 새로고침은 이때만 의미가 있다)
+ *   custom — 사용자가 찍은 고정 구간. 과거 이력을 보는 유일한 경로다.
+ * ⚠️ 서버(`fetchTickStats`)는 24시간(TICK_MAX_MINUTES)을 넘는 구간을 **뒤쪽(최신)만 남기고**
+ *    자른다. 잘린 걸 안 알리면 앞부분이 "그 시간엔 호출이 없었다" 로 오독되므로 clamped 로 밝힌다.
+ */
+export type TickMode = "live" | "custom";
+
+/** 'YYYY-MM-DDTHH:MM:SS' 두 개 → 'MM/DD HH:MM → HH:MM' (날이 다르면 뒤쪽에도 날짜) */
+function fmtSpan(from: string | null, to: string | null): string {
+  if (!from || !to) return "—";
+  const day = (v: string) => v.slice(5, 10).replace("-", "/");
+  const hm = (v: string) => v.slice(11, 16);
+  return from.slice(0, 10) === to.slice(0, 10)
+    ? `${day(from)} ${hm(from)} → ${hm(to)}`
+    : `${day(from)} ${hm(from)} → ${day(to)} ${hm(to)}`;
+}
+
 /** 한도를 넘은 분들을 연속 구간으로 병합한 것 */
 interface Segment {
   startTs: string;
@@ -72,13 +91,24 @@ function callsInWindow(calls: TickCall[], startTs: string | null): TickCall[] {
 const fmtInt = (n: number) => Math.round(n).toLocaleString();
 
 export function TickMonitor({
-  stats, tpmLimit, rpmLimit, windowMin, onWindowMin, auto, onAuto, loading, onRefresh,
+  stats, tpmLimit, rpmLimit,
+  mode, windowMin, onWindowMin,
+  customFrom, customTo, onCustomFrom, onCustomTo, onCustomMode, onCustomSubmit, clamped,
+  auto, onAuto, loading, onRefresh,
 }: {
   stats: TickStatsResponse;
   tpmLimit: number;
   rpmLimit: number;
+  mode: TickMode;
   windowMin: TickWindowMin;
   onWindowMin: (w: TickWindowMin) => void;
+  customFrom: string;
+  customTo: string;
+  onCustomFrom: (v: string) => void;
+  onCustomTo: (v: string) => void;
+  onCustomMode: () => void;
+  onCustomSubmit: () => void;
+  clamped: boolean;
   auto: boolean;
   onAuto: (v: boolean) => void;
   loading: boolean;
@@ -96,6 +126,9 @@ export function TickMonitor({
 
   const noLimit = tpmLimit <= 0 && rpmLimit <= 0;
   const winText = windowMin < 60 ? `${windowMin}분` : `${windowMin / 60}시간`;
+  // ⚠️ 직접 설정 구간은 입력칸 값이 아니라 **응답이 준 stats.range** 로 적는다 —
+  //    입력만 고치고 조회를 안 눌렀을 때 화면의 데이터와 문구가 어긋나면 안 된다.
+  const rangeText = mode === "live" ? `최근 ${winText}` : fmtSpan(stats.range.from, stats.range.to);
 
   const pick = (m: TickMetric) => {
     setMetric(m);
@@ -105,22 +138,37 @@ export function TickMonitor({
   return (
     <>
       <div className="tick-bar">
-        <span className="tick-bar-range">최근 {winText} · 호출 {fmtInt(stats.totals.calls)}건</span>
+        <span className="tick-bar-range">{rangeText} · 호출 {fmtInt(stats.totals.calls)}건</span>
         <div className="tick-bar-right">
           <div className="tick-seg" role="tablist" aria-label="조회 범위">
             {TICK_WINDOWS.map((w) => (
               <button
                 key={w}
                 type="button"
-                className={"tick-seg-btn" + (windowMin === w ? " active" : "")}
+                className={"tick-seg-btn" + (mode === "live" && windowMin === w ? " active" : "")}
                 onClick={() => onWindowMin(w)}
               >
                 {w < 60 ? `${w}분` : `${w / 60}시간`}
               </button>
             ))}
+            <button
+              type="button"
+              className={"tick-seg-btn" + (mode === "custom" ? " active" : "")}
+              onClick={onCustomMode}
+              title="과거 구간을 직접 지정해 조회"
+            >
+              직접 설정
+            </button>
           </div>
-          <label className="tick-auto">
-            <input type="checkbox" checked={auto} onChange={(e) => onAuto(e.target.checked)} />
+          {/* ⚠️ 자동 새로고침은 live 에서만 — 고정된 과거 구간을 30초마다 다시 부를 이유가 없고,
+              라이브 갱신은 매번 '지금' 으로 창을 다시 잡아 사용자가 지정한 구간을 덮어쓴다. */}
+          <label className={"tick-auto" + (mode === "custom" ? " off" : "")}>
+            <input
+              type="checkbox"
+              checked={auto && mode === "live"}
+              disabled={mode === "custom"}
+              onChange={(e) => onAuto(e.target.checked)}
+            />
             자동 새로고침
           </label>
           <button type="button" className="btn ghost" onClick={onRefresh} disabled={loading}>
@@ -128,6 +176,36 @@ export function TickMonitor({
           </button>
         </div>
       </div>
+
+      {mode === "custom" && (
+        <div className="tick-range">
+          <div className="custom-range">
+            <input
+              type="datetime-local"
+              value={customFrom}
+              onChange={(e) => onCustomFrom(e.target.value)}
+              aria-label="from"
+            />
+            <span className="range-arrow">→</span>
+            <input
+              type="datetime-local"
+              value={customTo}
+              onChange={(e) => onCustomTo(e.target.value)}
+              aria-label="to"
+            />
+            <button type="button" className="btn primary" onClick={onCustomSubmit} disabled={loading}>
+              조회
+            </button>
+          </div>
+          <span className="tick-range-hint">최대 24시간</span>
+        </div>
+      )}
+
+      {clamped && (
+        <div className="tick-notice warn">
+          1TICK 은 한 번에 최대 24시간까지 집계합니다 — 지정한 구간 중 <b>뒤쪽 24시간</b>만 표시됩니다.
+        </div>
+      )}
 
       {noLimit && (
         <div className="tick-notice">

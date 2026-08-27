@@ -120,6 +120,7 @@ export default function AccountsPage() {
     admin: users.filter((u) => u.role === "ADMIN").length,
     br: users.filter((u) => u.role === "BR").length,
     dev: users.filter((u) => u.role === "DEV").length,
+    field: users.filter((u) => u.role === "FIELD").length,
     off: users.filter((u) => u.useYn === "N").length,
   };
 
@@ -144,6 +145,7 @@ export default function AccountsPage() {
               <span className="acct-hero-pill role-ADMIN"><b>{counts.admin}</b> 운영자</span>
               <span className="acct-hero-pill role-BR"><b>{counts.br}</b> BR</span>
               <span className="acct-hero-pill role-DEV"><b>{counts.dev}</b> 개발자</span>
+              <span className="acct-hero-pill role-FIELD"><b>{counts.field}</b> 현업</span>
               {counts.off > 0 && <span className="acct-hero-pill off"><b>{counts.off}</b> 비활성</span>}
             </div>
           </div>

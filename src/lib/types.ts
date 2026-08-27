@@ -688,6 +688,70 @@ export interface StatsResponse {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 현업(FIELD) 실적 — /api/insights
+//
+// StatsResponse 를 그대로 내려보내면 안 된다. 거기엔 사용자 ID(topUsers), 에러 코드
+// (topErrors), 레이어 내부 지표(layers/selfTime) 처럼 현업에게 보일 이유가 없는 정보가 섞여 있다.
+//
+// ⚠️ 그래서 **빼는 방식이 아니라 담는 방식**으로 만든다 — 라우트가 이 타입의 필드만 골라
+//    새 객체를 짓는다(`toInsights`). StatsResponse 에 필드가 추가돼도 여기로는 새지 않는다.
+//    이 타입에 필드를 더할 때는 "현업이 남의 요청 내용/신원을 알 수 있는가" 를 먼저 볼 것.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 실적 화면의 시간 버킷 — 상태 3종과 평균 응답시간만. (트레이스 수 등 진단값 제외) */
+export interface InsightsBucket {
+  ts: string;
+  ok: number;
+  fail: number;
+  pending: number;
+  avgCubeLatencyMs?: number | null;
+}
+
+/** 실적 화면의 일별 행 — 사용자는 **수(count)만**, 누가인지는 내려가지 않는다. */
+export interface InsightsDaily {
+  date: string;
+  total: number;
+  ok: number;
+  fail: number;
+  pending: number;
+  /** 그날의 고유 사용자 '수' */
+  users: number;
+  avgCubeLatencyMs: number | null;
+  byAction: DailyActionStat[];
+}
+
+/** 실적 화면에 노출할 에이전트 소개 — 프로필의 공개 항목만 (편집용 계산식 등은 제외) */
+export interface InsightsAgent {
+  name: string;
+  nickname: string;
+  tagline: string;
+  avatar: string;
+  avatarImage: string;
+}
+
+export interface InsightsResponse {
+  range: { from: string | null; to: string | null };
+  /** 트레이스(=요청) 단위 합계 */
+  totals: StatusCounts & { total: number };
+  /** 성공률 0~1. 집계 대상이 없으면 null */
+  successRate: number | null;
+  /** 평균 응답 속도 ms (CUBE send→resp, 전 구간 왕복). 측정 가능한 트레이스가 없으면 null */
+  avgResponseMs: number | null;
+  /** 기간 내 고유 사용자 수 (신원 아님, 수만) */
+  uniqueUsers: number;
+  granularity: "5m" | "1h" | "1d";
+  buckets: InsightsBucket[];
+  daily: InsightsDaily[];
+  /** 기능(ACTION_TYP)별 실행/성공/실패 */
+  byAction: DimensionStats[];
+  /** FAB 별 실행/성공/실패 — 조직 단위 집계라 개인정보가 아니다 */
+  byFac: DimensionStats[];
+  agent: InsightsAgent;
+  /** 누적 FTE 성과. CUBE 미연결이면 null */
+  fte: FteStats | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 타임아웃 추적 (Timeout 탭)
 //
 // 출처는 **TRX_TOKEN_DET 한 곳**이다. GAIA 가 call_llm 을 try/except 로 감싸

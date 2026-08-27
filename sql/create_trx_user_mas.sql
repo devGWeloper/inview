@@ -44,7 +44,7 @@ CREATE TABLE TRX_USER_MAS (
     USER_ID       VARCHAR2(50)   NOT NULL,                   -- 사번 (로그인 ID, PK)
     USER_NM       VARCHAR2(100)  NOT NULL,                   -- 이름
     WORK_CTN      VARCHAR2(300),                             -- 업무 (담당 업무 설명)
-    ROLE_CD       VARCHAR2(10)   DEFAULT 'DEV' NOT NULL,     -- 권한: ADMIN/BR/DEV (roles.ts)
+    ROLE_CD       VARCHAR2(10)   DEFAULT 'DEV' NOT NULL,     -- 권한: ADMIN/BR/DEV/FIELD (roles.ts)
     PWD_HASH      VARCHAR2(256)  NOT NULL,                   -- 비밀번호 scrypt 해시 (hex)
     PWD_SALT      VARCHAR2(64)   NOT NULL,                   -- 비밀번호 솔트 (hex, 계정별 난수)
     USE_YN        CHAR(1)        DEFAULT 'Y' NOT NULL,       -- 사용 여부 (N=비활성/로그인 차단)
@@ -55,7 +55,7 @@ CREATE TABLE TRX_USER_MAS (
     REG_DT        TIMESTAMP      DEFAULT SYSTIMESTAMP,       -- 등록 일시
     UPD_DT        TIMESTAMP      DEFAULT SYSTIMESTAMP,       -- 최근 수정 일시
     CONSTRAINT PK_TRX_USER_MAS PRIMARY KEY (USER_ID),
-    CONSTRAINT CK_TRX_USER_MAS_ROLE CHECK (ROLE_CD IN ('ADMIN','BR','DEV')),
+    CONSTRAINT CK_TRX_USER_MAS_ROLE CHECK (ROLE_CD IN ('ADMIN','BR','DEV','FIELD')),
     CONSTRAINT CK_TRX_USER_MAS_USE  CHECK (USE_YN IN ('Y','N')),
     CONSTRAINT CK_TRX_USER_MAS_CHG  CHECK (MUST_CHG_YN IN ('Y','N')),
     CONSTRAINT CK_TRX_USER_MAS_GLOBAL CHECK (GLOBAL_YN IN ('Y','N'))
@@ -66,7 +66,7 @@ COMMENT ON TABLE  TRX_USER_MAS               IS '사용자 계정 마스터 (로
 COMMENT ON COLUMN TRX_USER_MAS.USER_ID       IS '사번 (로그인 ID, PK)';
 COMMENT ON COLUMN TRX_USER_MAS.USER_NM       IS '이름';
 COMMENT ON COLUMN TRX_USER_MAS.WORK_CTN      IS '업무 (담당 업무 설명)';
-COMMENT ON COLUMN TRX_USER_MAS.ROLE_CD       IS '권한 (ADMIN=운영자/BR=상위/DEV=개발자)';
+COMMENT ON COLUMN TRX_USER_MAS.ROLE_CD       IS '권한 (ADMIN=운영자/BR=상위/DEV=개발자/FIELD=현업 — 실적 화면만)';
 COMMENT ON COLUMN TRX_USER_MAS.PWD_HASH      IS '비밀번호 scrypt 해시 (hex)';
 COMMENT ON COLUMN TRX_USER_MAS.PWD_SALT      IS '비밀번호 솔트 (hex, 계정별 난수)';
 COMMENT ON COLUMN TRX_USER_MAS.USE_YN        IS '사용 여부 (Y/N)';

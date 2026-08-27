@@ -4,28 +4,31 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AgentProfile } from "@/lib/types";
-import { Role, roleAtLeast } from "@/lib/roles";
+import { canAccessPath } from "@/lib/roles";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiJson } from "@/lib/apiClient";
 import { useAgentScope } from "@/components/agents/AgentScopeProvider";
 
 /**
  * 분석 성격의 탭 묶음 (세그먼트 컨트롤). Agent 는 성격이 달라 별도 칩으로 분리.
- * minRole 이 있는 탭은 그 권한 이상일 때만 노출한다 (미들웨어가 실제 접근을 막지만,
- * 못 들어갈 탭을 띄워두면 403 만 보게 되므로 메뉴에서도 감춘다).
+ *
+ * 노출 판정은 **roles.ts 의 canAccessPath() 하나**로 한다 — 미들웨어의 실제 차단과 같은
+ * 함수라 "메뉴엔 보이는데 누르면 403" 이 구조적으로 생기지 않는다.
+ * (탭별 minRole 목록을 따로 들고 있던 예전 방식은 ROUTE_RULES 와 두 벌이 되어 어긋났다)
  */
 const ANALYSIS_TABS: ReadonlyArray<{
   href: string;
   label: string;
   icon: () => JSX.Element;
-  minRole?: Role;
   /** 에이전트별로 갈리는 탭인가 (TRX_TOKEN_DET 기반). 비기본 에이전트에서도 남는다 */
   agentScoped?: boolean;
 }> = [
   { href: "/", label: "Traces", icon: TracesIcon },
   { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
   { href: "/tokens", label: "Tokens", icon: TokensIcon, agentScoped: true },
-  { href: "/timeouts", label: "Timeout", icon: TimeoutIcon, minRole: "ADMIN", agentScoped: true },
+  { href: "/timeouts", label: "Timeout", icon: TimeoutIcon, agentScoped: true },
+  // 현업 실적 — 집계만 담긴 화면이라 전 권한에 노출한다. 현업 계정에겐 이 탭 하나만 남는다.
+  { href: "/insights", label: "실적", icon: InsightsIcon },
 ];
 
 /** 분석 탭 세그먼트 그룹 (Traces / Dashboard / Tokens / Timeout). 상단바 가운데. */
@@ -36,7 +39,7 @@ export function TabNav() {
   // 비기본 에이전트는 BIZ_AIACTIONTXN_HIS 기반 화면을 쓰지 않는다 — 탭 자체를 감춘다.
   const tabs = ANALYSIS_TABS
     .filter((t) => isDefault || t.agentScoped)
-    .filter((t) => !t.minRole || (user && roleAtLeast(user.role, t.minRole)));
+    .filter((t) => !!user && canAccessPath(user.role, t.href));
   return (
     <nav className="tabnav" aria-label="primary">
       <div className="tabnav-group" role="tablist">
@@ -161,6 +164,16 @@ function TimeoutIcon() {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
       <circle cx="8" cy="9" r="5.4" stroke="currentColor" strokeWidth="1.5" />
       <path d="M8 6.2V9l2 1.4M6 2h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+function InsightsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path d="M2 13.2h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <rect x="3" y="7" width="2.6" height="4.2" rx="0.8" fill="currentColor" />
+      <rect x="6.7" y="4.4" width="2.6" height="6.8" rx="0.8" fill="currentColor" />
+      <rect x="10.4" y="2" width="2.6" height="9.2" rx="0.8" fill="currentColor" />
     </svg>
   );
 }

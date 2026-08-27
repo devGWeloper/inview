@@ -3,7 +3,8 @@
 //
 //  1) 비로그인 → 페이지 요청은 /login 으로 리다이렉트(원래 목적지는 ?next=),
 //     API 요청은 401 JSON.
-//  2) 로그인했지만 권한 부족 → 페이지는 /403, API 는 403 JSON.
+//  2) 로그인했지만 권한 부족 → 페이지는 홈(현업은 /insights, 그 외 /403), API 는 403 JSON.
+//     판정은 roles.ts 의 canAccessPath() 한 곳 — 서열(ROUTE_RULES)과 현업 허용 목록을 모두 본다.
 //  3) BIZ(기본 에이전트 전용) 경로에 다른 팀 에이전트 소속이 들어오면 /tokens 로 보낸다.
 //     ⚠️ 여기 판정은 세션 클레임(bizAllowed) 기반의 **UX 리다이렉트**다. 권위 있는 차단은
 //        각 API 라우트의 requireBiz() 가 현재 config 로 다시 한다 (Edge 는 config 를 못 읽는다).
@@ -14,7 +15,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { AUTH_COOKIE, verifySession } from "@/lib/auth/session";
-import { requiredRoleForPath, roleAtLeast, isBizPath, resolveScope, isLockedScope } from "@/lib/roles";
+import { canAccessPath, homePathFor, isBizPath, resolveScope, isLockedScope } from "@/lib/roles";
 
 // 로그인 없이 접근 가능한 경로(정확 일치 또는 하위).
 function isPublic(pathname: string): boolean {
@@ -43,15 +44,17 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 2) 인가 (경로별 최소 권한)
-  const min = requiredRoleForPath(pathname);
-  if (min && !roleAtLeast(session.role, min)) {
+  // 2) 인가 (경로별 권한 — 서열 + 현업 허용 목록)
+  if (!canAccessPath(session.role, pathname)) {
     if (isApi) {
       return NextResponse.json({ error: "접근 권한이 없습니다." }, { status: 403 });
     }
     const url = req.nextUrl.clone();
-    url.pathname = "/403";
     url.search = "";
+    // 현업은 갈 수 있는 화면이 하나뿐이라 403 페이지보다 자기 홈으로 보내는 편이 낫다.
+    // (이미 홈에 있는데도 막혔다면 루프를 피해 /403 으로 — 허용 목록이 잘못된 경우다)
+    const home = homePathFor(session.role);
+    url.pathname = home !== pathname ? home : "/403";
     return NextResponse.redirect(url);
   }
 
@@ -68,7 +71,11 @@ export async function middleware(req: NextRequest) {
       const url = req.nextUrl.clone();
       url.search = "";
       // 미배정 계정은 갈 곳이 없어 안내가 필요하고, 소속이 있으면 자기 화면으로 보낸다.
-      url.pathname = isLockedScope(scope) ? "/403" : "/tokens";
+      // ⚠️ 그 화면조차 권한 밖이면(예: 현업은 /tokens 를 못 본다) /403 으로 — 안 그러면
+      //    "여기는 안 됨 → 저기로" 가 서로를 가리켜 리다이렉트 루프가 된다.
+      const fallback = "/tokens";
+      url.pathname =
+        isLockedScope(scope) || !canAccessPath(session.role, fallback) ? "/403" : fallback;
       return NextResponse.redirect(url);
     }
   }

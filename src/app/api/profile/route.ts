@@ -3,6 +3,7 @@ import { readProfile, writeProfile } from "@/lib/profile";
 import { computeFteStats } from "@/lib/fte";
 import { requireAgent, requireAgentAdmin } from "@/lib/auth/current";
 import { defaultAgentId, getAgent } from "@/lib/config";
+import { LOWEST_ROLE } from "@/lib/roles";
 import { logger, reqContext } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,8 @@ export async function GET(req: NextRequest) {
   const picked = pickAgent(req);
   if (!picked.ok) return NextResponse.json({ error: picked.error }, { status: 400 });
 
-  const guard = await requireAgent(picked.id);
+  // 조회는 현업(FIELD)까지 연다 — /agent 소개 카드의 데이터다. 편집(PUT)은 아래 ADMIN 그대로.
+  const guard = await requireAgent(picked.id, LOWEST_ROLE);
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   try {

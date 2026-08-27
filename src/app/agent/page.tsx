@@ -5,7 +5,7 @@ import { WorkShowcase } from "@/components/WorkShowcase";
 import { readProfile } from "@/lib/profile";
 import { computeFteStats } from "@/lib/fte";
 import { getSession, requireAgent } from "@/lib/auth/current";
-import { roleAtLeast } from "@/lib/roles";
+import { LOWEST_ROLE, roleAtLeast } from "@/lib/roles";
 import { defaultAgentId, getAgent } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,8 @@ export default async function AgentPage({
   const raw = (searchParams?.agent ?? "").trim();
   // 알 수 없는 id 는 기본 에이전트로 되돌린다(페이지라 400 대신 리다이렉트).
   const agentId = raw && getAgent(raw) ? raw : defaultAgentId();
-  const guard = await requireAgent(agentId);
+  // 소개 카드는 집계·원문이 없는 공개 정보라 현업(FIELD)에게도 연다 (roles.ts FIELD_ALLOW_PREFIXES).
+  const guard = await requireAgent(agentId, LOWEST_ROLE);
   if (!guard.ok) redirect(guard.status === 401 ? "/login?next=/agent" : "/403");
 
   const isDefault = agentId === defaultAgentId();

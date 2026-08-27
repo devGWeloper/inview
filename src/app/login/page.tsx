@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { Role, canAccessPath, homePathFor } from "@/lib/roles";
 
 export default function LoginPage() {
   return (
@@ -17,8 +18,18 @@ function LoginInner() {
   const params = useSearchParams();
   const { user, loading, setUser } = useAuth();
   // 오픈 리다이렉트 방지: 자체 경로("/xxx")만 허용, "//" 또는 외부 URL 은 홈으로.
-  const rawNext = params.get("next") || "/";
-  const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
+  const rawNext = params.get("next") || "";
+  const safeNext = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "";
+
+  /**
+   * 로그인 후 착지 경로.
+   * ⚠️ 권한 밖 경로로 보내면 미들웨어가 곧바로 되돌려 화면이 한 번 튄다 — 특히 현업(FIELD)은
+   *    기본 홈("/")이 아예 막혀 있다. 갈 수 없는 next 는 그 권한의 홈으로 바꿔서 보낸다.
+   */
+  function landing(role: Role): string {
+    if (safeNext && canAccessPath(role, safeNext.split("?")[0])) return safeNext;
+    return homePathFor(role);
+  }
 
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
@@ -28,8 +39,9 @@ function LoginInner() {
 
   // 이미 로그인 상태면 목적지로 보낸다.
   useEffect(() => {
-    if (!loading && user) router.replace(nextPath);
-  }, [loading, user, nextPath, router]);
+    if (!loading && user) router.replace(landing(user.role));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, user, safeNext, router]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,7 +57,7 @@ function LoginInner() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setErr(data.error ?? "로그인에 실패했습니다."); setSubmitting(false); return; }
       setUser(data.user);
-      router.replace(nextPath);
+      router.replace(landing(data.user.role));
     } catch {
       setErr("로그인 처리 중 오류가 발생했습니다.");
       setSubmitting(false);

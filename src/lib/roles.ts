@@ -1,22 +1,38 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // 권한(Role) 단일 소스.
 //
-//   ADMIN(운영자) > BR(상위 권한자) > DEV(개발자/일반 READ)
+//   ADMIN(운영자) > BR(상위 권한자) > DEV(개발자/일반 READ) > FIELD(현업)
+//
+// FIELD(현업)는 **개발자가 아닌 실사용/실적 열람자**다. 원문 메시지(JSON envelope), 다른
+// 사용자의 요청/질의, 에러 코드 같은 내부 정보를 보면 안 되고 집계된 실적만 본다.
+//
+// ⚠️ FIELD 만은 서열(ROUTE_RULES)이 아니라 **허용 목록(FIELD_ALLOW_PREFIXES)** 으로 판정한다.
+//    ROUTE_RULES 는 "규칙에 없으면 통과"(fail-open)라, 서열만 낮춰 두면 새로 추가되는 화면이
+//    자동으로 현업에게 열린다. 현업은 반대로 **명시적으로 연 경로만** 들어갈 수 있어야 한다.
+//    두 규칙의 합류 지점은 canAccessPath() 하나다 — 미들웨어/탭 노출 모두 이걸 쓴다.
 //
 // 이 파일은 클라이언트 컴포넌트 · Edge 미들웨어 · 서버 라우트 모두에서 import 하므로
 // Node 전용/서버 전용 모듈(fs, crypto, oracledb 등)을 절대 import 하지 않는다.
 // 화면↔경로↔권한 매핑의 유일한 출처 — 접근 범위가 바뀌면 ROUTE_RULES 만 고친다.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type Role = "ADMIN" | "BR" | "DEV";
+export type Role = "ADMIN" | "BR" | "DEV" | "FIELD";
 
-export const ROLES: Role[] = ["ADMIN", "BR", "DEV"];
+export const ROLES: Role[] = ["ADMIN", "BR", "DEV", "FIELD"];
+
+/**
+ * 가장 낮은 권한 = "인증만 되면 된다" 를 뜻하는 min 값.
+ * ⚠️ 서버 가드의 기본 min 은 여전히 "DEV" 다 — 현업에게 열 API 는 min 을 이 값으로
+ *    **명시**해야 한다. 기본값을 낮추면 기존 API 가 전부 현업에게 열린다(fail-open).
+ */
+export const LOWEST_ROLE: Role = "FIELD";
 
 /** 화면 표기용 한글 라벨 */
 export const ROLE_LABEL: Record<Role, string> = {
   ADMIN: "운영자",
   BR: "BR",
   DEV: "개발자",
+  FIELD: "현업",
 };
 
 /** 권한 선택 UI 등에서 쓰는 짧은 설명 */
@@ -24,13 +40,14 @@ export const ROLE_DESC: Record<Role, string> = {
   ADMIN: "전체 관리 · 계정/프로필 편집",
   BR: "리포트 · 개선센터 · 이벤트-FAB 열람/편집",
   DEV: "Traces · Dashboard · Tokens · Agent 조회",
+  FIELD: "실적 요약만 열람 (메시지 원문 · 타 사용자 정보 비노출)",
 };
 
 /** 권한 서열 (클수록 상위). 비교의 유일한 근거. */
-const RANK: Record<Role, number> = { ADMIN: 3, BR: 2, DEV: 1 };
+const RANK: Record<Role, number> = { ADMIN: 3, BR: 2, DEV: 1, FIELD: 0 };
 
 export function isRole(v: unknown): v is Role {
-  return v === "ADMIN" || v === "BR" || v === "DEV";
+  return v === "ADMIN" || v === "BR" || v === "DEV" || v === "FIELD";
 }
 
 /** role 이 min 이상의 권한인가 (ADMIN>=BR>=DEV). */
@@ -68,6 +85,54 @@ export function requiredRoleForPath(pathname: string): Role | null {
     if (pathname === r.prefix || pathname.startsWith(r.prefix + "/")) return r.min;
   }
   return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 현업(FIELD) 허용 목록 — **allow-list**. 여기 없는 경로는 전부 막힌다.
+//
+// ⚠️ ROUTE_RULES 와 방향이 반대다. 그쪽은 "규칙에 없으면 통과", 이쪽은 "목록에 없으면 차단".
+//    현업에게 새 화면을 열려면 반드시 여기에 한 줄 추가해야 한다 — 화면이 늘어날 때
+//    실수로 원문/타 사용자 정보가 딸려 나가는 것을 구조적으로 막는 장치다.
+//
+// 열려 있는 것:
+//   /insights      집계 실적 화면 (원문 · 사용자 ID · 에러 코드 없음)
+//   /api/insights  그 화면의 유일한 데이터 소스 (서버가 필드를 화이트리스트로 추림)
+//   /agent         에이전트 소개 카드 + FTE (공개용 프로필)
+//   /api/profile   위 카드의 데이터 (GET 만 — PUT 은 requireAgentAdmin 이 따로 막는다)
+//   /api/agents    상단바 에이전트 셀렉터가 마운트 시 읽는 목록 (비밀 없음)
+//   /403           권한 안내 화면 (여기까지 막으면 리다이렉트 루프가 된다)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const FIELD_ALLOW_PREFIXES: string[] = [
+  "/insights",
+  "/api/insights",
+  "/agent",
+  "/api/profile",
+  "/api/agents",
+  "/403",
+];
+
+/** 현업(FIELD)에게 열린 경로인가. */
+export function isFieldAllowedPath(pathname: string): boolean {
+  return FIELD_ALLOW_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+
+/**
+ * 이 권한으로 이 경로에 들어갈 수 있는가 — 경로 인가의 **단일 판정 지점**.
+ * 미들웨어(실제 차단)와 TabNav(메뉴 노출)가 같은 답을 쓰도록 한 곳으로 모은다.
+ */
+export function canAccessPath(role: Role, pathname: string): boolean {
+  if (role === "FIELD") return isFieldAllowedPath(pathname); // allow-list (fail-closed)
+  const min = requiredRoleForPath(pathname);
+  return !min || roleAtLeast(role, min);
+}
+
+/**
+ * 로그인 직후/권한 부족 시 되돌려 보낼 홈 경로.
+ * 현업의 홈은 트레이스 목록(/)이 아니라 실적 화면이다.
+ */
+export function homePathFor(role: Role): string {
+  return role === "FIELD" ? "/insights" : "/";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,6 +208,8 @@ export function canManageAgent(scope: AgentScope, role: Role, agentId: string): 
 
 const BIZ_PREFIXES = [
   "/dashboard",
+  "/insights",   // 현업 실적 화면 — 집계 대상이 BIZ_AIACTIONTXN_HIS 라 기본 에이전트 전용
+  "/api/insights",
   "/report",
   "/improvement",
   "/event-fabs",

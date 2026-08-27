@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchByTraceId } from "@/lib/db";
 import { logger, reqContext } from "@/lib/logger";
+import { requireBiz } from "@/lib/auth/current";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,11 @@ export async function GET(
   const t0 = Date.now();
   const ctx = reqContext(req);
   const traceId = decodeURIComponent(params.traceId);
+
+  // ⚠️ BIZ_AIACTIONTXN_HIS 는 기본 에이전트 전용 — 다른 팀 에이전트 소속 계정은 여기서 끊는다.
+  const bizGuard = await requireBiz();
+  if (!bizGuard.ok) return NextResponse.json({ error: bizGuard.error }, { status: bizGuard.status });
+
 
   logger.info("GET /api/traces/[traceId]", { ...ctx, traceId });
 

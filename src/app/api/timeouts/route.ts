@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchTimeoutStats } from "@/lib/timeouts";
 import { logger, reqContext } from "@/lib/logger";
 import { defaultAgentId, getAgent } from "@/lib/config";
-import { getSession } from "@/lib/auth/current";
+import { requireAgent } from "@/lib/auth/current";
 
 export const dynamic = "force-dynamic";
 
@@ -32,14 +32,14 @@ export async function GET(req: NextRequest) {
   }
   const agentId = rawAgent ?? defaultAgentId();
 
-  // ⚠️ 계정이 특정 에이전트에 묶여 있으면(TRX_USER_MAS.AGENT_ID → 세션) 그 밖은 403.
+  // ⚠️ 계정 범위 밖이면 403 (전역이 아니고 소속 에이전트도 다른 경우 · 미배정 계정 포함).
   //    400(알 수 없는 id) 판정 **뒤**, DB 조회 **앞**에 둔다 —
   //    "그런 에이전트는 없다" 와 "네 것이 아니다" 는 다른 답이고,
   //    권한 밖 요청은 커넥션을 열기 전에 끊는다.
-  const session = await getSession();
-  if (session?.agentId && agentId !== session.agentId) {
-    logger.warn("GET /api/timeouts agent scope violation", { ...ctx, want: agentId, allowed: session.agentId });
-    return NextResponse.json({ error: "이 에이전트에 접근할 권한이 없습니다." }, { status: 403 });
+  const guard = await requireAgent(agentId);
+  if (!guard.ok) {
+    logger.warn("GET /api/timeouts agent scope denied", { ...ctx, want: agentId, status: guard.status });
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
   }
 
   const filter = {

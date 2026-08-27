@@ -12,8 +12,10 @@ interface Account {
   work: string | null;
   role: Role;
   useYn: "Y" | "N";
-  /** 접근 가능 에이전트 id. null = 전체(제한 없음) */
+  /** 소속 에이전트 id. null = 미배정 */
   agentId: string | null;
+  /** 전역(모든 에이전트) 계정 */
+  global: boolean;
   lastLoginDt: string | null;
   regDt: string | null;
 }
@@ -22,9 +24,16 @@ function fmt(ts: string | null): string {
   return ts ? ts.replace("T", " ").slice(0, 16) : "—";
 }
 
-/** 결속 에이전트 표기. 설정에 없는 id 는 원문을 그대로 보여 잘못된 값을 드러낸다. */
-function AgentCell({ agents, id }: { agents: AgentInfo[]; id: string | null }) {
-  if (!id) return <span className="acct-dim">전체</span>;
+/** 범위 표기. 설정에 없는 id 는 원문을 그대로 보여 잘못된 값을 드러낸다. */
+function AgentCell({ agents, id, global: isGlobal }: { agents: AgentInfo[]; id: string | null; global: boolean }) {
+  if (isGlobal) return <span className="acct-badge on">전역</span>;
+  if (!id) {
+    return (
+      <span className="acct-agent-bad" title="에이전트가 배정되지 않아 Tokens · Timeout 조회가 막혀 있습니다">
+        미배정 ⚠️
+      </span>
+    );
+  }
   const found = agents.find((a) => a.id === id);
   if (found) return <span>{found.avatar} {found.name}</span>;
   return (
@@ -46,6 +55,8 @@ export default function AccountsPage() {
   //    ADMIN 은 결속이 없어(전체) 목록도 전체로 온다. 못 읽으면 셀렉트를 비활성으로 둔다.
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [agentsLoaded, setAgentsLoaded] = useState(false);
+  // 전역 권한/소속을 부여할 수 있는가 (= 전역 운영자). 서버가 목록 응답에 실어 준다.
+  const [canGrantGlobal, setCanGrantGlobal] = useState(false);
 
   // 모달 상태
   const [editor, setEditor] = useState<{ mode: "create" | "edit"; acc?: Account } | null>(null);
@@ -66,6 +77,7 @@ export default function AccountsPage() {
       setAvailable(data.available);
       setReason(data.reason ?? null);
       setUsers(asArray<Account>(data.users));
+      setCanGrantGlobal(data.canGrantGlobal === true);
     } catch (e) {
       setAvailable(false); setReason(errMessage(e)); setUsers([]);
     } finally {
@@ -99,7 +111,8 @@ export default function AccountsPage() {
 
   // 에이전트가 하나뿐인 배포에서는 결속 열/선택을 감춘다 — 기존 화면과 같아야 한다.
   // 단, 이미 결속된 계정이 있으면(설정이 줄었을 수도) 그 값은 반드시 보인다.
-  const showAgent = agents.length > 1 || users.some((u) => u.agentId);
+  // 에이전트가 하나뿐이고 전원이 전역이면(= 단일 에이전트 배포) 열을 감춘다.
+  const showAgent = agents.length > 1 || users.some((u) => u.agentId || !u.global);
   const cols = showAgent ? 8 : 7;
 
   const counts = {
@@ -184,7 +197,7 @@ export default function AccountsPage() {
                 <td>{u.name}</td>
                 <td className="acct-work">{u.work || "—"}</td>
                 <td><span className={"acct-role role-" + u.role}>{ROLE_LABEL[u.role]}</span></td>
-                {showAgent && <td className="acct-agent"><AgentCell agents={agents} id={u.agentId} /></td>}
+                {showAgent && <td className="acct-agent"><AgentCell agents={agents} id={u.agentId} global={u.global} /></td>}
                 <td>
                   {u.useYn === "Y"
                     ? <span className="acct-badge on">활성</span>
@@ -220,6 +233,7 @@ export default function AccountsPage() {
           meRole={me?.role}
           agents={agents}
           agentsLoaded={agentsLoaded}
+          canGrantGlobal={canGrantGlobal}
           onClose={() => setEditor(null)}
           onSaved={() => { setEditor(null); void load(); }}
         />
@@ -236,10 +250,10 @@ export default function AccountsPage() {
 
 // ── 생성 / 수정 모달 ──────────────────────────────────────────────────────
 function AccountEditor({
-  mode, acc, meRole, agents, agentsLoaded, onClose, onSaved,
+  mode, acc, meRole, agents, agentsLoaded, canGrantGlobal, onClose, onSaved,
 }: {
   mode: "create" | "edit"; acc?: Account; meRole?: Role;
-  agents: AgentInfo[]; agentsLoaded: boolean;
+  agents: AgentInfo[]; agentsLoaded: boolean; canGrantGlobal: boolean;
   onClose: () => void; onSaved: () => void;
 }) {
   const [userId, setUserId] = useState(acc?.userId ?? "");
@@ -247,7 +261,13 @@ function AccountEditor({
   const [work, setWork] = useState(acc?.work ?? "");
   const [role, setRole] = useState<Role>(acc?.role ?? "DEV");
   const [useYn, setUseYn] = useState<"Y" | "N">(acc?.useYn ?? "Y");
-  const [agentId, setAgentId] = useState(acc?.agentId ?? "");
+  // 범위 선택 — "" = 전역, 그 외 = 그 에이전트. (미배정은 화면에서 만들 수 없다;
+  // 잠긴 계정만 남기는 실수를 방지한다. 이미 미배정인 계정은 아래 옵션에 남는다.)
+  // 범위 선택 — "" = 전역, "__none" = 미배정(편집 시에만), 그 외 = 그 에이전트.
+  // ⚠️ 신규는 **기본 에이전트**로 시작한다. 전역을 기본값으로 두면 실수로 전역 계정을 양산한다.
+  const [agentId, setAgentId] = useState(
+    acc ? (acc.global ? "" : (acc.agentId ?? "__none")) : (agents.find((a) => a.isDefault)?.id ?? "")
+  );
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -257,16 +277,19 @@ function AccountEditor({
     (r) => r !== "ADMIN" || meRole === "ADMIN" || acc?.role === "ADMIN"
   );
 
-  // 에이전트 결속은 ADMIN 만 바꾼다 (NULL = 전 에이전트라 해제도 범위 확대다).
+  // 범위 변경은 **전역 운영자**만 한다 (전역 부여도, 다른 에이전트로 옮기는 것도 상향이다).
   // ⚠️ 여기서 막는 건 편의일 뿐이고, 실제 차단은 /api/accounts 의 403 이다.
-  const canEditAgent = meRole === "ADMIN" && agentsLoaded;
-  // 에이전트가 하나뿐인 배포에선 필드를 감춘다. 단, 이미 결속이 있으면 보여 준다.
-  const showAgent = agents.length > 1 || !!acc?.agentId;
-  // 설정에서 사라진 결속이라도 선택 목록에 남겨야 저장 시 조용히 풀리지 않는다.
-  const agentOptions = acc?.agentId && !agents.some((a) => a.id === acc.agentId)
-    ? [...agents.map((a) => ({ id: a.id, label: `${a.avatar} ${a.name}` })),
-       { id: acc.agentId, label: `${acc.agentId} (설정에 없음)` }]
-    : agents.map((a) => ({ id: a.id, label: `${a.avatar} ${a.name}` }));
+  const canEditAgent = meRole === "ADMIN" && canGrantGlobal && agentsLoaded;
+  // 에이전트 운영자에게는 선택지가 없다 — 새 계정은 항상 자기 에이전트 소속이다.
+  const showAgent = canGrantGlobal || agents.length > 1 || !!acc?.agentId || acc?.global === true;
+  // 설정에서 사라진 소속이라도 선택 목록에 남겨야 저장 시 조용히 풀리지 않는다.
+  const agentOptions = [
+    ...agents.map((a) => ({ id: a.id, label: `${a.avatar} ${a.name}` })),
+    ...(acc?.agentId && !agents.some((a) => a.id === acc.agentId)
+      ? [{ id: acc.agentId, label: `${acc.agentId} (설정에 없음)` }] : []),
+    // 이미 미배정인 계정을 편집할 때만 노출 (새로 만들 수는 없다).
+    ...(acc && !acc.global && !acc.agentId ? [{ id: "__none", label: "미배정 (조회 불가)" }] : []),
+  ];
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -276,8 +299,20 @@ function AccountEditor({
       // 결속을 바꿀 수 없는 사용자는 키 자체를 보내지 않는다 — 보내면 서버가 403 이다.
       // ⚠️ **값이 바뀐 경우에만** 보낸다. 늘 보내면 결속과 무관한 수정까지 "결속을 쓰겠다" 는
       //    요청이 되어, AGENT_ID 컬럼이 없는 ALTER 전 환경에서 저장이 통째로 실패한다.
-      const agentPatch = canEditAgent && agentId !== (acc?.agentId ?? "")
-        ? { agentId: agentId || null }
+      // 범위 변경 요청 — 전역이면 { global: true }, 에이전트면 { global: false, agentId }.
+      // ⚠️ **값이 바뀐 경우에만** 보낸다. 늘 보내면 범위와 무관한 수정까지 "그 컬럼을 쓰겠다" 는
+      //    요청이 되어, 컬럼이 없는 ALTER 전 환경에서 저장이 통째로 실패한다.
+      // ⚠️ 생성은 **항상** 범위를 보낸다(서버 기본값에 기대지 않는다). 수정은 값이 바뀐
+      //    경우에만 보낸다 — 늘 보내면 범위와 무관한 수정까지 "그 컬럼을 쓰겠다" 는 요청이
+      //    되어, 컬럼이 없는 ALTER 전 환경에서 저장이 통째로 실패한다.
+      // 생성에서 global:false 는 서버가 무시한다(컬럼 DEFAULT 'N'). 수정에서는 전역 회수를
+      // 뜻하므로 실제로 GLOBAL_YN 을 쓴다 — 그건 전역 운영자의 명시적 변경이라 정상이다.
+      const current = acc ? (acc.global ? "" : (acc.agentId ?? "__none")) : null;
+      const changed = mode === "create" || agentId !== current;
+      const agentPatch = canEditAgent && changed
+        ? (agentId === ""
+            ? { global: true }
+            : { global: false, agentId: agentId === "__none" ? null : agentId })
         : {};
       let res: Response;
       if (mode === "create") {
@@ -347,15 +382,15 @@ function AccountEditor({
           <label className="auth-field">
             <span>에이전트</span>
             <select value={agentId} disabled={!canEditAgent} onChange={(e) => setAgentId(e.target.value)}>
-              <option value="">전체 (제한 없음)</option>
+              <option value="">전역 (모든 에이전트)</option>
               {agentOptions.map((o) => (
                 <option key={o.id} value={o.id}>{o.label}</option>
               ))}
             </select>
             <em className="auth-hint">
               {canEditAgent
-                ? "고르면 그 에이전트의 Tokens · Timeout 만 조회할 수 있습니다. 전체는 제한 없음."
-                : "에이전트 결속은 운영자만 변경할 수 있습니다."}
+                ? "에이전트를 고르면 그 에이전트만 보고 관리합니다. 전역은 모든 에이전트를 오갈 수 있습니다."
+                : "에이전트 범위는 전역 운영자만 변경할 수 있습니다. 새 계정은 내 에이전트 소속으로 만들어집니다."}
             </em>
           </label>
         )}

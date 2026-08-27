@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/current";
 import { resetPassword, getUser } from "@/lib/users";
-import { roleAtLeast } from "@/lib/roles";
+import { roleAtLeast, resolveScope, canActOnAccount } from "@/lib/roles";
 import { logger, reqContext } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +22,10 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
   try {
     const target = await getUser(targetId);
     if (!target) return NextResponse.json({ error: "존재하지 않는 계정입니다." }, { status: 404 });
+    // ⚠️ 범위 밖 계정의 비밀번호를 초기화할 수 있으면 그 계정으로 로그인해 범위를 벗어날 수 있다.
+    if (!canActOnAccount(resolveScope(guard.session), target)) {
+      return NextResponse.json({ error: "존재하지 않는 계정입니다." }, { status: 404 });
+    }
     if (target.role === "ADMIN" && !roleAtLeast(guard.session.role, "ADMIN")) {
       return NextResponse.json({ error: "운영자 계정은 운영자만 초기화할 수 있습니다." }, { status: 403 });
     }

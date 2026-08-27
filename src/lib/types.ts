@@ -294,6 +294,16 @@ export interface AgentProfile {
   roadmap: string;
   /** 하는 일 (정형/비정형 구분 없이 단일 목록) */
   tasks: WorkTask[];
+  /**
+   * 1TICK 모니터 기준선 — 분당 토큰 한도. 0 = 미설정(추이만 표시).
+   *
+   * ⚠️ config.yml 의 agents[].tpmLimit 보다 **이 값이 우선**한다(0 이 아니면).
+   *    한도는 자주 바뀌는 운영 값이라 화면(/admin)에서 고치고, config 값은 초기값/폴백이다.
+   *    접속정보는 여전히 config.yml 전용이다.
+   */
+  tpmLimit: number;
+  /** 1TICK 모니터 기준선 — 분당 호출 한도. 0 = 미설정. (tpmLimit 과 같은 규칙) */
+  rpmLimit: number;
 }
 
 export const DEFAULT_PROFILE: AgentProfile = {
@@ -313,6 +323,8 @@ export const DEFAULT_PROFILE: AgentProfile = {
   avatar: "🧑‍🍳",
   avatarImage: "",
   roadmap: "",
+  tpmLimit: 0,
+  rpmLimit: 0,
   tasks: [
     { icon: "🧂", title: "시즈닝 자동 처리", desc: "수신 트랜잭션을 규칙 기반으로 시즈닝해 다운스트림으로 전달", metric: "상시 처리" },
     { icon: "🚫", title: "AutoQual 취소 처리", desc: "요청 받은 AutoQual 을 검증 후 자동으로 취소 처리", metric: "상시 처리" },

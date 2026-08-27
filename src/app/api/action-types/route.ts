@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadConfig } from "@/lib/config";
 import { logger, reqContext } from "@/lib/logger";
+import { requireBiz } from "@/lib/auth/current";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,11 @@ async function getOracle(): Promise<typeof import("oracledb") | null> {
 }
 
 export async function GET(req: NextRequest) {
+  // ⚠️ BIZ_AIACTIONTXN_HIS 는 기본 에이전트 전용이다. 다른 팀 에이전트 소속 계정은
+  //    URL 을 직접 쳐도 여기서 끊는다 (미들웨어 리다이렉트는 UX, 권위는 이 판정).
+  const bizGuard = await requireBiz();
+  if (!bizGuard.ok) return NextResponse.json({ error: bizGuard.error }, { status: bizGuard.status });
+
   const t0 = Date.now();
   const ctx = reqContext(req);
   const cfg = loadConfig().layers["GAIA"];

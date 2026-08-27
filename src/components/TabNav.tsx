@@ -70,21 +70,31 @@ export function AgentNavChip() {
   const path = usePathname();
   const agentActive = path?.startsWith("/agent") ?? false;
 
+  const { agent, isDefault, ready } = useAgentScope();
+
   const [profile, setProfile] = useState<AgentProfile | null>(null);
   useEffect(() => {
+    // ⚠️ 기본 에이전트가 아니면 /api/profile(기본) 은 403 이다 — 아예 부르지 않는다.
+    //    (아래 static 칩이 config 의 이름/아바타로 그린다)
+    if (!ready || !isDefault) return;
     let alive = true;
     apiJson<{ profile: AgentProfile }>("/api/profile", { cache: "no-store" })
       .then((d) => { if (alive && d?.profile) setProfile(d.profile); })
       .catch(() => {});
     return () => { alive = false; };
-  }, []);
+  }, [ready, isDefault]);
 
-  const { agent, isDefault } = useAgentScope();
-
-  // 비기본 에이전트: /agent 프로필은 기본 에이전트(BIZ 기반 FTE 포함) 전용이라 링크하지 않는다.
+  // 비기본 에이전트도 프로필 카드를 갖는다(FTE 없는 축소판) — ?agent= 로 그 프로필을 연다.
   if (!isDefault && agent) {
+    const href = `/agent?agent=${encodeURIComponent(agent.id)}`;
     return (
-      <span className="nav-agent static" title={agent.name}>
+      <Link
+        href={href}
+        className={"nav-agent" + (agentActive ? " active" : "")}
+        prefetch={false}
+        aria-current={agentActive ? "page" : undefined}
+        title={`${agent.name} · 프로필 보기`}
+      >
         <span className="nav-agent-photo" aria-hidden>
           <span className="nav-agent-emoji">{agent.avatar}</span>
         </span>
@@ -96,7 +106,7 @@ export function AgentNavChip() {
             <span className="nav-agent-role">AI AGENT</span>
           </span>
         </span>
-      </span>
+      </Link>
     );
   }
 

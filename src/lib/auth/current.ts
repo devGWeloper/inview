@@ -5,7 +5,9 @@
 
 import { cookies } from "next/headers";
 import { AUTH_COOKIE, verifySession, SessionPayload } from "./session";
-import { Role, roleAtLeast } from "../roles";
+import {
+  Role, roleAtLeast, AgentScope, resolveScope, canViewAgent, canManageAgent, isLockedScope,
+} from "../roles";
 
 /** 현재 요청의 세션. 없거나 무효/만료면 null. */
 export async function getSession(): Promise<SessionPayload | null> {
@@ -17,10 +19,65 @@ export type Guard =
   | { ok: true; session: SessionPayload }
   | { ok: false; status: 401 | 403; error: string };
 
+export type ScopeGuard =
+  | { ok: true; session: SessionPayload; scope: AgentScope }
+  | { ok: false; status: 401 | 403; error: string };
+
 /** 최소 권한을 요구한다. 라우트 핸들러 앞단에서 방어적으로 사용. */
 export async function requireRole(min: Role): Promise<Guard> {
   const session = await getSession();
   if (!session) return { ok: false, status: 401, error: "로그인이 필요합니다." };
   if (!roleAtLeast(session.role, min)) return { ok: false, status: 403, error: "접근 권한이 없습니다." };
   return { ok: true, session };
+}
+
+/** 현재 세션의 에이전트 범위. 세션이 없으면 null. */
+export async function getScope(): Promise<AgentScope | null> {
+  const session = await getSession();
+  return session ? resolveScope(session) : null;
+}
+
+/**
+ * 대상 에이전트를 **열람**할 권한을 요구한다.
+ *
+ * ⚠️ 호출 순서가 중요하다 — 라우트에서 "알 수 없는 에이전트(400)" 판정을 **먼저** 하고
+ *    이 가드를 부른다. "그런 에이전트는 없다" 와 "네 것이 아니다" 는 다른 답이다.
+ */
+export async function requireAgent(agentId: string, min: Role = "DEV"): Promise<ScopeGuard> {
+  const guard = await requireRole(min);
+  if (!guard.ok) return guard;
+  const scope = resolveScope(guard.session);
+  if (isLockedScope(scope)) {
+    return { ok: false, status: 403, error: "이 계정은 아직 에이전트가 배정되지 않았습니다. 운영자에게 문의하세요." };
+  }
+  if (!canViewAgent(scope, agentId)) {
+    return { ok: false, status: 403, error: "이 에이전트에 접근할 권한이 없습니다." };
+  }
+  return { ok: true, session: guard.session, scope };
+}
+
+/**
+ * 대상 에이전트를 **관리**(프로필/한도/계정 편집)할 권한을 요구한다.
+ * = ADMIN 이면서 그 에이전트를 볼 수 있어야 한다(전역 ADMIN 또는 그 에이전트의 ADMIN).
+ */
+export async function requireAgentAdmin(agentId: string): Promise<ScopeGuard> {
+  const guard = await requireRole("ADMIN");
+  if (!guard.ok) return guard;
+  const scope = resolveScope(guard.session);
+  if (!canManageAgent(scope, guard.session.role, agentId)) {
+    return { ok: false, status: 403, error: "이 에이전트를 관리할 권한이 없습니다." };
+  }
+  return { ok: true, session: guard.session, scope };
+}
+
+/**
+ * BIZ_AIACTIONTXN_HIS 기반 화면/API 접근 권한을 요구한다 (기본 에이전트 전용).
+ *
+ * ⚠️ 미들웨어의 bizAllowed 클레임은 로그인 시점에 고정된 캐시라 **권위가 없다**.
+ *    실제 판정은 여기서 매 요청 현재 config 의 기본 에이전트 id 로 다시 한다.
+ *    (config 를 읽어야 하므로 Node 런타임 전용 — Edge 미들웨어에서 부르지 말 것)
+ */
+export async function requireBiz(min: Role = "DEV"): Promise<ScopeGuard> {
+  const { defaultAgentId } = await import("../config");
+  return requireAgent(defaultAgentId(), min);
 }

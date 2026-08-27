@@ -5,6 +5,7 @@ import { logger, reqContext } from "@/lib/logger";
 import { isoNoTz } from "@/lib/timeBuckets";
 import { classifyPendingByCubeResp } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
 import { TraceWorkInfo, WORK_WINDOW_HOURS, groupTracesIntoWorks, rollupStatus, shiftLocalIso } from "@/lib/workGroup"; // TEMP(WORK_GROUP)
+import { requireBiz } from "@/lib/auth/current";
 
 export const dynamic = "force-dynamic";
 
@@ -242,6 +243,11 @@ async function resolveGroupedTraceIds(
 }
 
 export async function GET(req: NextRequest) {
+  // ⚠️ BIZ_AIACTIONTXN_HIS 는 기본 에이전트 전용이다. 다른 팀 에이전트 소속 계정은
+  //    URL 을 직접 쳐도 여기서 끊는다 (미들웨어 리다이렉트는 UX, 권위는 이 판정).
+  const bizGuard = await requireBiz();
+  if (!bizGuard.ok) return NextResponse.json({ error: bizGuard.error }, { status: bizGuard.status });
+
   const t0 = Date.now();
   const ctx = reqContext(req);
   const sp = req.nextUrl.searchParams;

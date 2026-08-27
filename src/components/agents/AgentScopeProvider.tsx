@@ -9,8 +9,8 @@ import { useAuth } from "@/components/auth/AuthProvider";
 // ─────────────────────────────────────────────────────────────────────────────
 // 선택된 에이전트를 앱 전역에 공급한다.
 //
-// ⚠️ 에이전트별로 갈리는 화면은 TRX_TOKEN_DET 를 읽는 Tokens / Timeout 둘뿐이다.
-//    나머지(Traces/Dashboard/Agent/Report/Improvement/event-fabs)는
+// ⚠️ 에이전트별로 갈리는 화면은 Tokens / Timeout (TRX_TOKEN_DET) 과 Agent 프로필뿐이다.
+//    나머지(Traces/Dashboard/Report/Improvement/event-fabs)는
 //    BIZ_AIACTIONTXN_HIS 기반의 기본 에이전트 전용이므로, 그 경로로 이동하면
 //    선택을 기본 에이전트로 되돌린다 — 숨긴 화면에 남의 에이전트 컨텍스트가
 //    걸려 있는 상태를 만들지 않기 위함이다.
@@ -18,8 +18,12 @@ import { useAuth } from "@/components/auth/AuthProvider";
 
 const STORAGE_KEY = "tracex.agent";
 
-/** 에이전트별로 갈리는 경로 접두사 */
-const AGENT_SCOPED_PREFIXES = ["/tokens", "/timeouts"];
+/**
+ * 에이전트별로 갈리는 경로 접두사.
+ * ⚠️ "/agent" 는 프로필 카드(에이전트마다 별도 파일)라 여기 들어간다 — "/agents" 같은
+ *    다른 경로와 섞이지 않도록 판정은 정확 일치 또는 `prefix + "/"` 로만 한다(아래).
+ */
+const AGENT_SCOPED_PREFIXES = ["/tokens", "/timeouts", "/agent"];
 
 export function isAgentScopedPath(pathname: string | null): boolean {
   if (!pathname) return false;
@@ -37,9 +41,13 @@ interface AgentScope {
   isDefault: boolean;
   /** /api/agents 로드가 끝났는가. 페이지는 이게 true 가 된 뒤 조회한다 */
   ready: boolean;
+  /** 전역(모든 에이전트) 계정인가 — 셀렉터/탭 노출 판단에 쓴다. */
+  isGlobal: boolean;
   /**
-   * 계정이 **config 에 없는 에이전트**에 묶여 있을 때의 안내 문구 (정상이면 null).
-   * 이 상태에선 /api/agents 목록이 비고 Tokens/Timeout 조회는 403 만 돌아오므로,
+   * 계정 범위가 막다른 길일 때의 안내 문구 (정상이면 null).
+   *   ① 미배정(잠금) — 아무 에이전트도 볼 수 없다
+   *   ② 소속 에이전트가 config.yml 에 없다
+   * 두 경우 모두 /api/agents 목록이 비고 조회는 403 만 돌아오므로,
    * 앱 셸(AppChrome)이 이 문구를 띄워 "왜 아무것도 안 보이는지" 를 밝힌다.
    */
   scopeWarning: string | null;
@@ -52,6 +60,7 @@ const Ctx = createContext<AgentScope>({
   agent: null,
   defaultId: "",
   isDefault: true,
+  isGlobal: false,
   ready: false,
   scopeWarning: null,
   setAgentId: () => {},
@@ -125,10 +134,15 @@ export function AgentScopeProvider({ children }: { children: React.ReactNode }) 
     // 계정 결속(TRX_USER_MAS.AGENT_ID)이 config.yml 의 agents[] 중 어디에도 없는 경우.
     // 목록이 비어 셀렉터도 안 뜨고 조회는 403 만 돌아오는 막다른 길이라, 화면에 이유를 남긴다.
     const bound = user?.agentId ?? null;
-    const scopeWarning =
-      listed && bound && !agents.some((a) => a.id === bound)
-        ? `이 계정은 '${bound}' 에이전트에만 접근할 수 있는데, 서버 설정에 그 에이전트가 없습니다. Tokens · Timeout 조회가 되지 않습니다 — 관리자에게 문의하세요.`
-        : null;
+    const isGlobal = user?.global === true;
+    let scopeWarning: string | null = null;
+    if (listed && user && !isGlobal) {
+      if (!bound) {
+        scopeWarning = "이 계정에는 아직 에이전트가 배정되지 않았습니다. 조회 화면이 비어 있습니다 — 운영자에게 배정을 요청하세요.";
+      } else if (!agents.some((a) => a.id === bound)) {
+        scopeWarning = `이 계정은 '${bound}' 에이전트에만 접근할 수 있는데, 서버 설정에 그 에이전트가 없습니다. Tokens · Timeout 조회가 되지 않습니다 — 관리자에게 문의하세요.`;
+      }
+    }
     return {
       agents,
       agentId,
@@ -140,11 +154,12 @@ export function AgentScopeProvider({ children }: { children: React.ReactNode }) 
       //    (agents=[agent-b], defaultId="agent-b" → 비교식은 true, 실제론 false).
       //    agent 를 못 찾은 상태(로드 전/실패/저장된 id 가 아직 반영 전)는 안전한 기본값 true.
       isDefault: agent ? agent.isDefault : true,
+      isGlobal,
       ready,
       scopeWarning,
       setAgentId,
     };
-  }, [agents, agentId, defaultId, ready, listed, user?.agentId, setAgentId]);
+  }, [agents, agentId, defaultId, ready, listed, user, setAgentId]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

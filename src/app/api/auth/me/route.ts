@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/current";
+import { resolveScope } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,14 +10,17 @@ export async function GET(_req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ user: null });
 
+  // ⚠️ 범위는 반드시 resolveScope 로 푼다 — 옛 쿠키(scope 키 없음)까지 여기서 흡수한다.
+  const scope = resolveScope(session);
   return NextResponse.json({
-    // agentId 는 결속 없음(운영자·기존 계정)이면 null 이다. 화면은 이 값으로
-    // "config 에 없는 에이전트에 묶인 계정" 안내를 띄운다(AgentScopeProvider).
     user: {
       userId: session.sub,
       name: session.name,
       role: session.role,
-      agentId: session.agentId ?? null,
+      // agentId = 소속 에이전트(없으면 null), global = 전 에이전트 접근.
+      // 화면은 이 둘로 셀렉터/탭/안내를 정한다(AgentScopeProvider).
+      agentId: scope.agentId,
+      global: scope.global,
     },
   });
 }

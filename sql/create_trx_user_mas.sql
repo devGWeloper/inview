@@ -24,11 +24,15 @@
 --     ※ TEMP: 강제 변경 흐름은 현재 임시로 꺼져 있어 앱이 MUST_CHG_YN 을 항상 'N' 으로만
 --       쓴다(컬럼/제약은 되살릴 때를 위해 그대로 둔다). CLAUDE.md TEMP 절 참고.
 --
---   [에이전트 결속] AGENT_ID 는 그 계정이 볼 수 있는 에이전트(config.yml agents[].id) 다.
---     NULL = 전 에이전트 접근(기본). 로그인 시 세션 payload 에 실린다 (src/lib/users.ts).
---     ⚠️ 앱은 이 컬럼이 없어도 동작하지만(존재를 탐지해 전원 NULL 취급) 그 상태에서는
---       계정별 제한이 사라지므로, **새 환경은 반드시 이 컬럼이 있는 상태로 만들 것**.
---       이미 운영 중인 DB 는 아래 [MIGRATION] 섹션 참고.
+--   [에이전트 범위] GLOBAL_YN 과 AGENT_ID 두 컬럼이 함께 범위를 정한다:
+--       GLOBAL_YN='Y'                 → 모든 에이전트 (전역 운영자)
+--       GLOBAL_YN='N' + AGENT_ID 값   → 그 에이전트(config.yml agents[].id) 하나
+--       GLOBAL_YN='N' + AGENT_ID NULL → 잠금 (미배정 — 아무 에이전트도 못 본다)
+--     로그인 시 세션 payload 에 실린다 (src/lib/users.ts → src/lib/roles.ts resolveScope).
+--     ⚠️ 앱은 두 컬럼이 없어도 동작하지만(존재를 탐지해 옛 규칙 'AGENT_ID 없음=전역' 으로
+--       되돌아감) 그 상태에서는 계정별 제한이 사라지므로, **새 환경은 반드시 두 컬럼이
+--       있는 상태로 만들 것**. 이미 운영 중인 DB 는 sql/migrations/ 의 두 파일 참고
+--       (2026-08-24_add_user_agent_id.sql → 2026-08-27_add_user_global_yn.sql 순).
 --
 --   [최초 관리자 시드] 테이블이 비어 있으면 앱이 최초 로그인/계정목록 조회 시
 --     기본 운영자 계정을 1건 자동 생성한다 (src/lib/users.ts ensureSeedAdmin):
@@ -45,14 +49,16 @@ CREATE TABLE TRX_USER_MAS (
     PWD_SALT      VARCHAR2(64)   NOT NULL,                   -- 비밀번호 솔트 (hex, 계정별 난수)
     USE_YN        CHAR(1)        DEFAULT 'Y' NOT NULL,       -- 사용 여부 (N=비활성/로그인 차단)
     MUST_CHG_YN   CHAR(1)        DEFAULT 'N' NOT NULL,       -- 비번 강제 변경 (TEMP: 현재 미사용, 항상 N)
-    AGENT_ID      VARCHAR2(50),                              -- 접근 가능 에이전트 id (NULL=전체, config.yml agents[].id)
+    AGENT_ID      VARCHAR2(50),                              -- 소속 에이전트 id (config.yml agents[].id, NULL=미배정)
+    GLOBAL_YN     CHAR(1)        DEFAULT 'N' NOT NULL,       -- 전역 계정 여부 (Y=모든 에이전트)
     LAST_LOGIN_DT TIMESTAMP,                                 -- 최근 로그인 일시
     REG_DT        TIMESTAMP      DEFAULT SYSTIMESTAMP,       -- 등록 일시
     UPD_DT        TIMESTAMP      DEFAULT SYSTIMESTAMP,       -- 최근 수정 일시
     CONSTRAINT PK_TRX_USER_MAS PRIMARY KEY (USER_ID),
     CONSTRAINT CK_TRX_USER_MAS_ROLE CHECK (ROLE_CD IN ('ADMIN','BR','DEV')),
     CONSTRAINT CK_TRX_USER_MAS_USE  CHECK (USE_YN IN ('Y','N')),
-    CONSTRAINT CK_TRX_USER_MAS_CHG  CHECK (MUST_CHG_YN IN ('Y','N'))
+    CONSTRAINT CK_TRX_USER_MAS_CHG  CHECK (MUST_CHG_YN IN ('Y','N')),
+    CONSTRAINT CK_TRX_USER_MAS_GLOBAL CHECK (GLOBAL_YN IN ('Y','N'))
 );
 
 -- 컬럼 코멘트 ---------------------------------------------------------------
@@ -65,7 +71,8 @@ COMMENT ON COLUMN TRX_USER_MAS.PWD_HASH      IS '비밀번호 scrypt 해시 (hex
 COMMENT ON COLUMN TRX_USER_MAS.PWD_SALT      IS '비밀번호 솔트 (hex, 계정별 난수)';
 COMMENT ON COLUMN TRX_USER_MAS.USE_YN        IS '사용 여부 (Y/N)';
 COMMENT ON COLUMN TRX_USER_MAS.MUST_CHG_YN   IS '비밀번호 강제 변경 플래그 (현재 미사용 - 항상 N)';
-COMMENT ON COLUMN TRX_USER_MAS.AGENT_ID      IS '접근 가능 에이전트 id (NULL=전체, config.yml agents[].id)';
+COMMENT ON COLUMN TRX_USER_MAS.AGENT_ID      IS '소속 에이전트 id (config.yml agents[].id, NULL=미배정)';
+COMMENT ON COLUMN TRX_USER_MAS.GLOBAL_YN     IS '전역 계정 여부 (Y=모든 에이전트, N=AGENT_ID 하나 / NULL 이면 미배정=잠금)';
 COMMENT ON COLUMN TRX_USER_MAS.LAST_LOGIN_DT IS '최근 로그인 일시';
 COMMENT ON COLUMN TRX_USER_MAS.REG_DT        IS '등록 일시';
 COMMENT ON COLUMN TRX_USER_MAS.UPD_DT        IS '최근 수정 일시';
@@ -85,7 +92,7 @@ CREATE PUBLIC SYNONYM TRX_USER_MAS FOR IDMSADM2.TRX_USER_MAS;
 -- [확인 쿼리]
 -- ============================================================================
 -- SELECT USER_ID, USER_NM, ROLE_CD, USE_YN, MUST_CHG_YN,
---        NVL(AGENT_ID, '(전체)') AS AGENT_ID
+--        GLOBAL_YN, NVL(AGENT_ID, '(미배정)') AS AGENT_ID
 --   FROM TRX_USER_MAS ORDER BY REG_DT;
 -- SELECT ROLE_CD, COUNT(*) FROM TRX_USER_MAS GROUP BY ROLE_CD;
 

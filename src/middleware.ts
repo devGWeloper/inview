@@ -4,6 +4,9 @@
 //  1) 비로그인 → 페이지 요청은 /login 으로 리다이렉트(원래 목적지는 ?next=),
 //     API 요청은 401 JSON.
 //  2) 로그인했지만 권한 부족 → 페이지는 /403, API 는 403 JSON.
+//  3) BIZ(기본 에이전트 전용) 경로에 다른 팀 에이전트 소속이 들어오면 /tokens 로 보낸다.
+//     ⚠️ 여기 판정은 세션 클레임(bizAllowed) 기반의 **UX 리다이렉트**다. 권위 있는 차단은
+//        각 API 라우트의 requireBiz() 가 현재 config 로 다시 한다 (Edge 는 config 를 못 읽는다).
 //
 // 경로↔최소권한 매핑은 src/lib/roles.ts(ROUTE_RULES) 단일 소스. 세션 검증은
 // Web Crypto 기반(session.ts)이라 Edge 에서도 동작한다.
@@ -11,7 +14,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { AUTH_COOKIE, verifySession } from "@/lib/auth/session";
-import { requiredRoleForPath, roleAtLeast } from "@/lib/roles";
+import { requiredRoleForPath, roleAtLeast, isBizPath, resolveScope, isLockedScope } from "@/lib/roles";
 
 // 로그인 없이 접근 가능한 경로(정확 일치 또는 하위).
 function isPublic(pathname: string): boolean {
@@ -50,6 +53,24 @@ export async function middleware(req: NextRequest) {
     url.pathname = "/403";
     url.search = "";
     return NextResponse.redirect(url);
+  }
+
+  // 3) 에이전트 범위 — 미배정 계정과 다른 팀 에이전트 소속을 BIZ 화면에서 돌려보낸다.
+  const scope = resolveScope(session);
+  if (isBizPath(pathname)) {
+    // bizAllowed 키가 없는 옛 쿠키는 통과시킨다(다음 로그인부터 판정) — 배포 직후 기존
+    // 세션이 전부 튕기지 않게. API 는 어차피 requireBiz 가 다시 본다.
+    const allowed = session.bizAllowed ?? true;
+    if (!allowed || isLockedScope(scope)) {
+      if (isApi) {
+        return NextResponse.json({ error: "이 화면은 기본 에이전트 전용입니다." }, { status: 403 });
+      }
+      const url = req.nextUrl.clone();
+      url.search = "";
+      // 미배정 계정은 갈 곳이 없어 안내가 필요하고, 소속이 있으면 자기 화면으로 보낸다.
+      url.pathname = isLockedScope(scope) ? "/403" : "/tokens";
+      return NextResponse.redirect(url);
+    }
   }
 
   return NextResponse.next();

@@ -40,7 +40,10 @@ layers:
 #
 #   - id       : 불변 키. ?agent=<id> / TRX_USER_MAS.AGENT_ID 에서 이 값을 쓴다
 #   - default  : 기본 에이전트 1개. db 를 생략하면 layers.GAIA 를 재사용한다
+#   - name / avatar       : 표시용. ⚠️ /admin 에서 편집하면 그 값이 우선한다(여기 값은 초기값)
 #   - tpmLimit / rpmLimit : 1TICK 모니터의 기준선. 0 = 미설정(추이만 표시)
+#                           ⚠️ 여기 값은 **폴백**이다 — /admin 의 "사용량 한도" 에서
+#                           0 이 아닌 값을 저장하면 그 값이 이긴다 (data/agent-profile*.json).
 #
 #   이 섹션을 통째로 지우면 layers.GAIA 를 쓰는 단일 에이전트로 동작한다(하위호환).
 # ============================================================

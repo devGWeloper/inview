@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchRequestFailureContext } from "@/lib/requestFailures";
 import { RequestFailureContextResponse } from "@/lib/types";
 import { logger, reqContext } from "@/lib/logger";
+import { requireBiz } from "@/lib/auth/current";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,11 @@ export async function GET(req: NextRequest, { params }: { params: { traceId: str
   // '%' 가 든 TRACE_ID 에서 URIError 로 500 이 난다.
   const traceId = params.traceId;
   const sp = req.nextUrl.searchParams;
+
+  // ⚠️ BIZ_AIACTIONTXN_HIS 는 기본 에이전트 전용 — 다른 팀 에이전트 소속 계정은 여기서 끊는다.
+  const bizGuard = await requireBiz("BR");
+  if (!bizGuard.ok) return NextResponse.json({ error: bizGuard.error }, { status: bizGuard.status });
+
 
   try {
     const result = await fetchRequestFailureContext(traceId, {

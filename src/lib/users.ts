@@ -68,7 +68,8 @@ function devAdminAccount(): UserAccount {
     work: DEV_ADMIN.work,
     role: DEV_ADMIN.role,
     useYn: "Y",
-    agentId: null, // 더미 관리자는 결속 없음(전 에이전트)
+    agentId: null,
+    global: true, // 더미 관리자는 전역
     lastLoginDt: null,
     regDt: null,
     updDt: null,
@@ -88,8 +89,20 @@ export interface UserAccount {
   work: string | null;
   role: Role;
   useYn: "Y" | "N";
-  /** 접근 가능 에이전트 id (null = 전 에이전트). ⚠️ AGENT_ID 컬럼이 없으면 항상 null. */
+  /**
+   * 소속 에이전트 id (null = 미배정). ⚠️ AGENT_ID 컬럼이 없으면 항상 null.
+   * ⚠️ 이 값만으로 범위를 판정하지 말 것 — global 과 묶어서 roles.ts 의 함수로만 판정한다.
+   */
   agentId: string | null;
+  /**
+   * 전역(모든 에이전트) 계정인가 = GLOBAL_YN='Y'.
+   *
+   * ⚠️ GLOBAL_YN 컬럼이 없으면(ALTER 전) **옛 규칙**으로 유도한다: 결속이 없으면 전역.
+   *    그래야 마이그레이션 전에도 지금까지와 똑같이 동작한다. 컬럼이 생긴 뒤부터
+   *    "결속 없음 = 잠금" 이 되므로, ALTER 와 UPDATE 는 한 번에 실행해야 한다
+   *    (sql/migrations/2026-08-27_add_user_global_yn.sql 이 둘 다 담고 있다).
+   */
+  global: boolean;
   lastLoginDt: string | null;
   regDt: string | null;
   updDt: string | null;
@@ -99,6 +112,10 @@ export interface UserListResult {
   available: boolean;
   reason?: string;
   users: UserAccount[];
+  /** AGENT_ID 컬럼이 있는가 (없으면 결속 편집 UI 를 감춘다). */
+  agentColumn?: boolean;
+  /** GLOBAL_YN 컬럼이 있는가 (없으면 전역 토글 UI 를 감춘다). */
+  globalColumn?: boolean;
 }
 
 const s = (r: Record<string, unknown>, k: string): string | null =>
@@ -120,6 +137,11 @@ function normAgentId(v: string | null | undefined): string | null {
 const AGENT_COL_MISSING =
   "에이전트 결속을 저장할 수 없습니다 — TRX_USER_MAS.AGENT_ID 컬럼이 아직 없습니다. " +
   "앱 자체 DB(GAIA)에서 sql/migrations/2026-08-24_add_user_agent_id.sql 을 실행한 뒤 다시 시도하세요.";
+
+/** GLOBAL_YN 컬럼이 없는데 전역 여부를 **쓰려 한** 경우의 오류 (AGENT_COL_MISSING 과 같은 이유). */
+const GLOBAL_COL_MISSING =
+  "전역 권한을 저장할 수 없습니다 — TRX_USER_MAS.GLOBAL_YN 컬럼이 아직 없습니다. " +
+  "앱 자체 DB(GAIA)에서 sql/migrations/2026-08-27_add_user_global_yn.sql 을 실행한 뒤 다시 시도하세요.";
 
 export type AgentIdCheck =
   | { ok: true; value: string | null }
@@ -143,8 +165,9 @@ export function validateAgentId(v: unknown): AgentIdCheck {
   return { ok: true, value: id };
 }
 
-function rowToAccount(r: Record<string, unknown>): UserAccount {
+function rowToAccount(r: Record<string, unknown>, hasGlobal: boolean): UserAccount {
   const roleRaw = (s(r, "ROLE_CD") ?? "DEV").trim();
+  const agentId = normAgentId(s(r, "AGENT_ID"));
   return {
     userId: String(s(r, "USER_ID") ?? ""),
     name: String(s(r, "USER_NM") ?? ""),
@@ -152,7 +175,9 @@ function rowToAccount(r: Record<string, unknown>): UserAccount {
     role: isRole(roleRaw) ? roleRaw : "DEV",
     useYn: s(r, "USE_YN") === "N" ? "N" : "Y",
     // 컬럼이 없는 SELECT 는 selectCols() 가 상수 NULL 로 채워 주므로 여기 분기는 없다.
-    agentId: normAgentId(s(r, "AGENT_ID")),
+    agentId,
+    // ⚠️ GLOBAL_YN 이 없으면 옛 규칙(결속 없음 = 전역)으로 유도한다.
+    global: hasGlobal ? s(r, "GLOBAL_YN") === "Y" : !agentId,
     lastLoginDt: s(r, "LAST_LOGIN_DT"),
     regDt: s(r, "REG_DT"),
     updDt: s(r, "UPD_DT"),
@@ -177,27 +202,46 @@ type Conn = Awaited<ReturnType<NonNullable<Awaited<ReturnType<typeof getOracle>>
 //    컬럼이 생긴 다음 호출부터 바로 잡히고, 한 번 잡힌 뒤로는 탐지 쿼리가 사라진다.
 // ─────────────────────────────────────────────────────────────────────────────
 let agentColFound = false;
+let globalColFound = false;
 
-async function hasAgentCol(conn: Conn): Promise<boolean> {
-  if (agentColFound) return true;
+/** 컬럼 1개 존재 탐지 (캐시는 true 만). */
+async function hasCol(conn: Conn, col: string, found: boolean, label: string): Promise<boolean> {
+  if (found) return true;
   try {
-    await conn.execute(`SELECT AGENT_ID FROM TRX_USER_MAS WHERE 1 = 0`);
-    agentColFound = true;
+    // ⚠️ 컬럼명은 상수 목록에서만 온다(호출부 2곳) — 사용자 입력이 아니다.
+    await conn.execute(`SELECT ${col} FROM TRX_USER_MAS WHERE 1 = 0`);
+    return true;
   } catch (e) {
     // ORA-00904(컬럼 미존재)는 ALTER 전의 정상 경로라 조용히 넘긴다.
     // ⚠️ 그 외(세션 끊김/ORA-01017 등)는 남긴다 — 결과가 "컬럼 없음" 과 구분되지 않는데
-    //    실제로는 그 호출 동안 계정 결속이 통째로 풀린 것(전원 제한 없음)이라 흔적이 필요하다.
+    //    실제로는 그 호출 동안 계정 결속이 통째로 풀린 것이라 흔적이 필요하다.
     if (!String(e).includes("ORA-00904")) {
-      logger.warn("hasAgentCol: AGENT_ID 탐지 실패 — 이번 조회는 결속 없음으로 처리", { err: String(e) });
+      logger.warn(`${label}: ${col} 탐지 실패 — 이번 조회는 컬럼 없음으로 처리`, { err: String(e) });
     }
+    return false;
   }
+}
+
+async function hasAgentCol(conn: Conn): Promise<boolean> {
+  agentColFound = await hasCol(conn, "AGENT_ID", agentColFound, "hasAgentCol");
   return agentColFound;
 }
 
+async function hasGlobalCol(conn: Conn): Promise<boolean> {
+  globalColFound = await hasCol(conn, "GLOBAL_YN", globalColFound, "hasGlobalCol");
+  return globalColFound;
+}
+
+/** 한 커넥션에서 두 컬럼의 존재를 함께 확인한다 (SELECT/INSERT/UPDATE 가 같이 쓴다). */
+async function cols(conn: Conn): Promise<{ agent: boolean; global: boolean }> {
+  return { agent: await hasAgentCol(conn), global: await hasGlobalCol(conn) };
+}
+
 /** SELECT 목록. 컬럼이 없으면 상수 NULL 로 대체해 호출부가 분기하지 않게 한다. */
-function selectCols(hasAgent: boolean): string {
+function selectCols(c: { agent: boolean; global: boolean }): string {
   return `${SELECT_COLS},
-       ${hasAgent ? "AGENT_ID" : "CAST(NULL AS VARCHAR2(50)) AS AGENT_ID"}`;
+       ${c.agent ? "AGENT_ID" : "CAST(NULL AS VARCHAR2(50)) AS AGENT_ID"},
+       ${c.global ? "GLOBAL_YN" : "CAST(NULL AS CHAR(1)) AS GLOBAL_YN"}`;
 }
 
 async function withConn<T>(
@@ -232,10 +276,13 @@ async function ensureSeedAdmin(conn: Conn, oracle: NonNullable<Awaited<ReturnTyp
     const n = Number((cnt.rows?.[0] as Record<string, unknown> | undefined)?.["N"] ?? 0);
     if (n > 0) return;
     const { hash, salt } = hashPassword(SEED_ADMIN.password);
+    // ⚠️ 시드 관리자는 반드시 전역이다 — 컬럼이 있는데 'N' 으로 들어가면 최초 운영자가
+    //    로그인하자마자 아무 에이전트도 못 보는 잠금 상태가 된다.
+    const seedGlobal = await hasGlobalCol(conn);
     await conn.execute(
       `INSERT INTO TRX_USER_MAS
-         (USER_ID, USER_NM, WORK_CTN, ROLE_CD, PWD_HASH, PWD_SALT, USE_YN, MUST_CHG_YN, REG_DT, UPD_DT)
-       VALUES (:userId, :name, :work, :role, :hash, :salt, 'Y', 'N', SYSTIMESTAMP, SYSTIMESTAMP)`,
+         (USER_ID, USER_NM, WORK_CTN, ROLE_CD, PWD_HASH, PWD_SALT, USE_YN, MUST_CHG_YN${seedGlobal ? ", GLOBAL_YN" : ""}, REG_DT, UPD_DT)
+       VALUES (:userId, :name, :work, :role, :hash, :salt, 'Y', 'N'${seedGlobal ? ", 'Y'" : ""}, SYSTIMESTAMP, SYSTIMESTAMP)`,
       { userId: SEED_ADMIN.userId, name: SEED_ADMIN.name, work: SEED_ADMIN.work, role: SEED_ADMIN.role, hash, salt },
       { autoCommit: true }
     );
@@ -254,13 +301,14 @@ export async function listUsers(): Promise<UserListResult> {
   try {
     return await withConn(async (conn, oracle) => {
       await ensureSeedAdmin(conn, oracle);
+      const c = await cols(conn);
       const res = await conn.execute(
-        `SELECT ${selectCols(await hasAgentCol(conn))} FROM TRX_USER_MAS ORDER BY REG_DT`,
+        `SELECT ${selectCols(c)} FROM TRX_USER_MAS ORDER BY REG_DT`,
         {},
         { outFormat: oracle.OBJECT }
       );
-      const users = ((res.rows ?? []) as Record<string, unknown>[]).map(rowToAccount);
-      return { available: true, users };
+      const users = ((res.rows ?? []) as Record<string, unknown>[]).map((r) => rowToAccount(r, c.global));
+      return { available: true, users, agentColumn: c.agent, globalColumn: c.global };
     });
   } catch (e) {
     logger.error("listUsers failed", { err: String(e) });
@@ -273,13 +321,14 @@ export async function getUser(userId: string): Promise<UserAccount | null> {
   if (!id) return null;
   try {
     return await withConn(async (conn, oracle) => {
+      const c = await cols(conn);
       const res = await conn.execute(
-        `SELECT ${selectCols(await hasAgentCol(conn))} FROM TRX_USER_MAS WHERE USER_ID = :id`,
+        `SELECT ${selectCols(c)} FROM TRX_USER_MAS WHERE USER_ID = :id`,
         { id },
         { outFormat: oracle.OBJECT }
       );
       const row = (res.rows ?? [])[0] as Record<string, unknown> | undefined;
-      return row ? rowToAccount(row) : null;
+      return row ? rowToAccount(row, c.global) : null;
     });
   } catch (e) {
     logger.error("getUser failed", { userId: id, err: String(e) });
@@ -300,6 +349,8 @@ export interface CreateUserInput {
    *    결속을 다루지 않는 호출은 키를 아예 넘기지 말 것(그래야 ALTER 전에도 생성이 된다).
    */
   agentId?: string | null;
+  /** 전역(모든 에이전트) 계정 여부. agentId 와 같은 규칙 — 키를 넣으면 컬럼이 없을 때 throw. */
+  global?: boolean;
 }
 
 /** 계정 생성. 사번 중복 시 throw. */
@@ -312,15 +363,16 @@ export async function createUser(input: CreateUserInput): Promise<UserAccount> {
   await guardDevWrite();
   const { hash, salt } = hashPassword(input.password);
   return withConn(async (conn, oracle) => {
-    // ⚠️ 컬럼이 없으면 AGENT_ID 와 :agentId 를 통째로 뺀다 (미사용 바인드도 넘기지 않는다).
-    const hasAgent = await hasAgentCol(conn);
-    // 결속을 명시했는데 컬럼이 없으면 **조용히 무시하지 않고** 실패시킨다.
-    if (input.agentId !== undefined && !hasAgent) throw new Error(AGENT_COL_MISSING);
+    // ⚠️ 컬럼이 없으면 해당 컬럼과 바인드를 통째로 뺀다 (미사용 바인드도 넘기지 않는다).
+    const c = await cols(conn);
+    // 결속/전역을 명시했는데 컬럼이 없으면 **조용히 무시하지 않고** 실패시킨다.
+    if (input.agentId !== undefined && !c.agent) throw new Error(AGENT_COL_MISSING);
+    if (input.global !== undefined && !c.global) throw new Error(GLOBAL_COL_MISSING);
     try {
       await conn.execute(
         `INSERT INTO TRX_USER_MAS
-           (USER_ID, USER_NM, WORK_CTN, ROLE_CD, PWD_HASH, PWD_SALT, USE_YN, MUST_CHG_YN${hasAgent ? ", AGENT_ID" : ""}, REG_DT, UPD_DT)
-         VALUES (:userId, :name, :work, :role, :hash, :salt, :useYn, 'N'${hasAgent ? ", :agentId" : ""}, SYSTIMESTAMP, SYSTIMESTAMP)`,
+           (USER_ID, USER_NM, WORK_CTN, ROLE_CD, PWD_HASH, PWD_SALT, USE_YN, MUST_CHG_YN${c.agent ? ", AGENT_ID" : ""}${c.global ? ", GLOBAL_YN" : ""}, REG_DT, UPD_DT)
+         VALUES (:userId, :name, :work, :role, :hash, :salt, :useYn, 'N'${c.agent ? ", :agentId" : ""}${c.global ? ", :globalYn" : ""}, SYSTIMESTAMP, SYSTIMESTAMP)`,
         {
           userId,
           name,
@@ -329,7 +381,8 @@ export async function createUser(input: CreateUserInput): Promise<UserAccount> {
           hash,
           salt,
           useYn: input.useYn === "N" ? "N" : "Y",
-          ...(hasAgent ? { agentId: normAgentId(input.agentId) } : {}),
+          ...(c.agent ? { agentId: normAgentId(input.agentId) } : {}),
+          ...(c.global ? { globalYn: input.global ? "Y" : "N" } : {}),
         },
         { autoCommit: true }
       );
@@ -339,11 +392,11 @@ export async function createUser(input: CreateUserInput): Promise<UserAccount> {
       throw e;
     }
     const created = await conn.execute(
-      `SELECT ${selectCols(hasAgent)} FROM TRX_USER_MAS WHERE USER_ID = :userId`,
+      `SELECT ${selectCols(c)} FROM TRX_USER_MAS WHERE USER_ID = :userId`,
       { userId },
       { outFormat: oracle.OBJECT }
     );
-    return rowToAccount((created.rows ?? [])[0] as Record<string, unknown>);
+    return rowToAccount((created.rows ?? [])[0] as Record<string, unknown>, c.global);
   });
 }
 
@@ -358,6 +411,8 @@ export interface UpdateUserInput {
    *    결속을 바꾸지 않는 수정은 키를 아예 넘기지 말 것(그래야 ALTER 전에도 수정이 된다).
    */
   agentId?: string | null;
+  /** 전역(모든 에이전트) 계정 여부. agentId 와 같은 규칙. */
+  global?: boolean;
 }
 
 /** 계정 정보 수정 (비밀번호 제외). */
@@ -386,34 +441,40 @@ export async function updateUser(userId: string, input: UpdateUserInput): Promis
     sets.push("USE_YN = :useYn");
     binds.useYn = input.useYn === "N" ? "N" : "Y";
   }
-  // AGENT_ID 는 컬럼 존재 확인이 필요해 커넥션을 연 뒤에 붙인다 (아래 withConn).
+  // AGENT_ID / GLOBAL_YN 은 컬럼 존재 확인이 필요해 커넥션을 연 뒤에 붙인다 (아래 withConn).
   const wantAgent = input.agentId !== undefined;
-  if (sets.length === 0 && !wantAgent) {
+  const wantGlobal = input.global !== undefined;
+  if (sets.length === 0 && !wantAgent && !wantGlobal) {
     const cur = await getUser(id);
     if (!cur) throw new Error("존재하지 않는 계정입니다.");
     return cur;
   }
   return withConn(async (conn, oracle) => {
-    const hasAgent = await hasAgentCol(conn);
-    // ⚠️ 컬럼이 없는데 결속을 바꾸라고 하면 실패시킨다 — 저장했다고 믿게 두지 않는다.
-    //    (결속을 건드리지 않는 수정은 여기 오지 않으므로 ALTER 전에도 그대로 저장된다.)
-    if (wantAgent && !hasAgent) throw new Error(AGENT_COL_MISSING);
+    const c = await cols(conn);
+    // ⚠️ 컬럼이 없는데 결속/전역을 바꾸라고 하면 실패시킨다 — 저장했다고 믿게 두지 않는다.
+    //    (그 둘을 건드리지 않는 수정은 여기 오지 않으므로 ALTER 전에도 그대로 저장된다.)
+    if (wantAgent && !c.agent) throw new Error(AGENT_COL_MISSING);
+    if (wantGlobal && !c.global) throw new Error(GLOBAL_COL_MISSING);
     if (wantAgent) {
       sets.push("AGENT_ID = :agentId");
       binds.agentId = normAgentId(input.agentId);
     }
+    if (wantGlobal) {
+      sets.push("GLOBAL_YN = :globalYn");
+      binds.globalYn = input.global ? "Y" : "N";
+    }
     const readBack = async (): Promise<UserAccount> => {
       const back = await conn.execute(
-        `SELECT ${selectCols(hasAgent)} FROM TRX_USER_MAS WHERE USER_ID = :id`,
+        `SELECT ${selectCols(c)} FROM TRX_USER_MAS WHERE USER_ID = :id`,
         { id },
         { outFormat: oracle.OBJECT }
       );
       const row = (back.rows ?? [])[0] as Record<string, unknown> | undefined;
       if (!row) throw new Error("존재하지 않는 계정입니다.");
-      return rowToAccount(row);
+      return rowToAccount(row, c.global);
     };
     // 여기 오면 sets 는 반드시 하나 이상이다 (빈 입력은 위에서 조기 반환했고,
-    // AGENT_ID 만 온 경우는 바로 위에서 set 을 넣거나 throw 했다).
+    // AGENT_ID/GLOBAL_YN 만 온 경우는 바로 위에서 set 을 넣거나 throw 했다).
     sets.push("UPD_DT = SYSTIMESTAMP");
     const res = await conn.execute(
       `UPDATE TRX_USER_MAS SET ${sets.join(", ")} WHERE USER_ID = :id`,
@@ -508,8 +569,9 @@ export async function verifyLogin(userId: string, password: string): Promise<Log
   try {
     return await withConn(async (conn, oracle) => {
       await ensureSeedAdmin(conn, oracle);
+      const c = await cols(conn);
       const res = await conn.execute(
-        `SELECT ${selectCols(await hasAgentCol(conn))}, PWD_HASH, PWD_SALT FROM TRX_USER_MAS WHERE USER_ID = :id`,
+        `SELECT ${selectCols(c)}, PWD_HASH, PWD_SALT FROM TRX_USER_MAS WHERE USER_ID = :id`,
         { id },
         { outFormat: oracle.OBJECT }
       );
@@ -526,7 +588,7 @@ export async function verifyLogin(userId: string, password: string): Promise<Log
           { autoCommit: true }
         );
       } catch { /* ignore */ }
-      return { ok: true, user: rowToAccount(row) };
+      return { ok: true, user: rowToAccount(row, c.global) };
     });
   } catch (e) {
     logger.error("verifyLogin failed", { userId: id, err: String(e) });

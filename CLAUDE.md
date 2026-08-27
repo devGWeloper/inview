@@ -86,33 +86,41 @@ For layers that make multiple downstream calls in one trace (e.g. GAIA → MCP t
 
 - **정의는 `config.yml` 의 `agents:`** — `{ id, name, avatar, default, db, tpmLimit, rpmLimit }`.
   `id` 가 전 계층의 키다 (`?agent=<id>`, `localStorage["tracex.agent"]`, `TRX_USER_MAS.AGENT_ID`).
-  ⚠️ **계정별 접근 제한이 있다** — 계정에 결속(`AGENT_ID`)이 있으면 그 에이전트만 고를 수 있고
-  다른 에이전트 조회는 **403** 이다. 결속이 없으면(NULL = 운영자·기존 계정) 종전대로 전부 고를 수 있다.
-  집행 지점은 조회 3라우트(`/api/tokens` · `/api/tokens/tick` · `/api/timeouts`)의 403 이고,
-  `/api/agents` 의 목록 필터는 표시용이다. ⚠️ 단 이건 **범위 분리용 편의이지 보안 경계가 아니다**
-  (BR 의 계정 생성·비번 초기화로 우회 가능 — 아래 "인증/인가 — 계정↔에이전트 결속" 참고).
+  ⚠️ **계정별 접근 제한이 있다** — 범위는 계정의 `GLOBAL_YN`/`AGENT_ID` 로 정해지며 판정은
+  `src/lib/roles.ts` 의 `resolveScope()`/`canViewAgent()` 한 곳이다 (아래 "인증/인가 — 에이전트 범위").
+  집행 지점은 조회 라우트의 `requireAgent()` 403 이고, `/api/agents` 의 목록 필터는 표시용이다.
   기본 에이전트(`default: true`)가 `db` 를 생략하면 `layers.GAIA` 를 재사용한다.
   **`agents:` 섹션이 없으면 `layers.GAIA` 를 쓰는 단일 에이전트를 합성**하므로 기존 배포가 그대로 돈다.
 - **로더는 `src/lib/config.ts`** — `listAgents()` / `getAgent(id)` / `getAgentDbConfig(id)` /
   `defaultAgentId()` / `publicAgents()`. ⚠️ `AgentDef` 는 접속정보를 품으므로 서버 전용이고,
   클라이언트로 내려가는 건 `publicAgents()` 가 만드는 `AgentInfo`(비밀 제거, `dbConfigured` 만) 뿐이다.
-- **에이전트별로 갈리는 모듈은 셋뿐**: `tokens.ts` · `timeouts.ts` · `tickStats.ts`. 셋 다
+- **에이전트별로 갈리는 모듈은 넷**: `tokens.ts` · `timeouts.ts` · `tickStats.ts` (DB 선택) 과
+  `profile.ts` (파일 선택). 앞 셋은
   `getAppDbConfig()` 대신 `getAgentDbConfig(filter.agentId)` 로 커넥션을 고른다.
   ⚠️ **agentId 는 WHERE 조건이 아니라 커넥션 선택이다** — 에이전트는 행이 아니라 DB 단위로 갈린다.
   `buildWhere()` 는 손대지 않는다. `getAppDbConfig()` 는 앱 공통 테이블(`TRX_USER_MAS`,
   `TRX_ERRMSG_COD`)용으로 그대로 남는다.
-- **라우트**: `GET /api/agents`(목록) + 기존 `/api/tokens`·`/api/tokens/tick`·`/api/timeouts` 의
-  `?agent=<id>`. ⚠️ **알 수 없는 id 는 400 이다** — 조용히 기본으로 폴백하면 남의 에이전트 수치를
-  자기 것으로 오독한다. 응답은 `agentId` 를 에코한다.
+- **라우트**: `GET /api/agents`(목록 — 프로필의 이름/아바타/한도를 얹어 내린다) +
+  `/api/tokens`·`/api/tokens/tick`·`/api/timeouts`·`/api/profile` 의 `?agent=<id>`.
+  ⚠️ **알 수 없는 id 는 400 이다** — 조용히 기본으로 폴백하면 남의 에이전트 수치를
+  자기 것으로 오독한다. 조회 응답은 `agentId` 를 에코한다.
 - **화면**: `AgentScopeProvider`(`src/components/agents/`)가 선택 상태를 쥐고 `localStorage` 에
   영속한다. 상단바 `AgentSelector`(에이전트 1개면 미렌더). **비기본 에이전트를 고르면 `TabNav` 가
-  Tokens/Timeout 만 남기고** 우측 칩도 링크 없는 정적 칩이 된다. ⚠️ **BIZ 계열 경로로 이동하면
+  Tokens/Timeout 만 남기고** 우측 칩은 그 에이전트의 프로필(`/agent?agent=<id>`)로 간다.
+  ⚠️ **BIZ 계열 경로로 이동하면
   기본 에이전트로 스냅백**한다 — 숨긴 화면에 남의 에이전트 컨텍스트가 걸린 상태를 만들지 않는다.
   스냅백 effect 의 deps 는 **`[pathname]` 뿐**이다(agentId 를 넣으면 셀렉터로 고른 직후 되돌아간다).
-- **BIZ_AIACTIONTXN_HIS 기반 화면은 전부 기본 에이전트 전용**이다 — Traces / Dashboard / `/agent` /
-  `/report` / `/improvement` / `/event-fabs`.
-- **TPM/RPM 한도는 config 단일 소스**다. `AgentProfile.tpmLimit`/`rpmLimit` 과 `/admin` 의
-  "사용량 한도" 섹션은 제거됐다.
+- **BIZ_AIACTIONTXN_HIS 기반 화면은 전부 기본 에이전트 전용**이다 — Traces / Dashboard /
+  `/report` / `/improvement` / `/event-fabs`. 경로 목록은 `roles.ts` 의 `isBizPath()` 단일 소스이고,
+  ⚠️ **서버에서 막는다**: 각 API 가 `requireBiz()` 로 판정하고(권위), 미들웨어는 세션의
+  `bizAllowed` 클레임으로 화면을 `/tokens` 로 되돌린다(UX). 예전엔 클라이언트 스냅백뿐이라
+  **URL 을 직접 치면 그대로 열렸다**.
+- **프로필(`/agent`, `/admin`)은 에이전트마다 따로다** — `data/agent-profile.json`(기본, 파일명 유지)
+  / `data/agent-profile.<id>.json`. 비기본 에이전트는 **FTE 섹션이 없다**(BIZ 집계라 남의 실적이 된다).
+  `/admin` 은 전역 운영자에게 편집 대상 셀렉터를 띄우고, 에이전트 운영자에게는 자기 것 하나만 온다.
+- **TPM/RPM 한도는 `/admin` 의 "사용량 한도" 에서 편집**한다(`AgentProfile.tpmLimit`/`rpmLimit`).
+  ⚠️ 우선순위는 **프로필 > config.yml** — 프로필 값이 0(미설정)이면 `config.yml` 의 `agents[]` 값이
+  쓰인다. 병합 지점은 `/api/agents` 한 곳이다. 접속정보는 여전히 `config.yml` 전용이다.
 
 ### App-owned DB — GAIA's DB doubles as it (⚠️ important)
 
@@ -291,37 +299,63 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
 
 ## 인증/인가 — 로그인 · 계정 · 권한 (⚠️ 앱 자체 DB = GAIA)
 
-전 화면 로그인 필수. 사번(USER_ID)으로 로그인하고 3단계 권한(**ADMIN 운영자 > BR 상위 > DEV 개발자**)으로 접근을 가른다. 기존 하드코딩 `ADMIN_PASSWORD`/`AdminGate`(sessionStorage 게이트)는 **완전히 제거**되고 세션 기반 인증으로 대체됐다.
+전 화면 로그인 필수. 사번(USER_ID)으로 로그인하고 **두 축**으로 접근을 가른다 —
+**권한**(ADMIN 운영자 > BR 상위 > DEV 개발자) × **에이전트 범위**(전역 / 에이전트 하나 / 미배정).
+두 축은 직교한다: "전역 ADMIN"은 모든 에이전트를 오가며 관리하고, "에이전트 ADMIN"은 **자기 에이전트 안에서만** ADMIN 이다. 기존 하드코딩 `ADMIN_PASSWORD`/`AdminGate`(sessionStorage 게이트)는 **완전히 제거**되고 세션 기반 인증으로 대체됐다.
 
 - **권한 단일 소스 `src/lib/roles.ts`** (클라이언트·Edge 미들웨어·서버 공용 — Node 전용 모듈 import 금지). `Role`, `ROLE_LABEL`, `roleAtLeast(role,min)`, 그리고 **경로→최소권한 매핑 `ROUTE_RULES`**(`requiredRoleForPath`). 접근 범위가 바뀌면 여기만 고친다. 현재: `/admin`=ADMIN, `/accounts`·`/api/accounts`·`/report`·`/improvement`·`/event-fabs`=BR, 그 외=인증만 되면 DEV. **계정 관리는 BR 이상**이되 권한 상향 방지 가드가 API 에 있다 — ADMIN 계정 생성/수정/삭제/초기화·ADMIN 승격은 **ADMIN 만**(BR 은 BR/DEV 만 다룰 수 있고 UI 도 ADMIN 옵션·행 버튼을 가림).
-- **계정 저장소 `TRX_USER_MAS`** (`sql/create_trx_user_mas.sql`, **앱 자체 DB=GAIA 에서만 1회 실행**, ADM 소유 + GRANT + PUBLIC SYNONYM — 다른 앱 테이블과 동일 패턴). 컬럼: USER_ID(사번,PK)/USER_NM/WORK_CTN(업무)/ROLE_CD/PWD_HASH/PWD_SALT/USE_YN/MUST_CHG_YN/**AGENT_ID**/LAST_LOGIN_DT/감사일시. `src/lib/users.ts` 가 CRUD·로그인검증·시드를 담당(lazy-`oracledb`-swallow, DB 불가 시 `available=false`).
-  - **계정↔에이전트 결속 `AGENT_ID`** (`sql/migrations/2026-08-24_add_user_agent_id.sql`) — **NULL = 전 에이전트**(기존 계정·운영자), 값이 있으면 `config.yml` 의 그 `agents[].id` 하나만.
-    로그인 시 세션 payload(`SessionPayload.agentId`)에 실려 ① `/api/agents` 목록 필터(표시용)
-    ② 조회 3라우트(`/api/tokens`·`/api/tokens/tick`·`/api/timeouts`)의 **403 판정**(실제 집행)에 쓰인다.
-    판정 순서는 **400(없는 에이전트) → 403(내 것이 아님) → DB 조회** 다 — 권한 밖 요청은 커넥션을 열기 전에 끊는다.
-    ⚠️ **결속 변경은 다음 로그인부터 적용된다** — 세션 클레임이고 쿠키는 고정 7일 만료(갱신 없음)라
-    살아 있는 세션은 최대 7일간 옛 결속으로 돈다. `ROLE_CD` 도 같은 방식이다(`/api/auth/me` 는 계정을 되읽지 않는다).
-    ⚠️ **이건 조회 범위를 나누는 편의 장치이지 보안 경계가 아니다.** BR 은 여전히 계정을 **생성**하고
-    (초기 비밀번호 = 사번) 비-ADMIN 계정의 **비밀번호를 초기화**할 수 있으므로, 결속 없는 계정을 만들어
-    그것으로 로그인하면 결속을 우회할 수 있다. 막으려면 역할 모델 수준의 결정(예: 계정 관리를 ADMIN 전용으로)이 필요하다.
-    ⚠️ `users.ts` 가 **컬럼 존재를 탐지**하므로 ALTER 전에도 **읽기·결속과 무관한 계정 저장**은 그대로 동작한다
-    (전원 NULL = 제한 없음). 다만 **결속을 쓰려는 요청은 조용히 무시하지 않고 실패**한다 —
-    `createUser`/`updateUser` 가 `agentId` 키를 받았는데 컬럼이 없으면 마이그레이션 파일명을 담아 throw 한다
-    (저장했다고 믿게 두지 않는다). 그래서 호출부는 **결속을 바꿀 때만** 키를 보낸다.
-    ⚠️ **변경 권한은 ADMIN 만** — `/api/accounts` 의 POST/PUT 이 `agentId` 키가 오면 비-ADMIN 을 403 으로 막는다
-    (NULL 이 최대 범위라 **결속 해제도 상향**이다). 저장 값은 `validateAgentId()`(`users.ts`)가 config 의 실제
-    id 인지 검증한다 — 없는 id 를 저장하면 그 계정은 목록이 비고 403 만 받는 막다른 길이 된다.
-    ⚠️ 그래도 결속이 설정에서 사라진 경우를 대비해 `AgentScopeProvider.scopeWarning` → `AgentScopeWarning`
-    (상단바 아래 안내 띠)이 이유를 화면에 밝힌다.
+- **계정 저장소 `TRX_USER_MAS`** (`sql/create_trx_user_mas.sql`, **앱 자체 DB=GAIA 에서만 1회 실행**, ADM 소유 + GRANT + PUBLIC SYNONYM — 다른 앱 테이블과 동일 패턴). 컬럼: USER_ID(사번,PK)/USER_NM/WORK_CTN(업무)/ROLE_CD/PWD_HASH/PWD_SALT/USE_YN/MUST_CHG_YN/**AGENT_ID**/**GLOBAL_YN**/LAST_LOGIN_DT/감사일시. `src/lib/users.ts` 가 CRUD·로그인검증·시드를 담당(lazy-`oracledb`-swallow, DB 불가 시 `available=false`).
+  - **에이전트 범위 = `GLOBAL_YN` + `AGENT_ID`** (`sql/migrations/2026-08-24_add_user_agent_id.sql`
+    → `sql/migrations/2026-08-27_add_user_global_yn.sql`, 순서대로):
+
+    | GLOBAL_YN | AGENT_ID | 범위 |
+    |---|---|---|
+    | `Y` | (무시) | **전역** — 모든 에이전트를 오가며 열람·관리 |
+    | `N` | `leeoksu` | 그 에이전트 하나 |
+    | `N` | NULL | **잠금**(미배정) — 아무 에이전트도 못 본다 |
+
+    ⚠️ **`AGENT_ID` 의 의미가 뒤집혔다** — 예전엔 NULL = 전 에이전트였고 지금은 NULL = 잠금이다.
+    그래서 **판정은 반드시 `src/lib/roles.ts` 를 거친다**: `resolveScope(claim)` → `canViewAgent` /
+    `canManageAgent` / `canActOnAccount` / `isLockedScope`. 호출부에서 `session.agentId` 를 직접
+    비교하면 규칙이 조용히 뒤집힌다.
+    서버 진입점은 `src/lib/auth/current.ts` 의 **`requireAgent(agentId, min)`**(열람) ·
+    **`requireAgentAdmin(agentId)`**(관리) · **`requireBiz(min)`**(기본 에이전트 전용 화면).
+    판정 순서는 **400(없는 에이전트) → 403(내 범위 아님) → DB 조회** 다 — 권한 밖 요청은 커넥션을 열기 전에 끊는다.
+    ⚠️ **세션 클레임은 `scope`("global"/"agent"/"locked")를 반드시 함께 싣는다.** `agentId` 만으로는
+    전역과 미배정을 구분할 수 없다. **`scope` 키가 없는 토큰은 이 기능 이전의 쿠키**라 `resolveScope` 가
+    옛 규칙(결속 없음 = 전역)으로 읽는다 — 배포 직후 살아 있는 로그인을 끊지 않기 위함이다.
+    ⚠️ **범위 변경은 다음 로그인부터 적용된다** — 세션 클레임이고 쿠키는 고정 7일 만료(갱신 없음)라
+    살아 있는 세션은 최대 7일간 옛 범위로 돈다. `ROLE_CD` 도 같은 방식이다(`/api/auth/me` 는 계정을 되읽지 않는다).
+  - **계정 관리도 범위 안에서만 된다** — 목록/수정/삭제/비번초기화 모두 `canActOnAccount()` 를 지난다.
+    에이전트 운영자에게는 **다른 팀 계정이 목록에도 안 뜨고**, 직접 URL 로 쳐도 **404**(존재를 알리지 않는다).
+    ⚠️ 전역 계정과 미배정 계정은 **전역 운영자만** 손댈 수 있다 — 전역 계정의 비밀번호를 초기화할 수
+    있으면 그 계정으로 범위를 벗어날 수 있기 때문이다(예전 "보안 경계가 아니다" 라고 적어 둔 구멍이 이것이다).
+    새 계정의 소속은 에이전트 운영자면 **자기 에이전트로 고정**되고(다른 값을 보내면 403),
+    전역 운영자가 범위를 지정하지 않으면 **기본 에이전트**로 만들어진다 — 그대로 두면 잠긴 계정이 되어
+    만든 사람도 받는 사람도 왜 안 보이는지 모른다.
+    `GLOBAL_YN` 부여/회수와 소속 이동은 **전역 ADMIN 전용**이고, 본인 계정의 범위는 스스로 못 바꾼다(자기 잠금 방지).
+    ⚠️ 저장 값은 `validateAgentId()`(`users.ts`)가 config 의 실제 id 인지 검증한다 — 없는 id 를 저장하면
+    그 계정은 목록이 비고 403 만 받는 막다른 길이 된다. 그래도 설정에서 사라진 경우를 대비해
+    `AgentScopeProvider.scopeWarning` → `AgentScopeWarning`(상단바 아래 안내 띠)이 이유를 화면에 밝힌다.
+    ⚠️ `users.ts` 가 **두 컬럼의 존재를 각각 탐지**하므로 ALTER 전에도 범위와 무관한 계정 저장은 그대로
+    동작하고, 읽기는 **옛 규칙(AGENT_ID 없음 = 전역)** 으로 되돌아간다. 다만 **범위를 쓰려는 요청은
+    조용히 무시하지 않고 실패**한다 — `createUser`/`updateUser` 가 `agentId`/`global` 키를 받았는데 컬럼이
+    없으면 마이그레이션 파일명을 담아 throw 한다(저장했다고 믿게 두지 않는다). 그래서 호출부는
+    **범위를 바꿀 때만** 키를 보내고, `global: false` 는 아예 보내지 않는다(컬럼 DEFAULT `'N'` 과 결과가 같다).
   - **최초 관리자 시드**: 테이블이 비면 로그인/목록 조회 시 `ensureSeedAdmin` 이 기본 운영자(USER_ID=`admin`/PW=`admin1234`/ADMIN)를 1회 생성. **최초 로그인 후 즉시 변경**(강제되진 않음 — 아래 TEMP 절).
 - **비밀번호**: 평문 저장 금지. `src/lib/auth/password.ts` 가 Node 내장 `crypto` scrypt 로 해시(외부 의존성 없음 — 배포가 src 복붙이라 native dep 회피). 변경은 사용자 메뉴의 `ChangePasswordModal` 에서 **자율**로만 한다 (강제 변경은 아래 TEMP 절 참고).
 - **세션**: `src/lib/auth/session.ts` 서명 쿠키(`trx_session`, httpOnly, **7일** — `SESSION_TTL_SEC` 한 곳. 슬라이딩 갱신 없음 = 로그인 시각 기준 고정 만료). 형식 `base64url(payload).HMAC-SHA256`, **Web Crypto(`crypto.subtle`)만 사용**해 Edge 미들웨어·Node 라우트 공용. 비밀키 `AUTH_SECRET`(미설정 시 개발용 폴백 — **운영 배포 시 반드시 환경변수 설정**). 쿠키 `secure` 는 기본 off(사내 HTTP 배포에서 로그인 막힘 방지) — HTTPS 면 `AUTH_COOKIE_SECURE=true`. 옵션은 `sessionCookieOptions()` 한 곳.
 - **미들웨어 `src/middleware.ts`**(Edge): 비로그인 페이지→`/login?next=`, API→401; 권한 부족 페이지→`/403`, API→403. 인가 근거는 `ROUTE_RULES`. 정적 자산·`/login`·`/api/auth/*` 는 통과.
+  BIZ 경로(`isBizPath`)에 범위 밖 계정이 오면 페이지는 `/tokens`(미배정이면 `/403`)로 보낸다.
+  ⚠️ Edge 는 `config.yml` 을 못 읽어(fs) 기본 에이전트 id 를 모른다 — 그래서 로그인 시 계산한
+  `bizAllowed` 클레임을 쓴다. **이건 UX 리다이렉트일 뿐 권위가 아니다**; 실제 차단은 각 API 의
+  `requireBiz()` 가 매 요청 현재 config 로 다시 한다. 클레임이 없는 옛 쿠키는 통과시킨다.
 - **API**: `POST /api/auth/login`·`logout`, `GET /api/auth/me`(비로그인 200+`{user:null}`), `POST /api/auth/change-password`(본인). 계정관리(BR 이상 + 위 상향방지 가드): `GET/POST /api/accounts`, `PUT/DELETE /api/accounts/[userId]`, `POST /api/accounts/[userId]/reset-password`. 서버 방어는 `src/lib/auth/current.ts` `requireRole(min)`.
 - **초기 비밀번호 = 사번**: 계정 생성 시 비밀번호를 **USER_ID(사번)와 동일**하게 설정한다 (강제 변경 없음 — 사번 그대로 로그인). 등록 폼엔 비번 입력이 없다. 관리자 **비밀번호 초기화**도 값 미지정 시 **사번으로** 초기화(지정하면 그 값). 결과 비번은 화면에 1회 노출해 전달용으로 보여준다.
 - **클라이언트**: `AuthProvider`(`/api/auth/me` 컨텍스트, `useAuth()`) → `AppChrome`(상단바/푸터 셸, `/login` 은 셸 없이 전체화면) → `UserMenu`(계정 칩+드롭다운, 권한별 관리 링크·비번변경·로그아웃). 기존 mutation 클라이언트 fetch 들은 `x-admin-password` 헤더를 떼고 **세션 쿠키 자동 전송**에 의존(401/403 시 안내 문구).
 - **화면**: `/login`(브랜드 히어로+폼 스플릿), `/accounts`(계정 목록·생성/수정/비번초기화/삭제, 권한 3택 카드), `/403`. `/agent` 헤더의 리포트/관리자 버튼은 서버에서 세션 권한으로 조건부 노출.
-- **기존 PUT 게이트 교체**: `/api/profile`=ADMIN, `/api/event-fabs`=BR, `/api/request-failures`=BR (모두 `requireRole`). `/admin`·`/report`·`/event-fabs`·`/improvement` 페이지의 `AdminGate` 래퍼 제거(미들웨어가 인가). **삭제된 파일**: `src/components/AdminGate.tsx`, `src/lib/adminAuth.ts` (⚠️ 사내 복붙 배포는 삭제가 전파 안 되니 그쪽 레포에서도 지울 것 — memory `deploy-copy-paste-sync`).
+- **기존 PUT 게이트 교체**: `/api/profile`=대상 에이전트의 ADMIN(`requireAgentAdmin`),
+  `/api/event-fabs`=BR+BIZ, `/api/request-failures`=BR+BIZ (`requireBiz("BR")`). `/admin`·`/report`·`/event-fabs`·`/improvement` 페이지의 `AdminGate` 래퍼 제거(미들웨어가 인가). **삭제된 파일**: `src/components/AdminGate.tsx`, `src/lib/adminAuth.ts` (⚠️ 사내 복붙 배포는 삭제가 전파 안 되니 그쪽 레포에서도 지울 것 — memory `deploy-copy-paste-sync`).
 
 ### ⚠️ TEMP — 비밀번호 강제 변경 비활성 (되살리기 전제)
 

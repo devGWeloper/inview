@@ -37,10 +37,14 @@ import { InsightsResponse, ROUTING_FAIL_LABEL } from "@/lib/types";
 //    주 단위 보고는 ②를 써야 매주 같은 기준으로 비교된다.
 type RecentKey = "today" | "7d" | "30d" | "month";
 
-/** 선택 상태. week 의 offset 은 `/report` 와 **같은 부호** — 0 = 이번 주, -1 = 지난주, -2 = 2주 전 … */
+/**
+ * 선택 상태. week 의 offset 은 `/report` 와 **같은 부호** — 0 = 이번 주, -1 = 지난주, -2 = 2주 전 …
+ * custom 의 from/to 는 `datetime-local` 문자열("YYYY-MM-DDTHH:mm") 그대로다.
+ */
 type Sel =
   | { kind: "recent"; key: RecentKey }
-  | { kind: "week"; offset: number };
+  | { kind: "week"; offset: number }
+  | { kind: "custom"; from: string; to: string };
 
 const RECENT_PRESETS: { key: RecentKey; label: string }[] = [
   { key: "today", label: "오늘" },
@@ -58,9 +62,12 @@ function weekBadge(offset: number): string {
   return `${-offset}주 전`;
 }
 
+/** 프리셋 버튼의 활성 여부 판정 (custom 은 비교 대상이 아니라 자기 버튼으로만 표시한다). */
 function sameSel(a: Sel, b: Sel): boolean {
-  return a.kind === b.kind &&
-    (a.kind === "recent" ? a.key === (b as typeof a).key : a.offset === (b as { offset: number }).offset);
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "recent" && b.kind === "recent") return a.key === b.key;
+  if (a.kind === "week" && b.kind === "week") return a.offset === b.offset;
+  return false;
 }
 
 function isoNoTz(d: Date): string {
@@ -89,6 +96,12 @@ function weekRange(offset: number): { from: Date; to: Date } {
  */
 function rangeDates(sel: Sel): { from: Date; to: Date } {
   const now = new Date();
+  if (sel.kind === "custom") {
+    // 사용자가 찍은 시각 그대로. 뒤집혀 있으면 바로잡는다(빈 결과보다 낫다).
+    const a = new Date(sel.from);
+    const b = new Date(sel.to);
+    return a <= b ? { from: a, to: b } : { from: b, to: a };
+  }
   if (sel.kind === "week") {
     const { from, to } = weekRange(sel.offset);
     return { from, to: to > now ? now : to };
@@ -110,6 +123,12 @@ function rangeOf(sel: Sel): { from: string; to: string } {
 function rangeLabel(sel: Sel): string {
   const { from, to } = rangeDates(sel);
   const d = (x: Date) => `${String(x.getMonth() + 1).padStart(2, "0")}/${String(x.getDate()).padStart(2, "0")} (${DAY_KO[x.getDay()]})`;
+  // ⚠️ 직접 설정은 사용자가 찍은 상한을 그대로 쓴다 — 아래 -1ms 를 적용하면 8/10 을 골랐는데
+  //    8/9 로 보여 "왜 하루가 빠지냐" 가 된다. 프리셋의 상한만 배타적이다.
+  if (sel.kind === "custom") {
+    const hm = (x: Date) => `${String(x.getHours()).padStart(2, "0")}:${String(x.getMinutes()).padStart(2, "0")}`;
+    return `${d(from)} ${hm(from)} ~ ${d(to)} ${hm(to)}`;
+  }
   // 상한이 배타적이라 표시용으로 1ms 당겨 **실제 마지막 날**을 가리킨다
   // (안 그러면 8/3~8/10 처럼 하루가 더 있는 것처럼 읽힌다).
   const last = new Date(to.getTime() - 1);
@@ -140,6 +159,9 @@ function actionLabel(key: string): string {
 export default function InsightsPage() {
   const { user } = useAuth();
   const [sel, setSel] = useState<Sel>({ kind: "recent", key: "30d" });
+  // 직접 설정 입력값 — 적용(submit) 전까지는 조회에 반영하지 않는다(타이핑 중 재조회 방지).
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [data, setData] = useState<InsightsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -164,6 +186,20 @@ export default function InsightsPage() {
   // 주간 모드가 아니면 ◀ 는 "지난주" 부터 시작한다 (최근 구간에서 곧장 거슬러 올라갈 수 있게).
   const weekOffset = sel.kind === "week" ? sel.offset : 0;
   const goWeek = (offset: number) => setSel({ kind: "week", offset: Math.min(0, offset) });
+
+  /** 직접 설정 진입 — 지금 보고 있는 구간을 그대로 채워 시작한다(빈 칸부터 찍게 하지 않는다). */
+  function enterCustom() {
+    const { from, to } = rangeDates(sel);
+    const v = (x: Date) => isoNoTz(x).slice(0, 16); // datetime-local 은 분 정밀
+    setCustomFrom(v(from));
+    setCustomTo(v(to));
+    setSel({ kind: "custom", from: v(from), to: v(to) });
+  }
+  function applyCustom(e: React.FormEvent) {
+    e.preventDefault();
+    if (!customFrom || !customTo) return;
+    setSel({ kind: "custom", from: customFrom, to: customTo });
+  }
 
   const daily = asArray<InsightsResponse["daily"][number]>(data?.daily);
   const byAction = asArray<InsightsResponse["byAction"][number]>(data?.byAction);
@@ -243,26 +279,20 @@ export default function InsightsPage() {
                   </button>
                 );
               })}
+              {/* 프리셋으로 안 잡히는 구간(특정 며칠, 월 중간 등)을 직접 찍는다 */}
+              <button
+                type="button"
+                role="tab"
+                aria-selected={sel.kind === "custom"}
+                className={"preset-btn" + (sel.kind === "custom" ? " active" : "")}
+                onClick={enterCustom}
+              >
+                Custom
+              </button>
             </div>
-            {/* 주 단위 — 이번 주/지난주는 한 번에, 그 이전은 ◀ 로 계속 거슬러 올라간다.
-                ▶ 는 이번 주에서 멈춘다(미래는 볼 것이 없다). /report 의 기간 이동과 같은 조작. */}
-            <div className="preset-group" role="tablist" aria-label="주 단위">
-              {[0, -1].map((o) => {
-                const active = sameSel(sel, { kind: "week", offset: o });
-                return (
-                  <button
-                    key={o}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    className={"preset-btn week" + (active ? " active" : "")}
-                    onClick={() => goWeek(o)}
-                  >
-                    {weekBadge(o)}
-                  </button>
-                );
-              })}
-            </div>
+            {/* 주 단위 이동 — 월~일 한 주를 통째로 본다. ◀ 로 몇 주 전이든 거슬러 올라가고
+                ▶ 는 이번 주에서 멈춘다(미래는 볼 것이 없다). /report 의 기간 이동과 같은 조작.
+                ⚠️ 이번 주/지난주 버튼을 따로 두지 않는다 — 화살표가 그 역할을 겸한다. */}
             <div className="week-nav" role="group" aria-label="주 이동">
               <button type="button" onClick={() => goWeek(weekOffset - 1)} aria-label="이전 주">
                 ◀
@@ -280,6 +310,24 @@ export default function InsightsPage() {
               </button>
             </div>
           </div>
+          {sel.kind === "custom" && (
+            <form className="custom-range" onSubmit={applyCustom}>
+              <input
+                type="datetime-local"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                aria-label="시작"
+              />
+              <span className="range-arrow">→</span>
+              <input
+                type="datetime-local"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                aria-label="끝"
+              />
+              <button type="submit" className="btn primary">적용</button>
+            </form>
+          )}
           <div className="ins-range" title="조회 구간">{rangeLabel(sel)}</div>
           <button type="button" className="btn ghost" onClick={() => void load(sel)}>
             새로고침

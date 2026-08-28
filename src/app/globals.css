@@ -4985,9 +4985,8 @@ button.tbd-row:not(:disabled):hover {
 /* 프리셋 두 줄(최근 구간 / 주 단위) + 조회 구간 표시 */
 .ins-filter { flex-wrap: wrap; align-items: center; gap: 10px; }
 .ins-presets { display: flex; flex-wrap: wrap; gap: 8px; }
-/* 주 단위 버튼은 '최근 N일' 과 성격이 달라 살짝 구분해 둔다 (활성일 때만 강조) */
-.preset-btn.week.active { background: var(--ok); border-color: var(--ok); color: #fff; }
-/* ◀▶ 주 이동 — 주간 모드일 때만 라벨을 살린다(그 외엔 '주 단위' 안내로 흐리게) */
+/* ◀▶ 주 이동 — 주간 모드일 때만 라벨을 살린다(그 외엔 '주 단위' 안내로 흐리게).
+   이번 주/지난주 버튼은 두지 않는다 — 화살표가 그 역할을 겸한다. */
 .ins-filter .week-nav-label { min-width: 62px; text-align: center; color: var(--text-3); }
 .ins-filter .week-nav-label.on { color: var(--ok); font-weight: 800; }
 .ins-range {

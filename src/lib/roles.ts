@@ -96,6 +96,8 @@ export function requiredRoleForPath(pathname: string): Role | null {
 //
 // 열려 있는 것:
 //   /insights      집계 실적 화면 (원문 · 사용자 ID · 에러 코드 없음)
+//                  ⚠️ 이 둘은 위 canViewInsights() 가 한 번 더 좁힌다 — 일반 사용자와
+//                     **전역 운영자**만 열 수 있다(BR·DEV·에이전트 ADMIN 은 못 본다).
 //   /api/insights  그 화면의 유일한 데이터 소스 (서버가 필드를 화이트리스트로 추림)
 //   /agent         에이전트 소개 카드 + FTE (공개용 프로필)
 //   /api/profile   위 카드의 데이터 (GET 만 — PUT 은 requireAgentAdmin 이 따로 막는다)
@@ -117,11 +119,38 @@ export function isFieldAllowedPath(pathname: string): boolean {
   return FIELD_ALLOW_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 실적 화면(/insights) — 일반 사용자 본인 + **전역 운영자**만.
+//
+// 일반 사용자에게 보여주는 화면이므로, 그 위 권한이 전부 볼 필요는 없다. 다만 운영자는
+// "일반 사용자에게 무엇이 보이는가" 를 확인할 수 있어야 하므로 **전역 ADMIN 에게만** 연다.
+// (별도 미리보기를 만들면 두 화면이 어긋나므로 같은 화면을 함께 본다)
+//
+// ⚠️ BR·DEV·에이전트 ADMIN 은 못 본다 — 이들은 Dashboard/Report 로 같은 수치를 더 자세히 본다.
+//    그래서 이 판정만은 role 서열이 아니라 **role + 전역 여부**를 함께 본다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const INSIGHTS_PREFIXES = ["/insights", "/api/insights"];
+
+export function isInsightsPath(pathname: string): boolean {
+  return INSIGHTS_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+
+/** 실적 화면을 볼 수 있는가. `global` 은 계정의 전역 여부(AgentScope.global). */
+export function canViewInsights(role: Role, global: boolean): boolean {
+  if (role === "FIELD") return true;       // 이 화면의 주인
+  return role === "ADMIN" && global;       // 전역 운영자만 함께 본다
+}
+
 /**
  * 이 권한으로 이 경로에 들어갈 수 있는가 — 경로 인가의 **단일 판정 지점**.
  * 미들웨어(실제 차단)와 TabNav(메뉴 노출)가 같은 답을 쓰도록 한 곳으로 모은다.
+ *
+ * ⚠️ `global` 은 /insights 판정에만 쓰인다. 기본값이 false 라 넘기는 것을 잊으면
+ *    운영자에게 탭이 안 보이는 쪽으로 틀린다 — 열리는 쪽으로 틀리지 않게 한 기본값이다.
  */
-export function canAccessPath(role: Role, pathname: string): boolean {
+export function canAccessPath(role: Role, pathname: string, global: boolean = false): boolean {
+  if (isInsightsPath(pathname)) return canViewInsights(role, global);
   if (role === "FIELD") return isFieldAllowedPath(pathname); // allow-list (fail-closed)
   const min = requiredRoleForPath(pathname);
   return !min || roleAtLeast(role, min);

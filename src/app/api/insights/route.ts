@@ -7,7 +7,7 @@ import { computeFteStats } from "@/lib/fte";
 import { fetchTokenStats } from "@/lib/tokens";
 import { fetchTimeoutStats } from "@/lib/timeouts";
 import { defaultAgentId } from "@/lib/config";
-import { LOWEST_ROLE } from "@/lib/roles";
+import { LOWEST_ROLE, canViewInsights } from "@/lib/roles";
 import {
   InsightsResponse,
   InsightsTimeouts,
@@ -29,12 +29,18 @@ export const runtime = "nodejs";
  *    집계는 computeStats() 로 공유하되, 응답은 아래 toInsights() 가 필요한 필드만 **새로 담아**
  *    만든다. StatsResponse 에 필드가 늘어도 여기로는 새지 않는다.
  *
- * 권한: 인증된 사용자 누구나(min = LOWEST_ROLE). 운영자/개발자도 같은 화면을 볼 수 있어야
- * "일반 사용자가 무엇을 보는지" 를 확인할 수 있다. 단 기본 에이전트 소속이어야 한다(requireBiz).
+* 권한: **일반 사용자(FIELD) 본인 + 전역 운영자(전역 ADMIN)** 뿐이다 (canViewInsights).
+ * 운영자가 함께 보는 이유는 "일반 사용자에게 무엇이 보이는가" 를 같은 화면으로 확인하기 위함이고,
+ * BR·DEV·에이전트 ADMIN 은 Dashboard/Report 로 같은 수치를 더 자세히 보므로 여기서 막는다.
+ * requireBiz 로 기본 에이전트 소속까지 확인한 뒤(scope), 그 위에서 한 번 더 좁힌다.
  */
 export async function GET(req: NextRequest) {
   const guard = await requireBiz(LOWEST_ROLE);
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
+  // ⚠️ 권위 있는 차단은 여기다 — 미들웨어/탭 숨김은 UX 일 뿐이고, URL 을 직접 쳐도 여기서 끊긴다.
+  if (!canViewInsights(guard.session.role, guard.scope.global)) {
+    return NextResponse.json({ error: "접근 권한이 없습니다." }, { status: 403 });
+  }
 
   const t0 = Date.now();
   const ctx = reqContext(req);

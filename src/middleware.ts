@@ -44,8 +44,10 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 2) 인가 (경로별 권한 — 서열 + 일반 사용자 허용 목록)
-  if (!canAccessPath(session.role, pathname)) {
+  // 2) 인가 (경로별 권한 — 서열 + 일반 사용자 허용 목록 + 실적 화면 전역 운영자 제한)
+  //    ⚠️ scope 는 아래 3) 보다 먼저 필요하다 — /insights 판정이 전역 여부를 본다.
+  const scope = resolveScope(session);
+  if (!canAccessPath(session.role, pathname, scope.global)) {
     if (isApi) {
       return NextResponse.json({ error: "접근 권한이 없습니다." }, { status: 403 });
     }
@@ -59,7 +61,6 @@ export async function middleware(req: NextRequest) {
   }
 
   // 3) 에이전트 범위 — 미배정 계정과 다른 팀 에이전트 소속을 BIZ 화면에서 돌려보낸다.
-  const scope = resolveScope(session);
   if (isBizPath(pathname)) {
     // bizAllowed 키가 없는 옛 쿠키는 통과시킨다(다음 로그인부터 판정) — 배포 직후 기존
     // 세션이 전부 튕기지 않게. API 는 어차피 requireBiz 가 다시 본다.
@@ -75,7 +76,7 @@ export async function middleware(req: NextRequest) {
       //    "여기는 안 됨 → 저기로" 가 서로를 가리켜 리다이렉트 루프가 된다.
       const fallback = "/tokens";
       url.pathname =
-        isLockedScope(scope) || !canAccessPath(session.role, fallback) ? "/403" : fallback;
+        isLockedScope(scope) || !canAccessPath(session.role, fallback, scope.global) ? "/403" : fallback;
       return NextResponse.redirect(url);
     }
   }

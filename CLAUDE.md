@@ -304,7 +304,7 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
 두 축은 직교한다: "전역 ADMIN"은 모든 에이전트를 오가며 관리하고, "에이전트 ADMIN"은 **자기 에이전트 안에서만** ADMIN 이다. 기존 하드코딩 `ADMIN_PASSWORD`/`AdminGate`(sessionStorage 게이트)는 **완전히 제거**되고 세션 기반 인증으로 대체됐다.
 
 - **권한 단일 소스 `src/lib/roles.ts`** (클라이언트·Edge 미들웨어·서버 공용 — Node 전용 모듈 import 금지). `Role`, `ROLE_LABEL`, `roleAtLeast(role,min)`, 그리고 **경로→최소권한 매핑 `ROUTE_RULES`**(`requiredRoleForPath`). 접근 범위가 바뀌면 여기만 고친다. 현재: `/admin`·`/timeouts`=ADMIN, `/accounts`·`/api/accounts`·`/report`·`/improvement`·`/event-fabs`=BR, 그 외=인증만 되면 DEV. **계정 관리는 BR 이상**이되 권한 상향 방지 가드가 API 에 있다 — ADMIN 계정 생성/수정/삭제/초기화·ADMIN 승격은 **ADMIN 만**(BR 은 그 아래 권한만 다룰 수 있고 UI 도 ADMIN 옵션·행 버튼을 가림).
-- ⚠️ **경로 인가의 진입점은 `canAccessPath(role, pathname)` 하나다** (미들웨어의 실제 차단과 `TabNav` 의 탭 노출이 같은 함수를 쓴다 — 예전처럼 탭별 `minRole` 목록을 따로 두면 `ROUTE_RULES` 와 두 벌이 되어 "메뉴엔 보이는데 누르면 403" 이 생긴다). 내부에서 FIELD 는 서열이 아니라 **허용 목록**으로 갈린다 (아래 절).
+- ⚠️ **경로 인가의 진입점은 `canAccessPath(role, pathname, global)` 하나다** (미들웨어의 실제 차단과 `TabNav` 의 탭 노출이 같은 함수를 쓴다 — 예전처럼 탭별 `minRole` 목록을 따로 두면 `ROUTE_RULES` 와 두 벌이 되어 "메뉴엔 보이는데 누르면 403" 이 생긴다). 내부에서 FIELD 는 서열이 아니라 **허용 목록**으로 갈린다 (아래 절).
 - **계정 저장소 `TRX_USER_MAS`** (`sql/create_trx_user_mas.sql`, **앱 자체 DB=GAIA 에서만 1회 실행**, ADM 소유 + GRANT + PUBLIC SYNONYM — 다른 앱 테이블과 동일 패턴). 컬럼: USER_ID(사번,PK)/USER_NM/WORK_CTN(업무)/ROLE_CD/PWD_HASH/PWD_SALT/USE_YN/MUST_CHG_YN/**AGENT_ID**/**GLOBAL_YN**/LAST_LOGIN_DT/감사일시. `src/lib/users.ts` 가 CRUD·로그인검증·시드를 담당(lazy-`oracledb`-swallow, DB 불가 시 `available=false`).
   - **에이전트 범위 = `GLOBAL_YN` + `AGENT_ID`** (`sql/migrations/2026-08-24_add_user_agent_id.sql`
     → `sql/migrations/2026-08-27_add_user_global_yn.sql`, 순서대로):
@@ -370,6 +370,13 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
   열린다.** 일반 사용자는 반대로 **명시적으로 연 경로만** 들어갈 수 있어야 한다. 두 규칙의 합류 지점이
   `canAccessPath()` 이고, 일반 사용자에게 새 화면을 열려면 목록에 한 줄 추가해야 한다.
   현재 열린 것: `/insights` · `/api/insights` · `/agent` · `/api/profile` · `/api/agents` · `/403`.
+- ⚠️ **`/insights` 는 반대로 위쪽도 좁힌다 — 일반 사용자 + 전역 ADMIN 뿐이다** (`canViewInsights(role, global)`).
+  일반 사용자에게 보여주는 화면이라 그 위 권한이 전부 볼 이유가 없고, BR·DEV·**에이전트 ADMIN** 은
+  Dashboard/Report 로 같은 수치를 더 자세히 본다. 전역 운영자만 함께 보는 이유는 "일반 사용자에게
+  무엇이 보이는가" 를 같은 화면으로 확인하기 위함이다. 그래서 이 판정만은 서열이 아니라
+  **role + 전역 여부**를 함께 본다 — `canAccessPath` 의 3번째 인자 `global` 이 이것 하나에만 쓰인다.
+  기본값이 `false` 라 **넘기는 것을 잊으면 탭이 안 보이는 쪽(fail-closed)으로** 틀린다.
+  ⚠️ 권위 있는 차단은 `/api/insights` 의 `canViewInsights` 403 이고, 미들웨어·`TabNav` 는 UX 다.
 - ⚠️ **서버 가드의 기본 min 은 그대로 `DEV` 다.** 그래서 기존 API 는 전부 일반 사용자에게 자동으로 닫혀
   있고(`requireBiz()`/`requireAgent()` 가 403), 일반 사용자에게 열 API 만 `LOWEST_ROLE` 을 **명시**한다
   (`/api/insights` 의 `requireBiz(LOWEST_ROLE)`, `/api/profile` GET·`/agent` 의 `requireAgent(id, LOWEST_ROLE)`).
@@ -391,7 +398,14 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
   상위 500건 LISTAGG 로 무거운 데다 화면에 쓰지도 않을 사번·질의 원문을 실어 나른다.
   넷(stats/fte/tokens/timeouts)은 `Promise.all` 이고 뒤 셋은 `.catch(() => null)` 이라
   한쪽이 죽어도 그 섹션만 빈다.
-- **화면 `/insights`** (`src/app/insights/page.tsx`, `ins-*`): 기간 프리셋(오늘/7일/30일/이번 달) 뒤로
+- **화면 `/insights`** (`src/app/insights/page.tsx`, `ins-*`): 기간 프리셋이 **두 줄**이다 —
+  ① 최근 구간(오늘/최근 7일/최근 30일/이번 달, 끝은 항상 '지금') ② **주 단위**(이번 주/지난주/2주 전/
+  3주 전 — `WEEK_PRESETS`, 클릭 한 번으로 월~일 한 주). ⚠️ "최근 7일"(창이 매일 밀림)과 "지난주"
+  (고정된 월~일)는 다른 구간이다 — 주간 보고는 ②를 써야 매주 같은 기준으로 비교된다.
+  `weekRange(offset)` 는 **`/report` 의 것과 같은 정의**(월요일 00:00 ~ 다음 월요일 00:00)이며
+  정의를 바꾸면 양쪽을 같이 고쳐야 한다(두 화면이 "지난주" 를 다르게 자르면 숫자가 갈린다).
+  이번 주는 상한을 '지금' 으로 줄여 일별 표에 빈 미래 날짜가 붙지 않게 한다. 툴바 우측 `ins-range`
+  가 실제 조회 구간을 "08/24 (월) ~ 08/28 (금)" 로 밝힌다. 그 뒤로
   **두 단**이 이어진다 — ① 업무 실적: KPI 6(처리 건수·성공률·실패·평균 응답 속도·사용 인원·누적 절감
   FTE) + 처리 추이 + **일별 현황 표**(2일 이상 조회일 때) + [기능별 실적 막대 | 절감 효과 추이] 2열,
   ② `ins-sep` 구분선 아래 **AI 운영 현황**: KPI 4(토큰 사용량·LLM 호출·평균 LLM 속도·타임아웃) +
@@ -406,9 +420,12 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
 - **차트 컴포넌트의 prop 타입은 '실제로 읽는 필드' 로 좁혀져 있다** (`TokenSeries`/`TimeoutSeries`/
   `TokenSummary`). 전체 응답을 요구하면 축소 응답(`InsightsTokens` 등)을 못 넘긴다 — 구조적 타이핑이라
   기존 호출부(Tokens/Timeout/Report 탭)는 전체 응답 그대로 통과한다. 화면을 늘릴 때 이 규칙을 깨지 말 것.
-- **운영자는 일반 사용자가 보는 것을 같은 화면으로 본다** — 별도 미리보기를 만들면 두 화면이 어긋나므로
-  `/insights` 는 전 권한에 노출하고, FIELD 가 아닌 계정에게만 "일반 사용자 계정에게 공개되는 유일한
-  화면" 안내 띠를 띄운다. 탭 이름은 **실적**.
+- **전역 운영자는 일반 사용자가 보는 것을 같은 화면으로 본다** — 별도 미리보기를 만들면 두 화면이
+  어긋나므로 같은 화면을 함께 보고, FIELD 가 아닌 계정에게만 "일반 사용자 계정에게 공개되는 유일한
+  화면" 안내 띠를 띄운다. 탭 이름은 **실적**. (열람 범위는 위 `canViewInsights` 참고)
+- **세로 여백은 `.ins .dash-body` 의 flex `gap` 한 곳에서 준다** — `.dash-body` 자체에는 간격 규칙이
+  없어(대시보드는 카드마다 따로 잡는다) 그냥 두면 섹션이 맞붙는다. 카드마다 margin 을 다는 방식은
+  섹션을 추가할 때마다 빠뜨리므로 쓰지 말 것. `.ins` 스코프라 대시보드에는 영향이 없다.
 - **DB**: `ROLE_CD` CHECK 제약에 `'FIELD'` 추가 — `sql/migrations/2026-08-28_add_field_role.sql`
   (앱 자체 DB=GAIA, ADM 계정 1회). ⚠️ **앱 배포보다 먼저** 실행할 것 — 제약을 넓히기 전에는
   `/accounts` 에서 일반 사용자 계정 저장이 ORA-02290 으로 실패한다.

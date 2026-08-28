@@ -26,9 +26,9 @@ function LoginInner() {
    * ⚠️ 권한 밖 경로로 보내면 미들웨어가 곧바로 되돌려 화면이 한 번 튄다 — 특히 일반 사용자(FIELD)는
    *    기본 홈("/")이 아예 막혀 있다. 갈 수 없는 next 는 그 권한의 홈으로 바꿔서 보낸다.
    */
-  function landing(role: Role): string {
-    if (safeNext && canAccessPath(role, safeNext.split("?")[0])) return safeNext;
-    return homePathFor(role);
+  function landing(u: { role: Role; global?: boolean }): string {
+    if (safeNext && canAccessPath(u.role, safeNext.split("?")[0], !!u.global)) return safeNext;
+    return homePathFor(u.role);
   }
 
   const [userId, setUserId] = useState("");
@@ -39,7 +39,7 @@ function LoginInner() {
 
   // 이미 로그인 상태면 목적지로 보낸다.
   useEffect(() => {
-    if (!loading && user) router.replace(landing(user.role));
+    if (!loading && user) router.replace(landing(user));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, user, safeNext, router]);
 
@@ -57,7 +57,7 @@ function LoginInner() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setErr(data.error ?? "로그인에 실패했습니다."); setSubmitting(false); return; }
       setUser(data.user);
-      router.replace(landing(data.user.role));
+      router.replace(landing(data.user));
     } catch {
       setErr("로그인 처리 중 오류가 발생했습니다.");
       setSubmitting(false);

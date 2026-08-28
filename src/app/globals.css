@@ -4972,3 +4972,23 @@ button.tbd-row:not(:disabled):hover {
   .ins-bar-row { grid-template-columns: 96px 1fr 96px; gap: 8px; }
   .acct-role-pick { grid-template-columns: 1fr; }
 }
+
+
+/* ── /insights 툴바 · 세로 여백 ──────────────────────────────────────────────
+   ⚠️ `.dash-body` 자체에는 간격 규칙이 없어(대시보드는 카드마다 따로 잡는다) 실적
+   화면은 섹션이 그대로 맞붙는다. 여기서 한 번에 준다 — 카드마다 margin 을 다는 방식은
+   섹션을 추가할 때마다 빠뜨리기 쉽다. `.ins` 스코프라 대시보드에는 영향이 없다. */
+.ins .dash-body { display: flex; flex-direction: column; gap: 18px; }
+.ins .dash-body > .ins-kpis { margin-bottom: 0; }   /* 위 gap 과 이중으로 붙지 않게 */
+.ins .dash-body > .ins-sep { margin: 8px 0 0; }     /* 음수 마진은 gap 레이아웃에서 어긋난다 */
+
+/* 프리셋 두 줄(최근 구간 / 주 단위) + 조회 구간 표시 */
+.ins-filter { flex-wrap: wrap; align-items: center; gap: 10px; }
+.ins-presets { display: flex; flex-wrap: wrap; gap: 8px; }
+/* 주 단위 버튼은 '최근 N일' 과 성격이 달라 살짝 구분해 둔다 (활성일 때만 강조) */
+.preset-btn.week.active { background: var(--ok); border-color: var(--ok); color: #fff; }
+.ins-range {
+  padding: 5px 10px; border-radius: 7px; background: var(--surface-2, #f8fafc);
+  border: 1px solid var(--border); font-size: 11.5px; font-weight: 700; color: var(--text-3);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}

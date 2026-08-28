@@ -39,7 +39,7 @@ export function TabNav() {
   // 비기본 에이전트는 BIZ_AIACTIONTXN_HIS 기반 화면을 쓰지 않는다 — 탭 자체를 감춘다.
   const tabs = ANALYSIS_TABS
     .filter((t) => isDefault || t.agentScoped)
-    .filter((t) => !!user && canAccessPath(user.role, t.href));
+    .filter((t) => !!user && canAccessPath(user.role, t.href, !!user.global));
   return (
     <nav className="tabnav" aria-label="primary">
       <div className="tabnav-group" role="tablist">

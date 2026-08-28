@@ -29,29 +29,77 @@ import { InsightsResponse, ROUTING_FAIL_LABEL } from "@/lib/types";
  * 별도 미리보기가 아니라 같은 화면이어야 어긋나지 않는다.
  */
 
-type Preset = "today" | "7d" | "30d" | "month";
+// 기간 프리셋은 두 줄이다.
+//  ① 최근 구간 — "지금까지" 를 본다 (오늘 / 최근 7일 / 최근 30일 / 이번 달)
+//  ② 주간      — **월~일 한 주를 통째로** 본다 (이번 주 / 지난주 / 2주 전 / 3주 전)
+// ⚠️ "최근 7일"(오늘 포함 7일, 창이 매일 밀림)과 "지난주"(고정된 월~일)는 다른 구간이다.
+//    주 단위 보고는 ②를 써야 매주 같은 기준으로 비교된다 — /report 의 주간 모드와 같은 정의다.
+type Preset = "today" | "7d" | "30d" | "month" | `w${number}`;
 
-const PRESETS: { key: Preset; label: string }[] = [
+const RECENT_PRESETS: { key: Preset; label: string }[] = [
   { key: "today", label: "오늘" },
   { key: "7d", label: "최근 7일" },
   { key: "30d", label: "최근 30일" },
   { key: "month", label: "이번 달" },
 ];
 
+/** 주간 프리셋 — offset 0 = 이번 주, 1 = 지난주 … (클릭 한 번으로 그 주 전체) */
+const WEEK_PRESETS: { key: Preset; label: string }[] = [
+  { key: "w0", label: "이번 주" },
+  { key: "w1", label: "지난주" },
+  { key: "w2", label: "2주 전" },
+  { key: "w3", label: "3주 전" },
+];
+
+const DAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
+
 function isoNoTz(d: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-/** 프리셋 → 조회 구간. 끝은 항상 '지금'. */
-function rangeOf(preset: Preset): { from: string; to: string } {
+/**
+ * offset 주 전의 [월요일 00:00, 다음 월요일 00:00) — /report 의 weekRange() 와 같은 정의.
+ * ⚠️ 두 화면이 "지난주" 를 다르게 자르면 같은 주인데 숫자가 갈린다. 정의를 바꾸려면 양쪽 다.
+ */
+function weekRange(offset: number): { from: Date; to: Date } {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) - offset * 7); // (getDay()+6)%7 = 월요일까지의 일수
+  const from = new Date(d);
+  const to = new Date(d);
+  to.setDate(to.getDate() + 7);
+  return { from, to };
+}
+
+/** 프리셋 → 조회 구간 (Date). 주간이 아니면 끝은 '지금'. */
+function rangeDates(preset: Preset): { from: Date; to: Date } {
   const now = new Date();
+  if (preset.startsWith("w")) {
+    const { from, to } = weekRange(Number(preset.slice(1)) || 0);
+    // 이번 주는 아직 끝나지 않았다 — 상한을 '지금' 으로 줄여 일별 표에 빈 미래 날짜가 붙지 않게.
+    return { from, to: to > now ? now : to };
+  }
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
   if (preset === "7d") start.setDate(start.getDate() - 6);
   else if (preset === "30d") start.setDate(start.getDate() - 29);
   else if (preset === "month") start.setDate(1);
-  return { from: isoNoTz(start), to: isoNoTz(now) };
+  return { from: start, to: now };
+}
+
+function rangeOf(preset: Preset): { from: string; to: string } {
+  const { from, to } = rangeDates(preset);
+  return { from: isoNoTz(from), to: isoNoTz(to) };
+}
+
+/** 조회 구간을 사람이 읽는 한 줄로 — 어느 구간을 보고 있는지 화면에 밝힌다. */
+function rangeLabel(preset: Preset): string {
+  const { from, to } = rangeDates(preset);
+  const d = (x: Date) => `${String(x.getMonth() + 1).padStart(2, "0")}/${String(x.getDate()).padStart(2, "0")} (${DAY_KO[x.getDay()]})`;
+  // 상한은 배타적(다음날 00:00)이라 표시용으로 1ms 당겨 마지막 날을 가리킨다.
+  const last = new Date(to.getTime() - 1);
+  return from.toDateString() === last.toDateString() ? d(from) : `${d(from)} ~ ${d(last)}`;
 }
 
 function pct(n: number | null): string {
@@ -159,21 +207,39 @@ export default function InsightsPage() {
             </div>
           </div>
         </div>
-        <div className="dash-filter">
-          <div className="preset-group" role="tablist" aria-label="기간">
-            {PRESETS.map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                role="tab"
-                aria-selected={preset === p.key}
-                className={"preset-btn" + (preset === p.key ? " active" : "")}
-                onClick={() => setPreset(p.key)}
-              >
-                {p.label}
-              </button>
-            ))}
+        <div className="dash-filter ins-filter">
+          <div className="ins-presets">
+            <div className="preset-group" role="tablist" aria-label="최근 기간">
+              {RECENT_PRESETS.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={preset === p.key}
+                  className={"preset-btn" + (preset === p.key ? " active" : "")}
+                  onClick={() => setPreset(p.key)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            {/* 주 단위 — 월~일 한 주를 클릭 한 번으로. 주간 보고가 매주 같은 기준이 되도록 분리했다 */}
+            <div className="preset-group" role="tablist" aria-label="주 단위">
+              {WEEK_PRESETS.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={preset === p.key}
+                  className={"preset-btn week" + (preset === p.key ? " active" : "")}
+                  onClick={() => setPreset(p.key)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
           </div>
+          <div className="ins-range" title="조회 구간">{rangeLabel(preset)}</div>
           <button type="button" className="btn ghost" onClick={() => void load(preset)}>
             새로고침
           </button>

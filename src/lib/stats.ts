@@ -379,7 +379,15 @@ export async function computeStats(q: StatsQuery): Promise<StatsResult> {
   }
 
   // 빈 버킷 채우기 (시계열 차트가 균일하게 보이도록)
-  const bucketArr: TimeBucket[] = enumerateBucketStarts(effectiveFromMs, effectiveToMs, g).map(
+  //
+  // ⚠️ `to` 는 **배타적 상한**이다 (주간 = 다음 월요일 00:00, 일간 = 다음날 00:00). 그대로
+  //    enumerate 하면 그 경계 시각이 속한 버킷이 하나 더 붙어 **끝에 항상 0 인 칸**이 생긴다
+  //    — 8/3~8/10(월~월) 조회가 8칸으로 그려지고 마지막 8/10 이 0 이라 차트가 뚝 떨어졌다.
+  //    1ms 를 당겨 마지막 실데이터 버킷에서 끊는다. (아래 daily 가 이미 쓰던 방식과 동일 —
+  //    두 배열의 끝 날짜가 달랐던 것도 이 때문이다.)
+  //    `to`=now 인 프리셋은 now 와 now-1ms 가 같은 버킷이라 영향이 없다.
+  const lastBucketMs = Math.max(effectiveFromMs, effectiveToMs - 1);
+  const bucketArr: TimeBucket[] = enumerateBucketStarts(effectiveFromMs, lastBucketMs, g).map(
     (k) => {
       const b = buckets.get(k) ?? { ts: isoNoTz(k), ok: 0, fail: 0, pending: 0 };
       // 버킷별 CUBE send→resp 평균 지연(=Action 응답 지연) 부착

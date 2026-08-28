@@ -4987,6 +4987,9 @@ button.tbd-row:not(:disabled):hover {
 .ins-presets { display: flex; flex-wrap: wrap; gap: 8px; }
 /* 주 단위 버튼은 '최근 N일' 과 성격이 달라 살짝 구분해 둔다 (활성일 때만 강조) */
 .preset-btn.week.active { background: var(--ok); border-color: var(--ok); color: #fff; }
+/* ◀▶ 주 이동 — 주간 모드일 때만 라벨을 살린다(그 외엔 '주 단위' 안내로 흐리게) */
+.ins-filter .week-nav-label { min-width: 62px; text-align: center; color: var(--text-3); }
+.ins-filter .week-nav-label.on { color: var(--ok); font-weight: 800; }
 .ins-range {
   padding: 5px 10px; border-radius: 7px; background: var(--surface-2, #f8fafc);
   border: 1px solid var(--border); font-size: 11.5px; font-weight: 700; color: var(--text-3);

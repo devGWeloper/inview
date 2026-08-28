@@ -29,29 +29,39 @@ import { InsightsResponse, ROUTING_FAIL_LABEL } from "@/lib/types";
  * 별도 미리보기가 아니라 같은 화면이어야 어긋나지 않는다.
  */
 
-// 기간 프리셋은 두 줄이다.
+// 기간 선택은 두 갈래다.
 //  ① 최근 구간 — "지금까지" 를 본다 (오늘 / 최근 7일 / 최근 30일 / 이번 달)
-//  ② 주간      — **월~일 한 주를 통째로** 본다 (이번 주 / 지난주 / 2주 전 / 3주 전)
+//  ② 주간      — **월~일 한 주를 통째로** 본다. 이번 주/지난주는 버튼 한 번, 그 이전은 ◀ 로
+//                계속 거슬러 올라간다 (몇 주 전이든). /report 의 기간 이동과 같은 조작이다.
 // ⚠️ "최근 7일"(오늘 포함 7일, 창이 매일 밀림)과 "지난주"(고정된 월~일)는 다른 구간이다.
-//    주 단위 보고는 ②를 써야 매주 같은 기준으로 비교된다 — /report 의 주간 모드와 같은 정의다.
-type Preset = "today" | "7d" | "30d" | "month" | `w${number}`;
+//    주 단위 보고는 ②를 써야 매주 같은 기준으로 비교된다.
+type RecentKey = "today" | "7d" | "30d" | "month";
 
-const RECENT_PRESETS: { key: Preset; label: string }[] = [
+/** 선택 상태. week 의 offset 은 `/report` 와 **같은 부호** — 0 = 이번 주, -1 = 지난주, -2 = 2주 전 … */
+type Sel =
+  | { kind: "recent"; key: RecentKey }
+  | { kind: "week"; offset: number };
+
+const RECENT_PRESETS: { key: RecentKey; label: string }[] = [
   { key: "today", label: "오늘" },
   { key: "7d", label: "최근 7일" },
   { key: "30d", label: "최근 30일" },
   { key: "month", label: "이번 달" },
 ];
 
-/** 주간 프리셋 — offset 0 = 이번 주, 1 = 지난주 … (클릭 한 번으로 그 주 전체) */
-const WEEK_PRESETS: { key: Preset; label: string }[] = [
-  { key: "w0", label: "이번 주" },
-  { key: "w1", label: "지난주" },
-  { key: "w2", label: "2주 전" },
-  { key: "w3", label: "3주 전" },
-];
-
 const DAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
+
+/** 주 뱃지 — /report 의 periodBadge(week) 와 같은 문구 */
+function weekBadge(offset: number): string {
+  if (offset === 0) return "이번 주";
+  if (offset === -1) return "지난주";
+  return `${-offset}주 전`;
+}
+
+function sameSel(a: Sel, b: Sel): boolean {
+  return a.kind === b.kind &&
+    (a.kind === "recent" ? a.key === (b as typeof a).key : a.offset === (b as { offset: number }).offset);
+}
 
 function isoNoTz(d: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
@@ -59,45 +69,49 @@ function isoNoTz(d: Date): string {
 }
 
 /**
- * offset 주 전의 [월요일 00:00, 다음 월요일 00:00) — /report 의 weekRange() 와 같은 정의.
+ * offset 주의 [월요일 00:00, 다음 월요일 00:00) — /report 의 weekRange() 와 **같은 정의·같은 부호**.
  * ⚠️ 두 화면이 "지난주" 를 다르게 자르면 같은 주인데 숫자가 갈린다. 정의를 바꾸려면 양쪽 다.
  */
 function weekRange(offset: number): { from: Date; to: Date } {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) - offset * 7); // (getDay()+6)%7 = 월요일까지의 일수
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + offset * 7); // (getDay()+6)%7 = 월요일까지의 일수
   const from = new Date(d);
   const to = new Date(d);
   to.setDate(to.getDate() + 7);
   return { from, to };
 }
 
-/** 프리셋 → 조회 구간 (Date). 주간이 아니면 끝은 '지금'. */
-function rangeDates(preset: Preset): { from: Date; to: Date } {
+/**
+ * 선택 → 조회 구간 (Date). `to` 는 **배타적 상한**이다 (주간이면 다음 월요일 00:00).
+ * ⚠️ 지나간 주의 상한을 '지금' 으로 줄이지 말 것 — 그러면 매번 다른 구간이 되어 비교가 깨진다.
+ *    아직 끝나지 않은 이번 주만 '지금' 으로 줄인다(빈 미래 날짜가 붙지 않게).
+ */
+function rangeDates(sel: Sel): { from: Date; to: Date } {
   const now = new Date();
-  if (preset.startsWith("w")) {
-    const { from, to } = weekRange(Number(preset.slice(1)) || 0);
-    // 이번 주는 아직 끝나지 않았다 — 상한을 '지금' 으로 줄여 일별 표에 빈 미래 날짜가 붙지 않게.
+  if (sel.kind === "week") {
+    const { from, to } = weekRange(sel.offset);
     return { from, to: to > now ? now : to };
   }
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
-  if (preset === "7d") start.setDate(start.getDate() - 6);
-  else if (preset === "30d") start.setDate(start.getDate() - 29);
-  else if (preset === "month") start.setDate(1);
+  if (sel.key === "7d") start.setDate(start.getDate() - 6);
+  else if (sel.key === "30d") start.setDate(start.getDate() - 29);
+  else if (sel.key === "month") start.setDate(1);
   return { from: start, to: now };
 }
 
-function rangeOf(preset: Preset): { from: string; to: string } {
-  const { from, to } = rangeDates(preset);
+function rangeOf(sel: Sel): { from: string; to: string } {
+  const { from, to } = rangeDates(sel);
   return { from: isoNoTz(from), to: isoNoTz(to) };
 }
 
 /** 조회 구간을 사람이 읽는 한 줄로 — 어느 구간을 보고 있는지 화면에 밝힌다. */
-function rangeLabel(preset: Preset): string {
-  const { from, to } = rangeDates(preset);
+function rangeLabel(sel: Sel): string {
+  const { from, to } = rangeDates(sel);
   const d = (x: Date) => `${String(x.getMonth() + 1).padStart(2, "0")}/${String(x.getDate()).padStart(2, "0")} (${DAY_KO[x.getDay()]})`;
-  // 상한은 배타적(다음날 00:00)이라 표시용으로 1ms 당겨 마지막 날을 가리킨다.
+  // 상한이 배타적이라 표시용으로 1ms 당겨 **실제 마지막 날**을 가리킨다
+  // (안 그러면 8/3~8/10 처럼 하루가 더 있는 것처럼 읽힌다).
   const last = new Date(to.getTime() - 1);
   return from.toDateString() === last.toDateString() ? d(from) : `${d(from)} ~ ${d(last)}`;
 }
@@ -125,12 +139,12 @@ function actionLabel(key: string): string {
 
 export default function InsightsPage() {
   const { user } = useAuth();
-  const [preset, setPreset] = useState<Preset>("30d");
+  const [sel, setSel] = useState<Sel>({ kind: "recent", key: "30d" });
   const [data, setData] = useState<InsightsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const load = useCallback(async (p: Preset) => {
+  const load = useCallback(async (p: Sel) => {
     setLoading(true);
     setErr(null);
     try {
@@ -145,7 +159,11 @@ export default function InsightsPage() {
     }
   }, []);
 
-  useEffect(() => { void load(preset); }, [preset, load]);
+  useEffect(() => { void load(sel); }, [sel, load]);
+
+  // 주간 모드가 아니면 ◀ 는 "지난주" 부터 시작한다 (최근 구간에서 곧장 거슬러 올라갈 수 있게).
+  const weekOffset = sel.kind === "week" ? sel.offset : 0;
+  const goWeek = (offset: number) => setSel({ kind: "week", offset: Math.min(0, offset) });
 
   const daily = asArray<InsightsResponse["daily"][number]>(data?.daily);
   const byAction = asArray<InsightsResponse["byAction"][number]>(data?.byAction);
@@ -210,37 +228,60 @@ export default function InsightsPage() {
         <div className="dash-filter ins-filter">
           <div className="ins-presets">
             <div className="preset-group" role="tablist" aria-label="최근 기간">
-              {RECENT_PRESETS.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={preset === p.key}
-                  className={"preset-btn" + (preset === p.key ? " active" : "")}
-                  onClick={() => setPreset(p.key)}
-                >
-                  {p.label}
-                </button>
-              ))}
+              {RECENT_PRESETS.map((p) => {
+                const active = sameSel(sel, { kind: "recent", key: p.key });
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    className={"preset-btn" + (active ? " active" : "")}
+                    onClick={() => setSel({ kind: "recent", key: p.key })}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
             </div>
-            {/* 주 단위 — 월~일 한 주를 클릭 한 번으로. 주간 보고가 매주 같은 기준이 되도록 분리했다 */}
+            {/* 주 단위 — 이번 주/지난주는 한 번에, 그 이전은 ◀ 로 계속 거슬러 올라간다.
+                ▶ 는 이번 주에서 멈춘다(미래는 볼 것이 없다). /report 의 기간 이동과 같은 조작. */}
             <div className="preset-group" role="tablist" aria-label="주 단위">
-              {WEEK_PRESETS.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={preset === p.key}
-                  className={"preset-btn week" + (preset === p.key ? " active" : "")}
-                  onClick={() => setPreset(p.key)}
-                >
-                  {p.label}
-                </button>
-              ))}
+              {[0, -1].map((o) => {
+                const active = sameSel(sel, { kind: "week", offset: o });
+                return (
+                  <button
+                    key={o}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    className={"preset-btn week" + (active ? " active" : "")}
+                    onClick={() => goWeek(o)}
+                  >
+                    {weekBadge(o)}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="week-nav" role="group" aria-label="주 이동">
+              <button type="button" onClick={() => goWeek(weekOffset - 1)} aria-label="이전 주">
+                ◀
+              </button>
+              <span className={"week-nav-label" + (sel.kind === "week" ? " on" : "")}>
+                {sel.kind === "week" ? weekBadge(sel.offset) : "주 단위"}
+              </span>
+              <button
+                type="button"
+                onClick={() => goWeek(weekOffset + 1)}
+                disabled={sel.kind !== "week" || sel.offset >= 0}
+                aria-label="다음 주"
+              >
+                ▶
+              </button>
             </div>
           </div>
-          <div className="ins-range" title="조회 구간">{rangeLabel(preset)}</div>
-          <button type="button" className="btn ghost" onClick={() => void load(preset)}>
+          <div className="ins-range" title="조회 구간">{rangeLabel(sel)}</div>
+          <button type="button" className="btn ghost" onClick={() => void load(sel)}>
             새로고침
           </button>
         </div>

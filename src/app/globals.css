@@ -3318,7 +3318,17 @@ button.tbd-row:not(:disabled):hover {
 .daily-table th.num, .daily-table td.num { text-align: right; font-family: var(--mono); }
 .daily-table tbody tr { border-bottom: 1px solid var(--border); }
 .daily-table tbody tr:hover { background: var(--surface-2); }
-.daily-table tbody tr.empty td { color: var(--text-muted); }
+/* 실적이 없는 날은 **한 줄로 얇게**. 30일 조회에선 빈 날이 표의 절반을 넘기도 하는데,
+   데이터 있는 날과 같은 높이를 주면 스크롤만 길어지고 정작 볼 날이 눈에 안 들어온다.
+   ⚠️ 행 자체를 빼지는 않는다 — 날짜가 건너뛰면 "조회가 덜 됐나" 로 읽히고, 연속 공백이
+   보이는 것 자체가 정보다(그 주에 안 썼다). 높이만 줄이고 톤을 낮춘다. */
+.daily-table tbody tr.empty td {
+  padding-top: 1px; padding-bottom: 1px;
+  font-size: 11px; line-height: 1.35;
+  color: var(--text-muted);
+}
+.daily-table tbody tr.empty .daily-date { font-weight: 600; }
+.daily-table tbody tr.empty .daily-run { min-width: 0; }
 .daily-table td.ok { color: var(--ok); font-weight: 600; }
 .daily-table td.err { color: var(--err); font-weight: 700; }
 .daily-table .daily-date { font-weight: 700; color: var(--text-2); }

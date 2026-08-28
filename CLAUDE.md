@@ -429,6 +429,10 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
 - **일별 현황 표는 `/report` 와 공유한다** (`src/components/DailyTable.tsx` — `DailyRow` ·
   `mergeDailyRows` · `DailyTable`). 원래 `report/page.tsx` 안에 있던 것을 뺐다: 두 벌로 두면 한쪽만
   고쳐져 같은 기간인데 다른 표가 된다. 일반 사용자 화면은 `labelAction={actionLabel}` 로 기능 코드만 한글로 바꾼다.
+  ⚠️ **실적이 없는 날(`tr.empty`)은 한 줄로 얇게 그린다**(패딩·글자 축소) — 30일 조회에선 빈 날이
+  표의 절반을 넘어, 데이터 있는 날과 같은 높이를 주면 스크롤만 길어지고 정작 볼 날이 안 보인다.
+  ⚠️ 행 자체를 빼지는 말 것 — 날짜가 건너뛰면 "조회가 덜 됐나" 로 읽히고, 연속된 공백이 보이는
+  것 자체가 정보다(그 기간에 안 썼다). 높이만 줄이고 톤을 낮춘다.
 - **차트 컴포넌트의 prop 타입은 '실제로 읽는 필드' 로 좁혀져 있다** (`TokenSeries`/`TimeoutSeries`/
   `TokenSummary`). 전체 응답을 요구하면 축소 응답(`InsightsTokens` 등)을 못 넘긴다 — 구조적 타이핑이라
   기존 호출부(Tokens/Timeout/Report 탭)는 전체 응답 그대로 통과한다. 화면을 늘릴 때 이 규칙을 깨지 말 것.

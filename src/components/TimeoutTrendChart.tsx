@@ -188,8 +188,14 @@ export function TimeoutTrendChart({ stats }: { stats: TimeoutSeries }) {
                 activeDot={{ r: 3, stroke: "var(--surface)", strokeWidth: 1.5 }}
               />
             ))}
+            {/* ⚠️ Brush 의 표시 구간(startIndex/endIndex)은 recharts **내부 state** 라 data 가 바뀌어도
+                초기화되지 않는다 — 7일(7칸)을 보다 30일(30칸)로 바꾸면 예전 끝 인덱스가 남아
+                앞쪽 일부만 그려진다("최근 30일인데 2주치만 보인다"). 구간이 달라졌을 때만
+                key 로 remount 해 전체 범위로 되돌린다. key 가 같은 재조회(새로고침)에서는
+                사용자가 끌어둔 구간이 그대로 유지된다. */}
             {data.length > 12 && (
               <Brush
+                key={data.length + ":" + (data[0]?.tick ?? "")}
                 dataKey="tick"
                 height={22}
                 stroke="var(--accent)"

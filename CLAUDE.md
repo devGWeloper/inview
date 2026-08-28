@@ -516,6 +516,19 @@ Points that matter when touching this code:
 - 응답의 배열은 **`asArray<T>()`** 로 감싸 렌더가 `undefined.map/filter` 를 만지지 않게 한다.
 - 에러 문구는 `errMessage(e)` 로 뽑아 화면에 사유를 보여준다(빈 표 ≠ 조회 실패). 패널 내부 배너 스타일은 `.load-error`.
 
+### ⚠️ 차트 Brush — 구간을 바꾸면 key 로 remount
+
+추이 차트 6종(`TimeSeriesChart` · `CubeLatencyChart` · `TokenChart` · `TokenLatencyChart` ·
+`TimeoutTrendChart` · `TickMonitorChart`)은 데이터가 많을 때 recharts `Brush` 를 붙인다.
+
+⚠️ **Brush 의 표시 구간(startIndex/endIndex)은 recharts 내부 state 라 `data` 가 바뀌어도
+초기화되지 않는다.** 7일(7칸)을 보다 30일(30칸)로 바꾸면 예전 끝 인덱스가 남아 앞쪽 일부만
+그려진다 — "최근 30일을 눌렀는데 2주치만 보인다" 가 이것이다(서버는 30칸을 정상적으로 내려준다).
+
+그래서 `<Brush key={data.length + ":" + (data[0]?.tick ?? "")}>` 로 **구간이 달라졌을 때만**
+remount 해 전체 범위로 되돌린다. key 가 같은 재조회(새로고침·자동 갱신)에서는 사용자가 끌어둔
+구간이 그대로 유지된다. 새 추이 차트에 Brush 를 달 때도 이 key 를 같이 달 것.
+
 ## 두 가지 지연 지표 (둘 다 정규 — 재는 대상이 다름)
 
 지연은 **성격이 다른 두 지표**로 나뉜다. 하나로 합치지 말 것.

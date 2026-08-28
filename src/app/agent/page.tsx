@@ -25,7 +25,7 @@ export default async function AgentPage({
   const raw = (searchParams?.agent ?? "").trim();
   // 알 수 없는 id 는 기본 에이전트로 되돌린다(페이지라 400 대신 리다이렉트).
   const agentId = raw && getAgent(raw) ? raw : defaultAgentId();
-  // 소개 카드는 집계·원문이 없는 공개 정보라 현업(FIELD)에게도 연다 (roles.ts FIELD_ALLOW_PREFIXES).
+  // 소개 카드는 집계·원문이 없는 공개 정보라 일반 사용자(FIELD)에게도 연다 (roles.ts FIELD_ALLOW_PREFIXES).
   const guard = await requireAgent(agentId, LOWEST_ROLE);
   if (!guard.ok) redirect(guard.status === 401 ? "/login?next=/agent" : "/403");
 

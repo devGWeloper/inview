@@ -27,7 +27,7 @@ const ANALYSIS_TABS: ReadonlyArray<{
   { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
   { href: "/tokens", label: "Tokens", icon: TokensIcon, agentScoped: true },
   { href: "/timeouts", label: "Timeout", icon: TimeoutIcon, agentScoped: true },
-  // 현업 실적 — 집계만 담긴 화면이라 전 권한에 노출한다. 현업 계정에겐 이 탭 하나만 남는다.
+  // 일반 사용자 실적 — 집계만 담긴 화면이라 전 권한에 노출한다. 일반 사용자 계정에겐 이 탭 하나만 남는다.
   { href: "/insights", label: "실적", icon: InsightsIcon },
 ];
 

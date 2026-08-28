@@ -1,14 +1,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // 권한(Role) 단일 소스.
 //
-//   ADMIN(운영자) > BR(상위 권한자) > DEV(개발자/일반 READ) > FIELD(현업)
+//   ADMIN(운영자) > BR(상위 권한자) > DEV(개발자/일반 READ) > FIELD(일반 사용자)
 //
-// FIELD(현업)는 **개발자가 아닌 실사용/실적 열람자**다. 원문 메시지(JSON envelope), 다른
+// FIELD(일반 사용자)는 **개발자가 아닌 실사용/실적 열람자**다. 원문 메시지(JSON envelope), 다른
 // 사용자의 요청/질의, 에러 코드 같은 내부 정보를 보면 안 되고 집계된 실적만 본다.
 //
 // ⚠️ FIELD 만은 서열(ROUTE_RULES)이 아니라 **허용 목록(FIELD_ALLOW_PREFIXES)** 으로 판정한다.
 //    ROUTE_RULES 는 "규칙에 없으면 통과"(fail-open)라, 서열만 낮춰 두면 새로 추가되는 화면이
-//    자동으로 현업에게 열린다. 현업은 반대로 **명시적으로 연 경로만** 들어갈 수 있어야 한다.
+//    자동으로 일반 사용자에게 열린다. 일반 사용자는 반대로 **명시적으로 연 경로만** 들어갈 수 있어야 한다.
 //    두 규칙의 합류 지점은 canAccessPath() 하나다 — 미들웨어/탭 노출 모두 이걸 쓴다.
 //
 // 이 파일은 클라이언트 컴포넌트 · Edge 미들웨어 · 서버 라우트 모두에서 import 하므로
@@ -22,8 +22,8 @@ export const ROLES: Role[] = ["ADMIN", "BR", "DEV", "FIELD"];
 
 /**
  * 가장 낮은 권한 = "인증만 되면 된다" 를 뜻하는 min 값.
- * ⚠️ 서버 가드의 기본 min 은 여전히 "DEV" 다 — 현업에게 열 API 는 min 을 이 값으로
- *    **명시**해야 한다. 기본값을 낮추면 기존 API 가 전부 현업에게 열린다(fail-open).
+ * ⚠️ 서버 가드의 기본 min 은 여전히 "DEV" 다 — 일반 사용자에게 열 API 는 min 을 이 값으로
+ *    **명시**해야 한다. 기본값을 낮추면 기존 API 가 전부 일반 사용자에게 열린다(fail-open).
  */
 export const LOWEST_ROLE: Role = "FIELD";
 
@@ -32,7 +32,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   ADMIN: "운영자",
   BR: "BR",
   DEV: "개발자",
-  FIELD: "현업",
+  FIELD: "일반 사용자",
 };
 
 /** 권한 선택 UI 등에서 쓰는 짧은 설명 */
@@ -88,10 +88,10 @@ export function requiredRoleForPath(pathname: string): Role | null {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 현업(FIELD) 허용 목록 — **allow-list**. 여기 없는 경로는 전부 막힌다.
+// 일반 사용자(FIELD) 허용 목록 — **allow-list**. 여기 없는 경로는 전부 막힌다.
 //
 // ⚠️ ROUTE_RULES 와 방향이 반대다. 그쪽은 "규칙에 없으면 통과", 이쪽은 "목록에 없으면 차단".
-//    현업에게 새 화면을 열려면 반드시 여기에 한 줄 추가해야 한다 — 화면이 늘어날 때
+//    일반 사용자에게 새 화면을 열려면 반드시 여기에 한 줄 추가해야 한다 — 화면이 늘어날 때
 //    실수로 원문/타 사용자 정보가 딸려 나가는 것을 구조적으로 막는 장치다.
 //
 // 열려 있는 것:
@@ -112,7 +112,7 @@ export const FIELD_ALLOW_PREFIXES: string[] = [
   "/403",
 ];
 
-/** 현업(FIELD)에게 열린 경로인가. */
+/** 일반 사용자(FIELD)에게 열린 경로인가. */
 export function isFieldAllowedPath(pathname: string): boolean {
   return FIELD_ALLOW_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
@@ -129,7 +129,7 @@ export function canAccessPath(role: Role, pathname: string): boolean {
 
 /**
  * 로그인 직후/권한 부족 시 되돌려 보낼 홈 경로.
- * 현업의 홈은 트레이스 목록(/)이 아니라 실적 화면이다.
+ * 일반 사용자의 홈은 트레이스 목록(/)이 아니라 실적 화면이다.
  */
 export function homePathFor(role: Role): string {
   return role === "FIELD" ? "/insights" : "/";
@@ -208,7 +208,7 @@ export function canManageAgent(scope: AgentScope, role: Role, agentId: string): 
 
 const BIZ_PREFIXES = [
   "/dashboard",
-  "/insights",   // 현업 실적 화면 — 집계 대상이 BIZ_AIACTIONTXN_HIS 라 기본 에이전트 전용
+  "/insights",   // 일반 사용자 실적 화면 — 집계 대상이 BIZ_AIACTIONTXN_HIS 라 기본 에이전트 전용
   "/api/insights",
   "/report",
   "/improvement",

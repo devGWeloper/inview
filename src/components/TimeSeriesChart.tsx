@@ -78,7 +78,7 @@ function CustomTooltip({
 
 /**
  * 상태별 적층 추이 차트.
- * ⚠️ prop 은 StatsResponse 전체가 아니라 실제로 쓰는 두 필드만 받는다 — 현업 실적 화면의
+ * ⚠️ prop 은 StatsResponse 전체가 아니라 실제로 쓰는 두 필드만 받는다 — 일반 사용자 실적 화면의
  *    InsightsResponse(사용자 ID·에러 코드가 빠진 축소 응답)도 그대로 넘길 수 있어야 한다.
  */
 export function TimeSeriesChart({ stats }: { stats: Pick<StatsResponse, "granularity" | "buckets"> }) {

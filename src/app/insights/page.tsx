@@ -13,11 +13,11 @@ import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 import { InsightsResponse, ROUTING_FAIL_LABEL } from "@/lib/types";
 
 /**
- * 현업(FIELD) 실적 화면 — 팀장·현장 엔지니어가 본다. 개발자용 진단 화면이 아니다.
+ * 일반 사용자(FIELD) 실적 화면 — 팀장·현장 엔지니어가 본다. 개발자용 진단 화면이 아니다.
  *
  * ⚠️ 이 화면의 데이터는 /api/insights **하나뿐**이다. 다른 API(/api/stats, /api/traces,
  *    /api/tokens, /api/timeouts …)를 여기서 부르지 말 것 — 그 응답에는 사번·질의 원문·
- *    에러 코드·내부 노드명이 들어 있고, 현업 계정은 애초에 그 경로들에서 403 이다
+ *    에러 코드·내부 노드명이 들어 있고, 일반 사용자 계정은 애초에 그 경로들에서 403 이다
  *    (roles.ts FIELD_ALLOW_PREFIXES).
  *
  * 구성은 두 단이다:
@@ -25,7 +25,7 @@ import { InsightsResponse, ROUTING_FAIL_LABEL } from "@/lib/types";
  *   ② AI 운영 현황 — 그걸 돌리는 LLM 이 얼마나 쓰였고 빠른가 (토큰 · 속도 · 타임아웃)
  * "누가 무슨 요청을 했는지" 는 어느 단에도 없다 — 사용자는 **수(count)** 로만 나온다.
  *
- * 운영자/개발자도 같은 화면을 그대로 본다 — "현업에게 무엇이 보이는가" 를 확인하려면
+ * 운영자/개발자도 같은 화면을 그대로 본다 — "일반 사용자에게 무엇이 보이는가" 를 확인하려면
  * 별도 미리보기가 아니라 같은 화면이어야 어긋나지 않는다.
  */
 
@@ -180,10 +180,10 @@ export default function InsightsPage() {
         </div>
       </div>
 
-      {/* 운영자/개발자에게만 — 지금 보고 있는 것이 '현업 공개 화면' 임을 밝힌다 */}
+      {/* 운영자/개발자에게만 — 지금 보고 있는 것이 '일반 사용자 공개 화면' 임을 밝힌다 */}
       {user && user.role !== "FIELD" && (
         <div className="ins-note">
-          이 화면은 <b>현업 계정에게 공개되는 유일한 화면</b>입니다. 요청 원문 · 사번 · 에러
+          이 화면은 <b>일반 사용자 계정에게 공개되는 유일한 화면</b>입니다. 요청 원문 · 사번 · 에러
           코드 · 내부 노드명은 서버에서 제외되어 내려오지 않습니다.
         </div>
       )}

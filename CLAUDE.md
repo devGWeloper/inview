@@ -300,7 +300,7 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
 ## 인증/인가 — 로그인 · 계정 · 권한 (⚠️ 앱 자체 DB = GAIA)
 
 전 화면 로그인 필수. 사번(USER_ID)으로 로그인하고 **두 축**으로 접근을 가른다 —
-**권한**(ADMIN 운영자 > BR 상위 > DEV 개발자 > FIELD 현업) × **에이전트 범위**(전역 / 에이전트 하나 / 미배정).
+**권한**(ADMIN 운영자 > BR 상위 > DEV 개발자 > FIELD 일반 사용자) × **에이전트 범위**(전역 / 에이전트 하나 / 미배정).
 두 축은 직교한다: "전역 ADMIN"은 모든 에이전트를 오가며 관리하고, "에이전트 ADMIN"은 **자기 에이전트 안에서만** ADMIN 이다. 기존 하드코딩 `ADMIN_PASSWORD`/`AdminGate`(sessionStorage 게이트)는 **완전히 제거**되고 세션 기반 인증으로 대체됐다.
 
 - **권한 단일 소스 `src/lib/roles.ts`** (클라이언트·Edge 미들웨어·서버 공용 — Node 전용 모듈 import 금지). `Role`, `ROLE_LABEL`, `roleAtLeast(role,min)`, 그리고 **경로→최소권한 매핑 `ROUTE_RULES`**(`requiredRoleForPath`). 접근 범위가 바뀌면 여기만 고친다. 현재: `/admin`·`/timeouts`=ADMIN, `/accounts`·`/api/accounts`·`/report`·`/improvement`·`/event-fabs`=BR, 그 외=인증만 되면 DEV. **계정 관리는 BR 이상**이되 권한 상향 방지 가드가 API 에 있다 — ADMIN 계정 생성/수정/삭제/초기화·ADMIN 승격은 **ADMIN 만**(BR 은 그 아래 권한만 다룰 수 있고 UI 도 ADMIN 옵션·행 버튼을 가림).
@@ -358,20 +358,20 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
 - **기존 PUT 게이트 교체**: `/api/profile`=대상 에이전트의 ADMIN(`requireAgentAdmin`),
   `/api/event-fabs`=BR+BIZ, `/api/request-failures`=BR+BIZ (`requireBiz("BR")`). `/admin`·`/report`·`/event-fabs`·`/improvement` 페이지의 `AdminGate` 래퍼 제거(미들웨어가 인가). **삭제된 파일**: `src/components/AdminGate.tsx`, `src/lib/adminAuth.ts` (⚠️ 사내 복붙 배포는 삭제가 전파 안 되니 그쪽 레포에서도 지울 것 — memory `deploy-copy-paste-sync`).
 
-### 현업(FIELD) 권한 — 실적 화면 `/insights` 하나만 (⚠️ allow-list)
+### 일반 사용자(FIELD) 권한 — 실적 화면 `/insights` 하나만 (⚠️ allow-list)
 
 이 앱은 원래 개발자가 4계층 동기 메시지를 추적하려고 만들었는데, 대시보드·토큰·타임아웃 같은
-**리포트성 화면이 늘면서 현업(비개발) 사용자도 실적을 보고 싶어졌다.** 하지만 현업에게
+**리포트성 화면이 늘면서 일반 사용자(비개발)도 실적을 보고 싶어졌다.** 하지만 일반 사용자에게
 레이어 JSON 원문·다른 사용자의 질의/사번·내부 에러 코드를 보이면 안 된다. 그래서 기존 3권한
-아래에 **FIELD(현업)** 를 두고, 현업 전용 화면 하나만 연다.
+아래에 **FIELD(일반 사용자)** 를 두고, 일반 사용자 전용 화면 하나만 연다.
 
 - ⚠️ **FIELD 만은 서열이 아니라 허용 목록(`FIELD_ALLOW_PREFIXES`)으로 판정한다.** `ROUTE_RULES` 는
-  "규칙에 없으면 통과"(fail-open)라, 서열만 낮춰 두면 **앞으로 추가되는 화면이 자동으로 현업에게
-  열린다.** 현업은 반대로 **명시적으로 연 경로만** 들어갈 수 있어야 한다. 두 규칙의 합류 지점이
-  `canAccessPath()` 이고, 현업에게 새 화면을 열려면 목록에 한 줄 추가해야 한다.
+  "규칙에 없으면 통과"(fail-open)라, 서열만 낮춰 두면 **앞으로 추가되는 화면이 자동으로 일반 사용자에게
+  열린다.** 일반 사용자는 반대로 **명시적으로 연 경로만** 들어갈 수 있어야 한다. 두 규칙의 합류 지점이
+  `canAccessPath()` 이고, 일반 사용자에게 새 화면을 열려면 목록에 한 줄 추가해야 한다.
   현재 열린 것: `/insights` · `/api/insights` · `/agent` · `/api/profile` · `/api/agents` · `/403`.
-- ⚠️ **서버 가드의 기본 min 은 그대로 `DEV` 다.** 그래서 기존 API 는 전부 현업에게 자동으로 닫혀
-  있고(`requireBiz()`/`requireAgent()` 가 403), 현업에게 열 API 만 `LOWEST_ROLE` 을 **명시**한다
+- ⚠️ **서버 가드의 기본 min 은 그대로 `DEV` 다.** 그래서 기존 API 는 전부 일반 사용자에게 자동으로 닫혀
+  있고(`requireBiz()`/`requireAgent()` 가 403), 일반 사용자에게 열 API 만 `LOWEST_ROLE` 을 **명시**한다
   (`/api/insights` 의 `requireBiz(LOWEST_ROLE)`, `/api/profile` GET·`/agent` 의 `requireAgent(id, LOWEST_ROLE)`).
   기본값을 낮추면 fail-open 이 된다.
 - **집계는 공유, 응답은 분리** — 대시보드 집계 계산을 라우트에서 끌어내 `src/lib/stats.ts`
@@ -382,7 +382,7 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
   새로 새고, 담는 방식이면 안 샌다. 빠지는 것: `topUsers`(사번) · `topErrors`(내부 에러 코드) ·
   `layers`/`selfTime`(내부 구조) · `excludeErrCds`. 남는 것: 상태 합계 · 성공률 · 평균 응답 ·
   **사용자 '수'** · 버킷 · 일별 · 기능(ACTION_TYP)별 · FAC별 · 프로필 공개 항목 · FTE.
-- **토큰·타임아웃도 같은 라우트가 실어 내린다** — 현업은 `/api/tokens`·`/api/timeouts` 에서 403 이라
+- **토큰·타임아웃도 같은 라우트가 실어 내린다** — 일반 사용자는 `/api/tokens`·`/api/timeouts` 에서 403 이라
   거기서 부를 수 없다. `/api/insights` 가 `fetchTokenStats`/`fetchTimeoutStats`(기본 에이전트)를
   같이 호출해 `toInsightsTokens()`/`toInsightsTimeouts()` 로 **모델까지만** 옮겨 담는다
   (`InsightsTokens`/`InsightsTimeouts`). 빠지는 것: `byNode`(내부 노드명) · `topUsers`/`byUser`(사번) ·
@@ -396,26 +396,26 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
   FTE) + 처리 추이 + **일별 현황 표**(2일 이상 조회일 때) + [기능별 실적 막대 | 절감 효과 추이] 2열,
   ② `ins-sep` 구분선 아래 **AI 운영 현황**: KPI 4(토큰 사용량·LLM 호출·평균 LLM 속도·타임아웃) +
   [토큰 사용 추이 | LLM 속도 추이] 2열 + [타임아웃 발생 추이 | 모델별 현황] 2열.
-  데이터 소스는 `/api/insights` **하나뿐**이다 — 여기서 다른 API 를 부르지 말 것(현업 세션은 어차피 403).
+  데이터 소스는 `/api/insights` **하나뿐**이다 — 여기서 다른 API 를 부르지 말 것(일반 사용자 세션은 어차피 403).
   기능 코드는 `ACTION_LABEL` 로 한글 표기(시즈닝/AutoQual 실행·취소), 모르는 값은 원문 그대로.
   ⚠️ 카드를 혼자 한 줄에 두면 **가로만 길고 안이 비어 보인다**(FTE 추이가 그랬다) — 조밀하지 않은
   카드는 `.ins-grid-2`(auto-fit minmax 380px, 좁으면 1열)로 짝지어 둘 것.
 - **일별 현황 표는 `/report` 와 공유한다** (`src/components/DailyTable.tsx` — `DailyRow` ·
   `mergeDailyRows` · `DailyTable`). 원래 `report/page.tsx` 안에 있던 것을 뺐다: 두 벌로 두면 한쪽만
-  고쳐져 같은 기간인데 다른 표가 된다. 현업 화면은 `labelAction={actionLabel}` 로 기능 코드만 한글로 바꾼다.
+  고쳐져 같은 기간인데 다른 표가 된다. 일반 사용자 화면은 `labelAction={actionLabel}` 로 기능 코드만 한글로 바꾼다.
 - **차트 컴포넌트의 prop 타입은 '실제로 읽는 필드' 로 좁혀져 있다** (`TokenSeries`/`TimeoutSeries`/
   `TokenSummary`). 전체 응답을 요구하면 축소 응답(`InsightsTokens` 등)을 못 넘긴다 — 구조적 타이핑이라
   기존 호출부(Tokens/Timeout/Report 탭)는 전체 응답 그대로 통과한다. 화면을 늘릴 때 이 규칙을 깨지 말 것.
-- **운영자는 현업이 보는 것을 같은 화면으로 본다** — 별도 미리보기를 만들면 두 화면이 어긋나므로
-  `/insights` 는 전 권한에 노출하고, FIELD 가 아닌 계정에게만 "현업 계정에게 공개되는 유일한
+- **운영자는 일반 사용자가 보는 것을 같은 화면으로 본다** — 별도 미리보기를 만들면 두 화면이 어긋나므로
+  `/insights` 는 전 권한에 노출하고, FIELD 가 아닌 계정에게만 "일반 사용자 계정에게 공개되는 유일한
   화면" 안내 띠를 띄운다. 탭 이름은 **실적**.
 - **DB**: `ROLE_CD` CHECK 제약에 `'FIELD'` 추가 — `sql/migrations/2026-08-28_add_field_role.sql`
   (앱 자체 DB=GAIA, ADM 계정 1회). ⚠️ **앱 배포보다 먼저** 실행할 것 — 제약을 넓히기 전에는
-  `/accounts` 에서 현업 계정 저장이 ORA-02290 으로 실패한다.
-- **로그인 착지**: 현업의 홈은 `/` 가 아니라 `/insights` (`homePathFor`). 로그인 페이지가 `next`
+  `/accounts` 에서 일반 사용자 계정 저장이 ORA-02290 으로 실패한다.
+- **로그인 착지**: 일반 사용자의 홈은 `/` 가 아니라 `/insights` (`homePathFor`). 로그인 페이지가 `next`
   파라미터를 `canAccessPath` 로 검사해 갈 수 없는 곳이면 홈으로 바꾼다(화면이 한 번 튀는 것 방지).
-- ⚠️ **현업 계정의 소속은 기본 에이전트여야 한다** — `/insights` 는 BIZ_AIACTIONTXN_HIS 집계라
-  `isBizPath` 에 포함된다. 미배정이거나 다른 팀 에이전트 소속이면 `/403` 이다(현업은 `/tokens` 도
+- ⚠️ **일반 사용자 계정의 소속은 기본 에이전트여야 한다** — `/insights` 는 BIZ_AIACTIONTXN_HIS 집계라
+  `isBizPath` 에 포함된다. 미배정이거나 다른 팀 에이전트 소속이면 `/403` 이다(일반 사용자는 `/tokens` 도
   못 보므로 미들웨어가 그쪽으로 되돌리지 않는다 — 서로를 가리키면 리다이렉트 루프가 된다).
 
 ### ⚠️ TEMP — 비밀번호 강제 변경 비활성 (되살리기 전제)

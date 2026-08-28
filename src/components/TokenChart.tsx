@@ -87,7 +87,7 @@ function CustomTooltip({
   );
 }
 
-/** 필요한 건 격자와 버킷뿐 — 전체 응답을 요구하지 않아 현업 화면의 축소 응답도 그대로 넘길 수 있다 */
+/** 필요한 건 격자와 버킷뿐 — 전체 응답을 요구하지 않아 일반 사용자 화면의 축소 응답도 그대로 넘길 수 있다 */
 export function TokenChart({ stats }: { stats: TokenSeries }) {
   const granularity = stats.granularity;
   const [hidden, setHidden] = useState<Record<SeriesKey, boolean>>({

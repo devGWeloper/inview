@@ -22,15 +22,15 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * 현업(FIELD) 실적 API — /insights 화면의 유일한 데이터 소스.
+ * 일반 사용자(FIELD) 실적 API — /insights 화면의 유일한 데이터 소스.
  *
- * ⚠️ 이 라우트의 존재 이유는 **필드 화이트리스트**다. /api/stats 를 현업에게 열면
+ * ⚠️ 이 라우트의 존재 이유는 **필드 화이트리스트**다. /api/stats 를 일반 사용자에게 열면
  *    topUsers(사번) · topErrors(내부 에러 코드) · layers(내부 구조) 가 그대로 나간다.
  *    집계는 computeStats() 로 공유하되, 응답은 아래 toInsights() 가 필요한 필드만 **새로 담아**
  *    만든다. StatsResponse 에 필드가 늘어도 여기로는 새지 않는다.
  *
  * 권한: 인증된 사용자 누구나(min = LOWEST_ROLE). 운영자/개발자도 같은 화면을 볼 수 있어야
- * "현업이 무엇을 보는지" 를 확인할 수 있다. 단 기본 에이전트 소속이어야 한다(requireBiz).
+ * "일반 사용자가 무엇을 보는지" 를 확인할 수 있다. 단 기본 에이전트 소속이어야 한다(requireBiz).
  */
 export async function GET(req: NextRequest) {
   const guard = await requireBiz(LOWEST_ROLE);
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
   const ctx = reqContext(req);
   const sp = req.nextUrl.searchParams;
 
-  // ⚠️ 현업 화면에는 userId/actionTyp/excludeErrCds 필터를 열지 않는다 —
+  // ⚠️ 일반 사용자 화면에는 userId/actionTyp/excludeErrCds 필터를 열지 않는다 —
   //    "특정 사용자만 골라보기" 는 이 화면이 하지 않기로 한 일이다. 기간만 받는다.
   const query = {
     dateFrom: sp.get("dateFrom") || undefined,
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
       computeStats(query),
       // FTE 는 실적의 헤드라인 지표다. CUBE 미연결이면 null → 화면이 '—' 로 그린다.
       computeFteStats(profile).catch(() => null),
-      // ⚠️ skipQuestions — questions/topUsers 는 사번·질의 원문을 싣는다. 현업 화면은 안 쓴다.
+      // ⚠️ skipQuestions — questions/topUsers 는 사번·질의 원문을 싣는다. 일반 사용자 화면은 안 쓴다.
       fetchTokenStats({ ...query, agentId, skipQuestions: true }).catch(() => null),
       fetchTimeoutStats({ ...query, agentId }).catch(() => null),
     ]);
@@ -128,7 +128,7 @@ function toInsights(
 /**
  * TokenStatsResponse → InsightsTokens.
  * ⚠️ 빠지는 것: byNode(내부 노드명) · topUsers(사번) · questions/calls(질의 원문).
- *    모델명까지만 공개한다 — 현업은 "어느 모델이 느린가" 까지만 알면 된다.
+ *    모델명까지만 공개한다 — 일반 사용자는 "어느 모델이 느린가" 까지만 알면 된다.
  */
 function toInsightsTokens(t: TokenStatsResponse): InsightsTokens {
   return {

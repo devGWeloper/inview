@@ -29,6 +29,9 @@ const SERIES_LABEL: Record<SeriesKey, string> = {
 
 type Gran = TimeoutStatsResponse["granularity"];
 
+/** 이 차트가 실제로 읽는 것 — 전체 응답(TimeoutStatsResponse)도 그대로 들어맞는다 */
+export type TimeoutSeries = { granularity: Gran; buckets: TimeoutBucket[] };
+
 function fmtTick(ts: string, g: Gran): string {
   if (g === "1d") return ts.slice(5, 10);
   return ts.slice(11, 16);
@@ -74,7 +77,7 @@ function CustomTooltip({
   );
 }
 
-export function TimeoutTrendChart({ stats }: { stats: TimeoutStatsResponse }) {
+export function TimeoutTrendChart({ stats }: { stats: TimeoutSeries }) {
   const granularity = stats.granularity;
   const [hidden, setHidden] = useState<Record<SeriesKey, boolean>>({
     timeout: false,

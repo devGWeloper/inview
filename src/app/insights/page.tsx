@@ -2,19 +2,28 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AgentAvatar } from "@/components/AgentAvatar";
+import { DailyTable, mergeDailyRows } from "@/components/DailyTable";
 import { FteChart } from "@/components/FteChart";
 import { TimeSeriesChart } from "@/components/TimeSeriesChart";
-import { fmtDuration } from "@/components/TokenLatencyChart";
+import { TimeoutTrendChart } from "@/components/TimeoutTrendChart";
+import { TokenChart } from "@/components/TokenChart";
+import { TokenLatencyChart, fmtDuration } from "@/components/TokenLatencyChart";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 import { InsightsResponse, ROUTING_FAIL_LABEL } from "@/lib/types";
 
 /**
- * 현업(FIELD) 실적 화면.
+ * 현업(FIELD) 실적 화면 — 팀장·현장 엔지니어가 본다. 개발자용 진단 화면이 아니다.
  *
  * ⚠️ 이 화면의 데이터는 /api/insights **하나뿐**이다. 다른 API(/api/stats, /api/traces,
- *    /api/tokens …)를 여기서 부르지 말 것 — 그 응답에는 사번·질의 원문·에러 코드가 들어 있고,
- *    현업 계정은 애초에 그 경로들에서 403 이다(roles.ts FIELD_ALLOW_PREFIXES).
+ *    /api/tokens, /api/timeouts …)를 여기서 부르지 말 것 — 그 응답에는 사번·질의 원문·
+ *    에러 코드·내부 노드명이 들어 있고, 현업 계정은 애초에 그 경로들에서 403 이다
+ *    (roles.ts FIELD_ALLOW_PREFIXES).
+ *
+ * 구성은 두 단이다:
+ *   ① 업무 실적 — 무엇을 얼마나 처리했고 얼마나 아꼈나 (KPI · 추이 · 일별 · 기능별 · FTE)
+ *   ② AI 운영 현황 — 그걸 돌리는 LLM 이 얼마나 쓰였고 빠른가 (토큰 · 속도 · 타임아웃)
+ * "누가 무슨 요청을 했는지" 는 어느 단에도 없다 — 사용자는 **수(count)** 로만 나온다.
  *
  * 운영자/개발자도 같은 화면을 그대로 본다 — "현업에게 무엇이 보이는가" 를 확인하려면
  * 별도 미리보기가 아니라 같은 화면이어야 어긋나지 않는다.
@@ -47,6 +56,13 @@ function rangeOf(preset: Preset): { from: string; to: string } {
 
 function pct(n: number | null): string {
   return n === null ? "—" : `${(n * 100).toFixed(1)}%`;
+}
+
+/** 큰 수를 KPI 한 칸에 담기 위한 축약 (12,345,678 → 12.3M). 표에는 쓰지 않는다. */
+function compact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 10_000) return `${(n / 1_000).toFixed(0)}K`;
+  return n.toLocaleString();
 }
 
 /** 기능(ACTION_TYP) 내부 코드를 사람이 읽는 이름으로. 모르는 값은 그대로 둔다. */
@@ -85,12 +101,47 @@ export default function InsightsPage() {
 
   const daily = asArray<InsightsResponse["daily"][number]>(data?.daily);
   const byAction = asArray<InsightsResponse["byAction"][number]>(data?.byAction);
+  const tokens = data?.tokens ?? null;
+  const timeouts = data?.timeouts ?? null;
+
   // 일별 표는 하루짜리 조회에선 KPI 와 동어반복이라 2일 이상일 때만 노출한다.
   const showDaily = daily.length > 1;
+  // /report 와 같은 표 = 같은 병합 규칙. 토큰 열은 tokens 가 없으면 자연히 0("-")이 된다.
+  const dailyRows = useMemo(() => mergeDailyRows(data, tokens), [data, tokens]);
   const maxAction = useMemo(
     () => Math.max(1, ...byAction.map((a) => a.total)),
     [byAction]
   );
+
+  // 모델별 현황 — 토큰(사용량·속도)과 타임아웃(끊김)을 모델 키로 합쳐 한 표로 읽는다.
+  const modelRows = useMemo(() => {
+    type Row = {
+      key: string;
+      calls: number;
+      totalTokens: number;
+      avgLatencyMs: number | null;
+      timeout: number;
+    };
+    const idx = new Map<string, Row>();
+    for (const m of tokens?.byModel ?? []) {
+      idx.set(m.key, {
+        key: m.key,
+        calls: m.calls,
+        totalTokens: m.totalTokens,
+        avgLatencyMs: m.avgLatencyMs,
+        timeout: 0,
+      });
+    }
+    for (const m of timeouts?.byModel ?? []) {
+      const cur = idx.get(m.key);
+      if (cur) cur.timeout = m.timeout;
+      else idx.set(m.key, { key: m.key, calls: m.calls, totalTokens: 0, avgLatencyMs: null, timeout: m.timeout });
+    }
+    return [...idx.values()].sort((a, b) => b.calls - a.calls);
+  }, [tokens, timeouts]);
+
+  const timeoutRate =
+    timeouts && timeouts.totalCalls > 0 ? timeouts.timeoutCalls / timeouts.totalCalls : null;
 
   return (
     <div className="dash ins">
@@ -116,7 +167,7 @@ export default function InsightsPage() {
                 type="button"
                 role="tab"
                 aria-selected={preset === p.key}
-                className={"preset" + (preset === p.key ? " active" : "")}
+                className={"preset-btn" + (preset === p.key ? " active" : "")}
                 onClick={() => setPreset(p.key)}
               >
                 {p.label}
@@ -133,7 +184,7 @@ export default function InsightsPage() {
       {user && user.role !== "FIELD" && (
         <div className="ins-note">
           이 화면은 <b>현업 계정에게 공개되는 유일한 화면</b>입니다. 요청 원문 · 사번 · 에러
-          코드는 서버에서 제외되어 내려오지 않습니다.
+          코드 · 내부 노드명은 서버에서 제외되어 내려오지 않습니다.
         </div>
       )}
 
@@ -142,7 +193,7 @@ export default function InsightsPage() {
 
       {data && (
         <div className="dash-body">
-          {/* ── KPI ─────────────────────────────────────────────── */}
+          {/* ═══ ① 업무 실적 ═══════════════════════════════════════ */}
           <div className="ins-kpis">
             <Kpi label="처리 건수" value={data.totals.total.toLocaleString()} unit="건" tone="accent" />
             <Kpi label="성공률" value={pct(data.successRate)} sub={`성공 ${data.totals.ok.toLocaleString()}건`} tone="ok" />
@@ -158,28 +209,19 @@ export default function InsightsPage() {
             />
           </div>
 
-          {/* ── 처리 추이 ────────────────────────────────────────── */}
-          <section className="dash-card dash-card-hero">
-            <div className="dash-card-head">
-              <div className="dash-card-title-group">
-                <span className="dash-card-title">처리 추이</span>
-                <span className="dash-card-sub">성공 · 실패 적층</span>
-              </div>
-            </div>
-            <div className="dash-card-body">
-              <TimeSeriesChart stats={{ granularity: data.granularity, buckets: data.buckets }} />
-            </div>
-          </section>
+          <Card title="처리 추이" sub="성공 · 실패 적층" hero>
+            <TimeSeriesChart stats={{ granularity: data.granularity, buckets: data.buckets }} />
+          </Card>
 
-          {/* ── 기능별 실적 ──────────────────────────────────────── */}
-          <section className="dash-card">
-            <div className="dash-card-head">
-              <div className="dash-card-title-group">
-                <span className="dash-card-title">기능별 실적</span>
-                <span className="dash-card-sub">무엇을 얼마나 처리했나</span>
-              </div>
-            </div>
-            <div className="dash-card-body">
+          {showDaily && (
+            <Card title="일별 현황" sub="하루 단위 처리량 — 날짜를 누르면 기능별 상세가 열립니다">
+              <DailyTable rows={dailyRows} labelAction={actionLabel} />
+            </Card>
+          )}
+
+          {/* 기능별 실적 + 절감 효과 추이 — 둘 다 한 줄을 다 쓸 만큼 조밀하지 않아 나란히 둔다 */}
+          <div className="ins-grid-2">
+            <Card title="기능별 실적" sub="무엇을 얼마나 처리했나">
               {byAction.length === 0 ? (
                 <div className="ins-empty">기간 내 처리 내역이 없습니다.</div>
               ) : (
@@ -202,69 +244,145 @@ export default function InsightsPage() {
                   ))}
                 </ul>
               )}
-            </div>
-          </section>
+            </Card>
 
-          {/* ── 일별 현황 ────────────────────────────────────────── */}
-          {showDaily && (
-            <section className="dash-card">
-              <div className="dash-card-head">
-                <div className="dash-card-title-group">
-                  <span className="dash-card-title">일별 현황</span>
-                  <span className="dash-card-sub">하루 단위 처리량</span>
-                </div>
-              </div>
-              <div className="dash-card-body">
+            <Card title="절감 효과 추이" sub="월별 FTE (1 FTE = 1인 1년치 업무량)">
+              {data.fte ? <FteChart stats={data.fte} /> : <div className="ins-empty">집계 준비 중입니다.</div>}
+            </Card>
+          </div>
+
+          {/* ═══ ② AI 운영 현황 ════════════════════════════════════ */}
+          <div className="ins-sep">
+            <span className="ins-sep-label">AI 운영 현황</span>
+            <span className="ins-sep-hint">에이전트를 움직이는 LLM 의 사용량과 속도</span>
+          </div>
+
+          <div className="ins-kpis">
+            <Kpi
+              label="LLM 토큰 사용량"
+              value={tokens ? compact(tokens.totals.totalTokens) : "—"}
+              sub={
+                tokens
+                  ? `입력 ${compact(tokens.totals.inputTokens)} · 출력 ${compact(tokens.totals.outputTokens)}`
+                  : undefined
+              }
+              tone="accent"
+            />
+            <Kpi
+              label="LLM 호출"
+              value={tokens ? tokens.totals.calls.toLocaleString() : "—"}
+              unit="회"
+              sub={
+                tokens?.avgTotalPerCall != null
+                  ? `호출당 평균 ${Math.round(tokens.avgTotalPerCall).toLocaleString()} 토큰`
+                  : undefined
+              }
+              tone="muted"
+            />
+            <Kpi
+              label="평균 LLM 속도"
+              value={tokens ? fmtDuration(tokens.avgLatencyMs) : "—"}
+              sub="응답에 성공한 호출 기준"
+              tone="muted"
+            />
+            <Kpi
+              label="타임아웃"
+              value={timeouts?.available ? timeouts.timeoutCalls.toLocaleString() : "—"}
+              unit={timeouts?.available ? "건" : undefined}
+              sub={
+                timeouts?.available
+                  ? `전체 호출의 ${pct(timeoutRate)} · 영향 질문 ${timeouts.affectedTraces.toLocaleString()}건`
+                  : "집계 준비 중"
+              }
+              tone={timeouts?.available && timeouts.timeoutCalls > 0 ? "err" : "muted"}
+            />
+          </div>
+
+          <div className="ins-grid-2">
+            <Card title="토큰 사용 추이" sub="입력 · 출력 적층">
+              {tokens ? (
+                <TokenChart stats={tokens} />
+              ) : (
+                <div className="ins-empty">토큰 데이터를 불러오지 못했습니다.</div>
+              )}
+            </Card>
+            <Card title="LLM 속도 추이" sub="호출 1건의 평균 소요시간">
+              {tokens ? (
+                <TokenLatencyChart stats={tokens} />
+              ) : (
+                <div className="ins-empty">토큰 데이터를 불러오지 못했습니다.</div>
+              )}
+            </Card>
+          </div>
+
+          <div className="ins-grid-2">
+            <Card title="타임아웃 발생 추이" sub="끊긴 LLM 호출">
+              {!timeouts || !timeouts.available ? (
+                <div className="ins-empty">타임아웃 집계가 아직 준비되지 않았습니다.</div>
+              ) : timeouts.failedCalls === 0 ? (
+                <div className="ins-empty">기간 내 끊긴 호출이 없습니다.</div>
+              ) : (
+                <TimeoutTrendChart stats={timeouts} />
+              )}
+            </Card>
+
+            <Card title="모델별 현황" sub="어느 모델을 얼마나 쓰고 얼마나 빠른가">
+              {modelRows.length === 0 ? (
+                <div className="ins-empty">기간 내 LLM 호출이 없습니다.</div>
+              ) : (
                 <div className="ins-table-wrap">
                   <table className="ins-table">
                     <thead>
                       <tr>
-                        <th>날짜</th>
-                        <th className="num">처리</th>
-                        <th className="num">성공</th>
-                        <th className="num">실패</th>
-                        <th className="num">사용 인원</th>
-                        <th className="num">평균 응답</th>
+                        <th>모델</th>
+                        <th className="num">호출</th>
+                        <th className="num">토큰</th>
+                        <th className="num">평균 속도</th>
+                        <th className="num">타임아웃</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {daily.map((d) => {
-                        const dow = new Date(d.date + "T00:00:00").getDay();
-                        return (
-                          <tr key={d.date} className={dow === 0 ? "sun" : dow === 6 ? "sat" : undefined}>
-                            <td>{d.date.slice(5)}</td>
-                            <td className="num">{d.total.toLocaleString()}</td>
-                            <td className="num ok">{d.ok.toLocaleString()}</td>
-                            <td className={"num" + (d.fail > 0 ? " err" : "")}>{d.fail.toLocaleString()}</td>
-                            <td className="num">{d.users.toLocaleString()}</td>
-                            <td className="num">{fmtDuration(d.avgCubeLatencyMs)}</td>
-                          </tr>
-                        );
-                      })}
+                      {modelRows.map((m) => (
+                        <tr key={m.key}>
+                          <td>{m.key}</td>
+                          <td className="num">{m.calls.toLocaleString()}</td>
+                          <td className="num">{m.totalTokens.toLocaleString()}</td>
+                          <td className="num">{fmtDuration(m.avgLatencyMs)}</td>
+                          <td className={"num" + (m.timeout > 0 ? " err" : "")}>
+                            {m.timeout > 0 ? m.timeout.toLocaleString() : "-"}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
-              </div>
-            </section>
-          )}
-
-          {/* ── 절감 효과 추이 ───────────────────────────────────── */}
-          {data.fte && (
-            <section className="dash-card">
-              <div className="dash-card-head">
-                <div className="dash-card-title-group">
-                  <span className="dash-card-title">절감 효과 추이</span>
-                  <span className="dash-card-sub">월별 FTE (1 FTE = 1인 1년치 업무량)</span>
-                </div>
-              </div>
-              <div className="dash-card-body">
-                <FteChart stats={data.fte} />
-              </div>
-            </section>
-          )}
+              )}
+            </Card>
+          </div>
         </div>
       )}
     </div>
+  );
+}
+
+function Card({
+  title, sub, hero, children,
+}: {
+  title: string;
+  sub?: string;
+  hero?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={"dash-card" + (hero ? " dash-card-hero" : "")}>
+      <div className="dash-card-head">
+        <div className="dash-card-title-group">
+          <span className="dash-card-title">{title}</span>
+          {sub && <span className="dash-card-sub">{sub}</span>}
+        </div>
+      </div>
+      <div className="dash-card-body">{children}</div>
+    </section>
   );
 }
 

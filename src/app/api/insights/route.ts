@@ -4,9 +4,18 @@ import { requireBiz } from "@/lib/auth/current";
 import { computeStats } from "@/lib/stats";
 import { readProfile } from "@/lib/profile";
 import { computeFteStats } from "@/lib/fte";
+import { fetchTokenStats } from "@/lib/tokens";
+import { fetchTimeoutStats } from "@/lib/timeouts";
 import { defaultAgentId } from "@/lib/config";
 import { LOWEST_ROLE } from "@/lib/roles";
-import { InsightsResponse, StatsResponse } from "@/lib/types";
+import {
+  InsightsResponse,
+  InsightsTimeouts,
+  InsightsTokens,
+  StatsResponse,
+  TimeoutStatsResponse,
+  TokenStatsResponse,
+} from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 // 프로필 파일(fs) 을 읽으므로 Node 런타임 강제
@@ -41,14 +50,20 @@ export async function GET(req: NextRequest) {
   logger.info("GET /api/insights", { ...ctx, ...query, by: guard.session.sub });
 
   try {
-    const profile = readProfile(defaultAgentId());
-    const [{ stats }, fte] = await Promise.all([
+    const agentId = defaultAgentId();
+    const profile = readProfile(agentId);
+    // 토큰/타임아웃은 TRX_TOKEN_DET(기본 에이전트 DB) — BIZ 집계와는 다른 소스라 따로 읽는다.
+    // 넷 다 서로를 기다릴 이유가 없고, 뒤 셋은 실패해도 그 섹션만 비운다(화면은 그대로 그려진다).
+    const [{ stats }, fte, tok, tmo] = await Promise.all([
       computeStats(query),
       // FTE 는 실적의 헤드라인 지표다. CUBE 미연결이면 null → 화면이 '—' 로 그린다.
       computeFteStats(profile).catch(() => null),
+      // ⚠️ skipQuestions — questions/topUsers 는 사번·질의 원문을 싣는다. 현업 화면은 안 쓴다.
+      fetchTokenStats({ ...query, agentId, skipQuestions: true }).catch(() => null),
+      fetchTimeoutStats({ ...query, agentId }).catch(() => null),
     ]);
 
-    const body: InsightsResponse = toInsights(stats, profile, fte);
+    const body: InsightsResponse = toInsights(stats, profile, fte, tok, tmo);
     logger.info("GET /api/insights done", {
       ...ctx, traces: body.totals.total, ms: Date.now() - t0, status: 200,
     });
@@ -66,7 +81,9 @@ export async function GET(req: NextRequest) {
 function toInsights(
   stats: StatsResponse,
   profile: ReturnType<typeof readProfile>,
-  fte: Awaited<ReturnType<typeof computeFteStats>>
+  fte: Awaited<ReturnType<typeof computeFteStats>>,
+  tok: TokenStatsResponse | null,
+  tmo: TimeoutStatsResponse | null
 ): InsightsResponse {
   const { total, ok, fail, pending } = stats.totals;
   return {
@@ -103,5 +120,63 @@ function toInsights(
       avatarImage: profile.avatarImage,
     },
     fte,
+    tokens: tok ? toInsightsTokens(tok) : null,
+    timeouts: tmo ? toInsightsTimeouts(tmo) : null,
+  };
+}
+
+/**
+ * TokenStatsResponse → InsightsTokens.
+ * ⚠️ 빠지는 것: byNode(내부 노드명) · topUsers(사번) · questions/calls(질의 원문).
+ *    모델명까지만 공개한다 — 현업은 "어느 모델이 느린가" 까지만 알면 된다.
+ */
+function toInsightsTokens(t: TokenStatsResponse): InsightsTokens {
+  return {
+    granularity: t.granularity,
+    buckets: t.buckets.map((b) => ({
+      ts: b.ts,
+      inputTokens: b.inputTokens,
+      outputTokens: b.outputTokens,
+      totalTokens: b.totalTokens,
+      calls: b.calls,
+      avgLatencyMs: b.avgLatencyMs,
+    })),
+    totals: {
+      calls: t.totals.calls,
+      inputTokens: t.totals.inputTokens,
+      outputTokens: t.totals.outputTokens,
+      totalTokens: t.totals.totalTokens,
+    },
+    avgTotalPerCall: t.avgTotalPerCall,
+    avgLatencyMs: t.avgLatencyMs,
+    // sub(노드 구성)는 옮기지 않는다 — 내부 구조다.
+    byModel: t.byModel.map((m) => ({
+      key: m.key,
+      calls: m.calls,
+      totalTokens: m.totalTokens,
+      avgLatencyMs: m.avgLatencyMs,
+    })),
+  };
+}
+
+/**
+ * TimeoutStatsResponse → InsightsTimeouts.
+ * ⚠️ 빠지는 것: byNode · byUser(사번) · items(실패 호출 원문) · topReasons(스택 트레이스).
+ */
+function toInsightsTimeouts(t: TimeoutStatsResponse): InsightsTimeouts {
+  return {
+    available: t.available,
+    granularity: t.granularity,
+    buckets: t.buckets.map((b) => ({ ts: b.ts, failed: b.failed, timeout: b.timeout })),
+    totalCalls: t.totalCalls,
+    failedCalls: t.failedCalls,
+    timeoutCalls: t.timeoutCalls,
+    affectedTraces: t.affectedTraces,
+    byModel: t.byModel.map((m) => ({
+      key: m.key,
+      failed: m.failed,
+      timeout: m.timeout,
+      calls: m.calls,
+    })),
   };
 }

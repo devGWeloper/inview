@@ -268,14 +268,19 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     }
 
     // 4) topUsers — TOTAL_TOKENS 기준 (count = totalTokens)
+    //    ⚠️ skipQuestions 면 4~6 을 통째로 건너뛴다 — 무거울 뿐 아니라 사번·질의 원문을
+    //    실어 나르는 세 쿼리라, 그걸 화면에 쓰지 않는 호출부(/api/insights)는 아예 읽지 않는다.
+    const skipQ = filter.skipQuestions === true;
     const userSql =
       `SELECT USER_ID AS K, SUM(TOTAL_TOKENS) AS T FROM TRX_TOKEN_DET${where}` +
       `${where ? " AND" : " WHERE"} USER_ID IS NOT NULL` +
       ` GROUP BY USER_ID ORDER BY T DESC FETCH FIRST ${TOP_USER_LIMIT} ROWS ONLY`;
-    const topUsers: TopItem[] = (await run("topUsers", userSql)).map((r) => ({
-      key: String(r.K ?? r.k ?? ""),
-      count: num(r.T ?? r.t),
-    }));
+    const topUsers: TopItem[] = skipQ
+      ? []
+      : (await run("topUsers", userSql)).map((r) => ({
+          key: String(r.K ?? r.k ?? ""),
+          count: num(r.T ?? r.t),
+        }));
 
     // 5) questions — 질문(TRACE_ID) 단위 묶음 (LAST_TM desc — 최신 질문부터 N건).
     //    표의 기본 정렬이 최신순이므로 로드 기준도 최신순이어야 "최근 질문이 안 보이는" 착시가 없다.
@@ -306,7 +311,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
         ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS') AS LAST_TM` +
         ` FROM TRX_TOKEN_DET${grpWhere("TRACE_ID IS NULL")}` +
       `) ORDER BY LAST_TM DESC FETCH FIRST ${QUESTION_LIMIT} ROWS ONLY`;
-    const questions: TokenQuestion[] = (await run("questions", questionsSql)).map((r) => ({
+    const questions: TokenQuestion[] = skipQ ? [] : (await run("questions", questionsSql)).map((r) => ({
       qKey: String(r.QKEY ?? r.qkey ?? ""),
       traceId: str(r.TRACE_ID ?? r.trace_id),
       nodes: dedupeCsv(str(r.NODES ?? r.nodes)),
@@ -348,7 +353,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     };
 
     let calls: TokenRow[] = [];
-    if (filter.traceId) {
+    if (filter.traceId && !skipQ) {
       const callsSql =
         `SELECT TOKEN_ID, TRACE_ID, NODE_NM, MODEL_NM, USER_ID,` +
         ` INPUT_TOKENS, OUTPUT_TOKENS, TOTAL_TOKENS, LATENCY_MS, QUERY_CTN${statCols},` +

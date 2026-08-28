@@ -382,11 +382,30 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
   새로 새고, 담는 방식이면 안 샌다. 빠지는 것: `topUsers`(사번) · `topErrors`(내부 에러 코드) ·
   `layers`/`selfTime`(내부 구조) · `excludeErrCds`. 남는 것: 상태 합계 · 성공률 · 평균 응답 ·
   **사용자 '수'** · 버킷 · 일별 · 기능(ACTION_TYP)별 · FAC별 · 프로필 공개 항목 · FTE.
-- **화면 `/insights`** (`src/app/insights/page.tsx`, `ins-*`): 기간 프리셋(오늘/7일/30일/이번 달) +
-  KPI 6(처리 건수·성공률·실패·평균 응답 속도·사용 인원·누적 절감 FTE) + 처리 추이 + 기능별 실적 막대
-  + 일별 현황 표(2일 이상 조회일 때) + 절감 효과 추이(FteChart). 데이터 소스는 `/api/insights`
-  **하나뿐**이다 — 여기서 다른 API 를 부르지 말 것(현업 세션은 어차피 403).
+- **토큰·타임아웃도 같은 라우트가 실어 내린다** — 현업은 `/api/tokens`·`/api/timeouts` 에서 403 이라
+  거기서 부를 수 없다. `/api/insights` 가 `fetchTokenStats`/`fetchTimeoutStats`(기본 에이전트)를
+  같이 호출해 `toInsightsTokens()`/`toInsightsTimeouts()` 로 **모델까지만** 옮겨 담는다
+  (`InsightsTokens`/`InsightsTimeouts`). 빠지는 것: `byNode`(내부 노드명) · `topUsers`/`byUser`(사번) ·
+  `questions`/`calls`(질의 원문) · `items`(실패 호출 원문) · `topReasons`(스택 트레이스).
+  ⚠️ 토큰 조회는 **`skipQuestions: true`** 로 부른다(`TokenFilter`) — questions/topUsers/calls 는
+  상위 500건 LISTAGG 로 무거운 데다 화면에 쓰지도 않을 사번·질의 원문을 실어 나른다.
+  넷(stats/fte/tokens/timeouts)은 `Promise.all` 이고 뒤 셋은 `.catch(() => null)` 이라
+  한쪽이 죽어도 그 섹션만 빈다.
+- **화면 `/insights`** (`src/app/insights/page.tsx`, `ins-*`): 기간 프리셋(오늘/7일/30일/이번 달) 뒤로
+  **두 단**이 이어진다 — ① 업무 실적: KPI 6(처리 건수·성공률·실패·평균 응답 속도·사용 인원·누적 절감
+  FTE) + 처리 추이 + **일별 현황 표**(2일 이상 조회일 때) + [기능별 실적 막대 | 절감 효과 추이] 2열,
+  ② `ins-sep` 구분선 아래 **AI 운영 현황**: KPI 4(토큰 사용량·LLM 호출·평균 LLM 속도·타임아웃) +
+  [토큰 사용 추이 | LLM 속도 추이] 2열 + [타임아웃 발생 추이 | 모델별 현황] 2열.
+  데이터 소스는 `/api/insights` **하나뿐**이다 — 여기서 다른 API 를 부르지 말 것(현업 세션은 어차피 403).
   기능 코드는 `ACTION_LABEL` 로 한글 표기(시즈닝/AutoQual 실행·취소), 모르는 값은 원문 그대로.
+  ⚠️ 카드를 혼자 한 줄에 두면 **가로만 길고 안이 비어 보인다**(FTE 추이가 그랬다) — 조밀하지 않은
+  카드는 `.ins-grid-2`(auto-fit minmax 380px, 좁으면 1열)로 짝지어 둘 것.
+- **일별 현황 표는 `/report` 와 공유한다** (`src/components/DailyTable.tsx` — `DailyRow` ·
+  `mergeDailyRows` · `DailyTable`). 원래 `report/page.tsx` 안에 있던 것을 뺐다: 두 벌로 두면 한쪽만
+  고쳐져 같은 기간인데 다른 표가 된다. 현업 화면은 `labelAction={actionLabel}` 로 기능 코드만 한글로 바꾼다.
+- **차트 컴포넌트의 prop 타입은 '실제로 읽는 필드' 로 좁혀져 있다** (`TokenSeries`/`TimeoutSeries`/
+  `TokenSummary`). 전체 응답을 요구하면 축소 응답(`InsightsTokens` 등)을 못 넘긴다 — 구조적 타이핑이라
+  기존 호출부(Tokens/Timeout/Report 탭)는 전체 응답 그대로 통과한다. 화면을 늘릴 때 이 규칙을 깨지 말 것.
 - **운영자는 현업이 보는 것을 같은 화면으로 본다** — 별도 미리보기를 만들면 두 화면이 어긋나므로
   `/insights` 는 전 권한에 노출하고, FIELD 가 아닌 계정에게만 "현업 계정에게 공개되는 유일한
   화면" 안내 띠를 띄운다. 탭 이름은 **실적**.

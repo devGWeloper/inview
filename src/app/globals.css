@@ -4915,6 +4915,25 @@ button.tbd-row:not(:disabled):hover {
 
 .ins-empty { padding: 26px 0; text-align: center; font-size: 12.5px; color: var(--text-3); }
 
+/* 2열 배치 — 한 줄을 다 쓸 만큼 조밀하지 않은 카드(FTE 추이 등)를 나란히 둔다.
+   혼자 두면 가로만 길고 안이 비어 보인다. 좁은 화면에선 자연히 1열로 접힌다. */
+.ins-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 18px;
+  align-items: stretch;
+}
+.ins-grid-2 > .dash-card { margin: 0; min-width: 0; }
+
+/* 섹션 구분선 — "업무 실적" 과 "AI 운영 현황" 을 가른다 */
+.ins-sep {
+  display: flex; align-items: baseline; gap: 10px;
+  margin: 12px 0 -4px; padding-top: 14px;
+  border-top: 1px solid var(--border-strong);
+}
+.ins-sep-label { font-size: 15px; font-weight: 800; color: var(--text); letter-spacing: -0.2px; }
+.ins-sep-hint { font-size: 11.5px; color: var(--text-3); }
+
 /* 기능별 실적 — 성공/실패를 한 트랙에 이어 붙여 총량과 구성비를 같이 읽는다 */
 .ins-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
 .ins-bar-row { display: grid; grid-template-columns: 140px 1fr 130px; align-items: center; gap: 12px; }

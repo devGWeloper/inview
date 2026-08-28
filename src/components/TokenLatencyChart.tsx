@@ -17,6 +17,9 @@ const COLOR = "#f59e0b"; // latency 전용 색 (토큰 차트와 구분)
 
 type Gran = TokenStatsResponse["granularity"];
 
+/** 이 차트가 실제로 읽는 것 — 전체 응답(TokenStatsResponse)도 그대로 들어맞는다 */
+export type TokenSeries = { granularity: Gran; buckets: TokenBucket[] };
+
 function fmtTick(ts: string, g: Gran): string {
   if (g === "1d") return ts.slice(5, 10);
   return ts.slice(11, 16);
@@ -67,7 +70,7 @@ function CustomTooltip({
   );
 }
 
-export function TokenLatencyChart({ stats }: { stats: TokenStatsResponse }) {
+export function TokenLatencyChart({ stats }: { stats: TokenSeries }) {
   const granularity = stats.granularity;
 
   const data: Row[] = useMemo(

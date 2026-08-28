@@ -29,6 +29,9 @@ const SERIES_LABEL: Record<SeriesKey, string> = {
 
 type Gran = TokenStatsResponse["granularity"];
 
+/** 이 차트가 실제로 읽는 것 — 전체 응답(TokenStatsResponse)도 그대로 들어맞는다 */
+export type TokenSeries = { granularity: Gran; buckets: TokenBucket[] };
+
 function fmtTick(ts: string, g: Gran): string {
   if (g === "1d") return ts.slice(5, 10);
   return ts.slice(11, 16);
@@ -84,7 +87,8 @@ function CustomTooltip({
   );
 }
 
-export function TokenChart({ stats }: { stats: TokenStatsResponse }) {
+/** 필요한 건 격자와 버킷뿐 — 전체 응답을 요구하지 않아 현업 화면의 축소 응답도 그대로 넘길 수 있다 */
+export function TokenChart({ stats }: { stats: TokenSeries }) {
   const granularity = stats.granularity;
   const [hidden, setHidden] = useState<Record<SeriesKey, boolean>>({
     inputTokens: false,

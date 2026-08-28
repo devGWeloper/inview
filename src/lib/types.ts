@@ -451,6 +451,12 @@ export interface TokenFilter {
    * 생략 = 기본 에이전트.
    */
   agentId?: string;
+  /**
+   * 질문 단위 집계(questions / topUsers / calls)를 건너뛴다.
+   * 그 세 쿼리는 상위 500건 LISTAGG 라 무겁고, **질의 원문·사번을 실어 나른다** —
+   * 현업 실적(/api/insights)처럼 화면에 쓰지도 않고 내려서도 안 되는 호출부는 켜 둔다.
+   */
+  skipQuestions?: boolean;
 }
 
 export interface TokenBucket {
@@ -729,6 +735,54 @@ export interface InsightsAgent {
   avatarImage: string;
 }
 
+/**
+ * 실적 화면의 LLM 토큰 요약 — Tokens 탭 응답에서 **모델까지만** 옮겨 담은 것.
+ * ⚠️ 노드명(내부 구조) · 사번 · 질의 원문은 이 타입에 자리가 없다.
+ */
+export interface InsightsTokens {
+  granularity: "5m" | "1h" | "1d";
+  buckets: TokenBucket[];
+  totals: { calls: number; inputTokens: number; outputTokens: number; totalTokens: number };
+  /** 호출당 평균 총 토큰. 호출이 없으면 null */
+  avgTotalPerCall: number | null;
+  /** 전체 평균 LLM 호출 소요시간(ms). **성공 호출만**. 기록이 없으면 null */
+  avgLatencyMs: number | null;
+  /** 모델별 토큰/호출/속도 (totalTokens desc) */
+  byModel: InsightsModelTokens[];
+}
+
+export interface InsightsModelTokens {
+  key: string;
+  calls: number;
+  totalTokens: number;
+  avgLatencyMs: number | null;
+}
+
+/**
+ * 실적 화면의 타임아웃 요약. `available=false` = GAIA 가 실패 호출을 아직 적재하지 않음
+ * (0 건과 구분해야 한다 — 0 으로 보이면 "문제 없음" 으로 오독된다).
+ */
+export interface InsightsTimeouts {
+  available: boolean;
+  granularity: "5m" | "1h" | "1d";
+  buckets: TimeoutBucket[];
+  /** 기간 내 전체 LLM 호출 수 (실패율 분모) */
+  totalCalls: number;
+  failedCalls: number;
+  timeoutCalls: number;
+  /** 실패 호출이 하나라도 있는 고유 질문 수 = "질문 몇 개가 깨졌나" */
+  affectedTraces: number;
+  /** 모델별 실패/타임아웃 (failed desc) */
+  byModel: InsightsModelTimeouts[];
+}
+
+export interface InsightsModelTimeouts {
+  key: string;
+  failed: number;
+  timeout: number;
+  calls: number;
+}
+
 export interface InsightsResponse {
   range: { from: string | null; to: string | null };
   /** 트레이스(=요청) 단위 합계 */
@@ -749,6 +803,10 @@ export interface InsightsResponse {
   agent: InsightsAgent;
   /** 누적 FTE 성과. CUBE 미연결이면 null */
   fte: FteStats | null;
+  /** LLM 토큰 요약. 조회 실패/미구성이면 null → 화면이 그 섹션만 비운다 */
+  tokens: InsightsTokens | null;
+  /** 타임아웃 요약. 조회 실패/미구성이면 null */
+  timeouts: InsightsTimeouts | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

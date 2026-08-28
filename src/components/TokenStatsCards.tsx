@@ -1,6 +1,12 @@
 import { TokenBucket, TokenStatsResponse } from "@/lib/types";
 import { fmtDuration } from "@/components/TokenLatencyChart";
 
+/** KPI 카드가 실제로 읽는 것 — 전체 응답(TokenStatsResponse)도 그대로 들어맞는다 */
+export type TokenSummary = Pick<
+  TokenStatsResponse,
+  "totals" | "avgTotalPerCall" | "avgLatencyMs" | "buckets" | "granularity"
+>;
+
 function fmtInt(n: number): string {
   return Math.round(n).toLocaleString();
 }
@@ -36,7 +42,7 @@ function Sparkline({
   );
 }
 
-export function TokenStatsCards({ stats }: { stats: TokenStatsResponse }) {
+export function TokenStatsCards({ stats }: { stats: TokenSummary }) {
   const { totals, avgTotalPerCall, avgLatencyMs, buckets, granularity } = stats;
 
   const totalSpark = buckets.map((b: TokenBucket) => b.totalTokens);

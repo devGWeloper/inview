@@ -44,10 +44,9 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 2) 인가 (경로별 권한 — 서열 + 일반 사용자 허용 목록 + 실적 화면 전역 운영자 제한)
-  //    ⚠️ scope 는 아래 3) 보다 먼저 필요하다 — /insights 판정이 전역 여부를 본다.
+  // 2) 인가 (경로별 권한 — 서열 + 일반 사용자 허용 목록 + 실적 화면 role 판정)
   const scope = resolveScope(session);
-  if (!canAccessPath(session.role, pathname, scope.global)) {
+  if (!canAccessPath(session.role, pathname)) {
     if (isApi) {
       return NextResponse.json({ error: "접근 권한이 없습니다." }, { status: 403 });
     }
@@ -76,7 +75,7 @@ export async function middleware(req: NextRequest) {
       //    "여기는 안 됨 → 저기로" 가 서로를 가리켜 리다이렉트 루프가 된다.
       const fallback = "/tokens";
       url.pathname =
-        isLockedScope(scope) || !canAccessPath(session.role, fallback, scope.global) ? "/403" : fallback;
+        isLockedScope(scope) || !canAccessPath(session.role, fallback) ? "/403" : fallback;
       return NextResponse.redirect(url);
     }
   }

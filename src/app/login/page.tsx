@@ -27,7 +27,7 @@ function LoginInner() {
    *    기본 홈("/")이 아예 막혀 있다. 갈 수 없는 next 는 그 권한의 홈으로 바꿔서 보낸다.
    */
   function landing(u: { role: Role; global?: boolean }): string {
-    if (safeNext && canAccessPath(u.role, safeNext.split("?")[0], !!u.global)) return safeNext;
+    if (safeNext && canAccessPath(u.role, safeNext.split("?")[0])) return safeNext;
     return homePathFor(u.role);
   }
 

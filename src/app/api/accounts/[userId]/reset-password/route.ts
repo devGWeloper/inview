@@ -8,14 +8,14 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * 비밀번호 초기화 (BR 이상). 본문에 newPassword 가 있으면 그 값으로,
+ * 비밀번호 초기화 (ADMIN). 본문에 newPassword 가 있으면 그 값으로,
  * 없으면 **사번(USER_ID)** 으로 초기화한다. ⚠️ TEMP: 강제 변경을 임시로 빼서
  * 대상자는 초기화된 값 그대로 로그인하고 원할 때 직접 변경한다.
  * ADMIN 대상 계정은 ADMIN 만 초기화할 수 있다.
  */
 export async function POST(req: NextRequest, { params }: { params: { userId: string } }) {
   const ctx = reqContext(req);
-  const guard = await requireRole("BR");
+  const guard = await requireRole("ADMIN");
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   const targetId = decodeURIComponent(params.userId);

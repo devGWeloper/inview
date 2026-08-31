@@ -203,6 +203,7 @@ export default function InsightsPage() {
 
   const daily = asArray<InsightsResponse["daily"][number]>(data?.daily);
   const byAction = asArray<InsightsResponse["byAction"][number]>(data?.byAction);
+  const topErrors = asArray<InsightsResponse["topErrors"][number]>(data?.topErrors);
   const tokens = data?.tokens ?? null;
   const timeouts = data?.timeouts ?? null;
 
@@ -213,6 +214,12 @@ export default function InsightsPage() {
   const maxAction = useMemo(
     () => Math.max(1, ...byAction.map((a) => a.total)),
     [byAction]
+  );
+  // 막대는 **1위 대비 상대 길이**다. topErrors 의 분모(행 수 vs 트레이스 수)가 실제 코드와
+  // TEMP 가상 코드에서 서로 달라 "전체 대비 %" 로는 읽을 수 없기 때문 — 건수와 순위만 보여준다.
+  const maxError = useMemo(
+    () => Math.max(1, ...topErrors.map((e) => e.count)),
+    [topErrors]
   );
 
   // 모델별 현황 — 토큰(사용량·속도)과 타임아웃(끊김)을 모델 키로 합쳐 한 표로 읽는다.
@@ -338,8 +345,8 @@ export default function InsightsPage() {
       {/* 운영자/개발자에게만 — 지금 보고 있는 것이 '일반 사용자 공개 화면' 임을 밝힌다 */}
       {user && user.role !== "FIELD" && (
         <div className="ins-note">
-          이 화면은 <b>일반 사용자 계정에게 공개되는 유일한 화면</b>입니다. 요청 원문 · 사번 · 에러
-          코드 · 내부 노드명은 서버에서 제외되어 내려오지 않습니다.
+          이 화면은 <b>일반 사용자 계정에게 공개되는 유일한 화면</b>입니다. 요청 원문 · 사번 ·
+          내부 노드명은 서버에서 제외되어 내려오지 않습니다. (실패 사유는 코드가 아니라 설명으로 내려갑니다)
         </div>
       )}
 
@@ -374,7 +381,8 @@ export default function InsightsPage() {
             </Card>
           )}
 
-          {/* 기능별 실적 + 절감 효과 추이 — 둘 다 한 줄을 다 쓸 만큼 조밀하지 않아 나란히 둔다 */}
+          {/* 기능별 실적 + 주요 실패 원인 — "무엇을 처리했나 / 무엇이 안 됐나" 한 쌍으로 읽는다.
+              둘 다 같은 형태의 막대 목록이라 나란히 두면 눈이 한 줄로 훑는다. */}
           <div className="ins-grid-2">
             <Card title="기능별 실적" sub="무엇을 얼마나 처리했나">
               {byAction.length === 0 ? (
@@ -401,10 +409,36 @@ export default function InsightsPage() {
               )}
             </Card>
 
-            <Card title="절감 효과 추이" sub="월별 FTE (1 FTE = 1인 1년치 업무량)">
-              {data.fte ? <FteChart stats={data.fte} /> : <div className="ins-empty">집계 준비 중입니다.</div>}
+            <Card title="주요 실패 원인" sub={topErrors.length > 0 ? `발생 빈도 상위 ${topErrors.length}건` : "기간 내 실패 사유"}>
+              {topErrors.length === 0 ? (
+                <div className="ins-empty">기간 내 실패한 요청이 없습니다 ✓</div>
+              ) : (
+                <ul className="ins-bars errors">
+                  {topErrors.map((e) => (
+                    <li key={e.code} className="ins-bar-row">
+                      <span className="ins-bar-key" title={e.described ? `${e.label} (${e.code})` : e.code}>
+                        <span className="ins-bar-reason">{e.label}</span>
+                        {/* 설명이 붙은 항목만 코드를 보조로 병기한다 — 설명이 없으면 라벨이 이미 코드다 */}
+                        {e.described && <em className="ins-bar-code">{e.code}</em>}
+                      </span>
+                      <span className="ins-bar-track">
+                        <span className="ins-bar-fill fail" style={{ width: `${(e.count / maxError) * 100}%` }} />
+                      </span>
+                      <span className="ins-bar-val">
+                        <b>{e.count.toLocaleString()}</b>
+                        <em>건</em>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </Card>
           </div>
+
+          {/* 절감 효과 추이 — 12개월 막대라 폭을 다 쓰는 편이 읽기 좋다 */}
+          <Card title="절감 효과 추이" sub="월별 FTE (1 FTE = 1인 1년치 업무량)">
+            {data.fte ? <FteChart stats={data.fte} /> : <div className="ins-empty">집계 준비 중입니다.</div>}
+          </Card>
 
           {/* ═══ ② AI 운영 현황 ════════════════════════════════════ */}
           <div className="ins-sep">

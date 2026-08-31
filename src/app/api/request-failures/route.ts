@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchRequestFailures, saveRequestFailureHandling } from "@/lib/requestFailures";
 import { getAppEnv } from "@/lib/db";
 import { FailureStatus, RequestFailureListResponse } from "@/lib/types";
-import { requireRole, requireBiz } from "@/lib/auth/current";
+import { requireBiz } from "@/lib/auth/current";
 import { logger, reqContext } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -51,11 +51,15 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(body);
 }
 
-/** 조치 정보 저장 (upsert). BR 이상 권한 필요. */
+/**
+ * 조치 정보 저장 (upsert). **ADMIN 전용**.
+ * ⚠️ 목록(GET)·대화 흐름(context)은 BR 이고 저장만 ADMIN 이다 — BR 은 전 화면 열람이되
+ *    데이터는 수정하지 못한다. 화면의 저장 버튼 비활성은 UX 일 뿐, 권위는 이 판정이다.
+ */
 export async function PUT(req: NextRequest) {
   const ctx = reqContext(req);
-  // BR 이상 + 기본 에이전트 범위 (BIZ 기반 화면이라 다른 팀 에이전트는 애초에 대상이 아니다).
-  const guard = await requireBiz("BR");
+  // ADMIN + 기본 에이전트 범위 (BIZ 기반 화면이라 다른 팀 에이전트는 애초에 대상이 아니다).
+  const guard = await requireBiz("ADMIN");
   if (!guard.ok) {
     logger.warn("PUT /api/request-failures unauthorized", { ...ctx, status: guard.status });
     return NextResponse.json({ error: guard.error }, { status: guard.status });

@@ -3125,7 +3125,13 @@ button.tbd-row:not(:disabled):hover {
   font-size: 11px; cursor: pointer; padding: 2px 4px; border-radius: 5px;
 }
 .fm-search-clear:hover { color: var(--text); background: var(--surface-3); }
-.fm-actions { margin-left: auto; display: flex; gap: 8px; }
+.fm-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+/* 열람 전용(BR 이하) — 저장 버튼 자리에 상태만 남긴다 */
+.fm-readonly {
+  font-size: 11px; font-weight: 600; letter-spacing: .02em;
+  color: var(--text-muted); border: 1px solid var(--border);
+  background: var(--surface-2); border-radius: 999px; padding: 4px 10px;
+}
 .fm-dirty-dot {
   display: inline-block; width: 6px; height: 6px; margin-left: 7px;
   border-radius: 50%; background: #fff;
@@ -3171,6 +3177,10 @@ button.tbd-row:not(:disabled):hover {
 }
 .fm-dot:hover { border-color: var(--accent); transform: scale(1.12); }
 .fm-dot:active { transform: scale(0.9); }
+/* 열람 전용에서는 도트가 값 표시일 뿐 조작 대상이 아니다 */
+.fm-dot:disabled { cursor: default; }
+.fm-dot:disabled:hover { border-color: var(--border); transform: none; }
+.fm-dot.on:disabled:hover { border-color: var(--accent); }
 .fm-dot.on {
   border-color: transparent;
   background: linear-gradient(135deg, var(--accent), #4f46e5);
@@ -4959,6 +4969,19 @@ button.tbd-row:not(:disabled):hover {
 .ins-bar-fill { height: 100%; }
 .ins-bar-fill.ok { background: var(--ok); }
 .ins-bar-fill.fail { background: var(--err); }
+/* 주요 실패 원인 — 사유(설명)를 앞세우고 내부 코드는 보조로만 병기한다.
+   사유 문구는 기능명보다 길어 키 열을 넓히고 2줄까지 접는다(코드는 접힘 밖). */
+.ins-bars.errors .ins-bar-row { grid-template-columns: minmax(0, 1.5fr) 1fr 78px; }
+.ins-bars.errors .ins-bar-key { white-space: normal; overflow: visible; }
+.ins-bar-reason {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; line-height: 1.35;
+}
+.ins-bar-key .ins-bar-code {
+  display: block; margin-top: 2px; font-style: normal; font-size: 10px; font-weight: 600;
+  letter-spacing: .02em; color: var(--text-3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
 .ins-bar-val { text-align: right; font-variant-numeric: tabular-nums; }
 .ins-bar-val b { display: block; font-size: 14px; font-weight: 800; color: var(--text); }
 .ins-bar-val em { display: block; font-style: normal; font-size: 10.5px; color: var(--text-3); }

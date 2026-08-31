@@ -6,12 +6,17 @@ import { useAuth } from "./AuthProvider";
 import { ChangePasswordModal } from "./ChangePasswordModal";
 import { ROLE_LABEL, Role, roleAtLeast } from "@/lib/roles";
 
-/** 권한별 관리 링크 (드롭다운). min 이상만 노출. */
+/**
+ * 권한별 관리 링크 (드롭다운). min 이상만 노출.
+ * ⚠️ min 은 **화면을 볼 수 있는 최소 권한**(roles.ts ROUTE_RULES)과 같아야 한다 —
+ *    BR 은 전 화면 열람이라 리포트/개선센터/이벤트-FAB 이 보이고, 그 화면의 저장만 ADMIN 이다.
+ *    계정 관리·프로필 편집은 화면 자체가 쓰기 전용이라 ADMIN 에게만 노출한다.
+ */
 const ADMIN_LINKS: { href: string; label: string; icon: string; min: Role }[] = [
   { href: "/report", label: "실적 리포트", icon: "📋", min: "BR" },
   { href: "/improvement", label: "Improvement Center", icon: "🚀", min: "BR" },
   { href: "/event-fabs", label: "이벤트-FAB 매핑", icon: "🗂", min: "BR" },
-  { href: "/accounts", label: "계정 관리", icon: "👤", min: "BR" },
+  { href: "/accounts", label: "계정 관리", icon: "👤", min: "ADMIN" },
   { href: "/admin", label: "프로필 편집", icon: "✏️", min: "ADMIN" },
 ];
 

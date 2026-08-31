@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchEventFabMappings, saveEventFabMappings } from "@/lib/eventFabs";
-import { requireRole, requireBiz } from "@/lib/auth/current";
+import { requireBiz } from "@/lib/auth/current";
 import { logger, reqContext } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -24,11 +24,15 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(result);
 }
 
-/** 매핑 전체 저장 (전량 교체). BR 이상 권한 필요. */
+/**
+ * 매핑 전체 저장 (전량 교체). **ADMIN 전용**.
+ * ⚠️ 조회(GET)는 BR 이고 저장만 ADMIN 이다 — BR 은 전 화면 열람이되 데이터는 수정하지 못한다.
+ *    화면의 저장 버튼 비활성(event-fabs/page.tsx 의 canEdit)은 UX 일 뿐, 권위는 이 판정이다.
+ */
 export async function PUT(req: NextRequest) {
   const ctx = reqContext(req);
-  // BR 이상 + 기본 에이전트 범위 (BIZ 기반 화면이라 다른 팀 에이전트는 애초에 대상이 아니다).
-  const guard = await requireBiz("BR");
+  // ADMIN + 기본 에이전트 범위 (BIZ 기반 화면이라 다른 팀 에이전트는 애초에 대상이 아니다).
+  const guard = await requireBiz("ADMIN");
   if (!guard.ok) {
     logger.warn("PUT /api/event-fabs unauthorized", { ...ctx, status: guard.status });
     return NextResponse.json({ error: guard.error }, { status: guard.status });

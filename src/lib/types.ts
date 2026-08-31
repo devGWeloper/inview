@@ -783,6 +783,24 @@ export interface InsightsModelTimeouts {
   calls: number;
 }
 
+/**
+ * 실적 화면의 "주요 실패 원인" 한 항목.
+ *
+ * ⚠️ 대시보드의 topErrors 는 **코드(ERR_CD) 목록**이지만, 실적 화면은 개발자가 아닌 사람이 본다.
+ *    그래서 서버가 TRX_ERRMSG_COD 마스터(+ TEMP 가상 코드 라벨)로 **설명을 붙여** 내리고,
+ *    화면은 설명을 앞세우고 코드는 보조로만 쓴다. 설명이 없으면 label = code 다.
+ */
+export interface InsightsError {
+  /** 내부 에러 코드 (설명이 없을 때만 화면에 그대로 노출된다) */
+  code: string;
+  /** 사람이 읽는 사유. 마스터에 없으면 코드 그대로 */
+  label: string;
+  /** 발생 건수 */
+  count: number;
+  /** 설명이 마스터/라벨 표에 있었는가 (화면이 코드 병기 여부를 정한다) */
+  described: boolean;
+}
+
 export interface InsightsResponse {
   range: { from: string | null; to: string | null };
   /** 트레이스(=요청) 단위 합계 */
@@ -800,6 +818,8 @@ export interface InsightsResponse {
   byAction: DimensionStats[];
   /** FAB 별 실행/성공/실패 — 조직 단위 집계라 개인정보가 아니다 */
   byFac: DimensionStats[];
+  /** 주요 실패 원인 top N (사유 설명 포함). 에러가 없으면 빈 배열 */
+  topErrors: InsightsError[];
   agent: InsightsAgent;
   /** 누적 FTE 성과. CUBE 미연결이면 null */
   fte: FteStats | null;

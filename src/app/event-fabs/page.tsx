@@ -3,12 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { EventFabMapping, FAB_IDS } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { roleAtLeast } from "@/lib/roles";
 
 // 이벤트(액션) × FAB 허용 매트릭스 편집기. 저장하면 MCP DB 의 TRX_EVENT_MAP 에
 // 전량 교체로 반영되고, MCP 로직이 요청 FAB 허용 여부 판정에 사용한다.
 // 이벤트가 100개로 늘어도 견디도록: 스티키 헤더 + 내부 스크롤 + 검색 필터 +
 // 열/행 단위 일괄 토글. (스키마·MCP 연동 예시: sql/create_trx_event_map.sql)
-// 접근 제어는 미들웨어(BR 이상)가 담당한다.
+// 접근 제어: 화면 열람은 미들웨어(BR 이상), **저장은 ADMIN 전용**(PUT 이 requireBiz("ADMIN")).
+// BR 은 매트릭스를 읽기만 한다 — 아래 canEdit 가 편집 UI 를 잠근다(권위는 서버).
 
 interface EventFabApi {
   available: boolean;
@@ -33,6 +36,12 @@ function EventFabEditor() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  // 데이터 수정은 ADMIN 만. BR 이하는 같은 화면을 열람 전용으로 본다.
+  const { user } = useAuth();
+  const canEdit = !!user && roleAtLeast(user.role, "ADMIN");
+  // 편집 가능 = 권한 O + DB 연결 O. 두 사유를 나눠 두어 안내 문구가 서로를 가리지 않게 한다.
+  const editable = canEdit && available;
 
   useEffect(() => {
     let alive = true;
@@ -81,9 +90,11 @@ function EventFabEditor() {
   }, [rows, q]);
 
   function setEventId(idx: number, value: string) {
+    if (!editable) return;
     setRows((list) => list.map((r, i) => (i === idx ? { ...r, eventId: value } : r)));
   }
   function toggleFab(idx: number, fab: string) {
+    if (!editable) return;
     setRows((list) =>
       list.map((r, i) => {
         if (i !== idx) return r;
@@ -94,6 +105,7 @@ function EventFabEditor() {
   }
   /** 행 전체 토글 — 모두 켜져 있으면 비우고, 아니면 전체 선택 */
   function toggleRow(idx: number) {
+    if (!editable) return;
     setRows((list) =>
       list.map((r, i) => {
         if (i !== idx) return r;
@@ -104,6 +116,7 @@ function EventFabEditor() {
   }
   /** 열 전체 토글 — 현재 보이는(필터된) 행들만 대상으로 켜고 끈다 */
   function toggleCol(fab: string) {
+    if (!editable) return;
     const idxs = new Set(visible.map((v) => v.i));
     if (idxs.size === 0) return;
     const allOn = visible.every(({ r }) => r.fabs.includes(fab));
@@ -117,16 +130,18 @@ function EventFabEditor() {
     );
   }
   function addRow() {
+    if (!editable) return;
     setQ(""); // 필터가 걸려 있으면 새 행이 안 보이므로 해제
     setRows((list) => [...list, { eventId: "", fabs: [] }]);
   }
   function removeRow(idx: number) {
+    if (!editable) return;
     setRows((list) => list.filter((_, i) => i !== idx));
   }
 
   async function onSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!dirty || saving) return;
+    if (!dirty || saving || !editable) return;
     setSaving(true);
     setMsg(null);
     try {
@@ -184,17 +199,23 @@ function EventFabEditor() {
             )}
           </label>
           <div className="fm-actions">
-            <button type="button" className="btn ghost" onClick={addRow} disabled={!available}>+ 이벤트</button>
-            <button type="submit" className="btn primary" disabled={!dirty || saving || !available}>
-              {saving ? "저장 중…" : "저장"}
-              {dirty && !saving && <span className="fm-dirty-dot" aria-label="저장되지 않은 변경 있음" />}
-            </button>
+            {canEdit ? (
+              <>
+                <button type="button" className="btn ghost" onClick={addRow} disabled={!editable}>+ 이벤트</button>
+                <button type="submit" className="btn primary" disabled={!dirty || saving || !editable}>
+                  {saving ? "저장 중…" : "저장"}
+                  {dirty && !saving && <span className="fm-dirty-dot" aria-label="저장되지 않은 변경 있음" />}
+                </button>
+              </>
+            ) : (
+              <span className="fm-readonly" title="매핑 수정은 운영자(ADMIN)만 할 수 있습니다">열람 전용</span>
+            )}
           </div>
         </div>
 
         {!available && (
           <div className="dash-banner err">
-            MCP DB 미연결 — 조회/저장 불가{reason ? ` (${reason})` : ""}
+            MCP DB 미연결 — 조회{canEdit ? "/저장" : ""} 불가{reason ? ` (${reason})` : ""}
           </div>
         )}
         {msg && <div className={`dash-banner ${msg.kind === "ok" ? "loading" : "err"}`}>{msg.text}</div>}
@@ -210,7 +231,7 @@ function EventFabEditor() {
                     className={hoverCol === fab ? "hl" : undefined}
                     onClick={() => toggleCol(fab)}
                     onMouseEnter={() => setHoverCol(fab)}
-                    title={`${fab} 열 전체 토글`}
+                    title={editable ? `${fab} 열 전체 토글` : fab}
                   >
                     {fab}
                   </th>
@@ -223,7 +244,9 @@ function EventFabEditor() {
                 <tr>
                   <td className="fm-empty" colSpan={fabColumns.length + 2}>
                     {rows.length === 0 ? (
-                      <>아직 매핑이 없습니다 — <button type="button" className="fm-empty-add" onClick={addRow} disabled={!available}>이벤트 추가</button></>
+                      canEdit
+                        ? <>아직 매핑이 없습니다 — <button type="button" className="fm-empty-add" onClick={addRow} disabled={!editable}>이벤트 추가</button></>
+                        : <>아직 매핑이 없습니다.</>
                     ) : (
                       <>“{q}” 에 해당하는 이벤트가 없습니다.</>
                     )}
@@ -241,8 +264,9 @@ function EventFabEditor() {
                         onChange={(e) => setEventId(i, e.target.value)}
                         placeholder="ACTION_TYP"
                         aria-label="이벤트 (ACTION_TYP)"
-                        autoFocus={r.eventId === "" && i === rows.length - 1}
+                        autoFocus={editable && r.eventId === "" && i === rows.length - 1}
                         spellCheck={false}
+                        readOnly={!editable}
                       />
                       {r.fabs.length === 0 && <span className="fm-zero" title="허용 FAB 이 없으면 저장할 수 없습니다">팹 없음</span>}
                     </div>
@@ -259,6 +283,7 @@ function EventFabEditor() {
                           type="button"
                           className={"fm-dot" + (on ? " on" : "")}
                           onClick={() => toggleFab(i, fab)}
+                          disabled={!editable}
                           aria-pressed={on}
                           aria-label={`${r.eventId || "이벤트"} — ${fab} 허용`}
                         />
@@ -266,8 +291,12 @@ function EventFabEditor() {
                     );
                   })}
                   <td className="fm-td-ops">
-                    <button type="button" className="fm-op" onClick={() => toggleRow(i)} title="행 전체 토글">▦</button>
-                    <button type="button" className="fm-op del" onClick={() => removeRow(i)} title="행 삭제">✕</button>
+                    {editable && (
+                      <>
+                        <button type="button" className="fm-op" onClick={() => toggleRow(i)} title="행 전체 토글">▦</button>
+                        <button type="button" className="fm-op del" onClick={() => removeRow(i)} title="행 삭제">✕</button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}

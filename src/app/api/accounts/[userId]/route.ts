@@ -8,14 +8,14 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * 계정 수정 (BR 이상).
+ * 계정 수정 (ADMIN).
  * - ADMIN 대상·ADMIN 승격은 ADMIN 만 (권한 상향 방지)
  * - 대상이 자기 에이전트 범위 밖이면 404 취급(존재를 알리지 않는다)
  * - 소속 에이전트/전역 변경은 전역 운영자만 (범위 상향 방지)
  */
 export async function PUT(req: NextRequest, { params }: { params: { userId: string } }) {
   const ctx = reqContext(req);
-  const guard = await requireRole("BR");
+  const guard = await requireRole("ADMIN");
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
   const actorIsAdmin = roleAtLeast(guard.session.role, "ADMIN");
   const scope = resolveScope(guard.session);
@@ -28,7 +28,7 @@ export async function PUT(req: NextRequest, { params }: { params: { userId: stri
     if (!canActOnAccount(scope, target)) {
       return NextResponse.json({ error: "존재하지 않는 계정입니다." }, { status: 404 });
     }
-    // BR 은 운영자(ADMIN) 계정을 건드릴 수 없다.
+    // 잔여 방어: ADMIN 미만은 운영자(ADMIN) 계정을 건드릴 수 없다.
     if (target.role === "ADMIN" && !actorIsAdmin) {
       return NextResponse.json({ error: "운영자 계정은 운영자만 수정할 수 있습니다." }, { status: 403 });
     }
@@ -39,7 +39,7 @@ export async function PUT(req: NextRequest, { params }: { params: { userId: stri
     if (typeof body.work === "string" || body.work === null) input.work = body.work;
     if (body.role !== undefined) {
       if (!isRole(body.role)) return NextResponse.json({ error: "권한 값이 올바르지 않습니다." }, { status: 400 });
-      // BR 은 ADMIN 으로 승격시킬 수 없다.
+      // 잔여 방어: ADMIN 미만은 ADMIN 으로 승격시킬 수 없다.
       if (body.role === "ADMIN" && !actorIsAdmin) {
         return NextResponse.json({ error: "운영자(ADMIN) 권한은 운영자만 부여할 수 있습니다." }, { status: 403 });
       }
@@ -89,10 +89,10 @@ export async function PUT(req: NextRequest, { params }: { params: { userId: stri
   }
 }
 
-/** 계정 삭제 (BR 이상). ADMIN 대상은 ADMIN 만. */
+/** 계정 삭제 (ADMIN). */
 export async function DELETE(req: NextRequest, { params }: { params: { userId: string } }) {
   const ctx = reqContext(req);
-  const guard = await requireRole("BR");
+  const guard = await requireRole("ADMIN");
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
   const actorIsAdmin = roleAtLeast(guard.session.role, "ADMIN");
   const scope = resolveScope(guard.session);

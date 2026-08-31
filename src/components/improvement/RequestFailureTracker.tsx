@@ -11,10 +11,15 @@ import {
 } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 import { humanText } from "@/lib/humanText";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { roleAtLeast } from "@/lib/roles";
 
 // Improvement Center 의 첫 모듈. 에이전트가 라우팅/LLM 단계에서 처리하지 못하고 튕긴
 // "실패 요청"(ACTION_TYP IS NULL AND RECV_MSG_CTN IS NOT NULL)을 좌측 리스트로 훑고,
 // 우측에서 원본 요청·사용자 요청 흐름을 보며 조치 상태(미조치→조치중→조치완료/무시)를 남긴다.
+//
+// ⚠️ 조회는 BR 이상, **조치 저장은 ADMIN 전용**이다(PUT 이 requireBiz("ADMIN")). BR 은 같은
+//    화면을 열람 전용으로 본다 — 아래 canEdit 가 조치 폼을 잠근다(권위는 서버 판정).
 
 const STATUS_LABEL: Record<FailureStatus, string> = Object.fromEntries(
   FAILURE_STATUSES.map((s) => [s.key, s.label])
@@ -70,6 +75,10 @@ export function RequestFailureTracker() {
   const [errMap, setErrMap] = useState<Record<string, string>>({});
   // 목록 로드 실패 사유 (세션 만료·권한 등) — 빈 목록과 구분해 보여준다
   const [loadErr, setLoadErr] = useState<string | null>(null);
+
+  // 조치 저장은 ADMIN 만. BR 이하는 같은 화면을 열람 전용으로 본다.
+  const { user } = useAuth();
+  const canEdit = !!user && roleAtLeast(user.role, "ADMIN");
 
   const load = useCallback(async (rk: RangeKey) => {
     setLoading(true);
@@ -148,7 +157,7 @@ export function RequestFailureTracker() {
           실패 요청을 조회할 수 없습니다{data.reason ? ` — ${data.reason}` : ""}
         </div>
       )}
-      {data && data.available && !data.triageAvailable && (
+      {data && data.available && canEdit && !data.triageAvailable && (
         <div className="dash-banner warn">
           조치 정보 테이블(TRX_REQ_FAILURE_INF)이 아직 없어 <b>조치 저장이 비활성화</b>됩니다.
           목록/흐름 조회는 정상입니다. (sql/create_trx_req_failure_inf.sql 실행 필요)
@@ -248,6 +257,7 @@ export function RequestFailureTracker() {
               item={selectedItem}
               errMap={errMap}
               triageAvailable={!!data?.triageAvailable}
+              canEdit={canEdit}
               onSaved={(patch) => applyTriage(selectedItem.traceId, patch)}
             />
           ) : (
@@ -304,11 +314,14 @@ function StatusChip({
 
 // ── 상세 + 조치 + 사용자 흐름 ────────────────────────────────────────────────
 function FailureDetail({
-  item, errMap, triageAvailable, onSaved,
+  item, errMap, triageAvailable, canEdit, onSaved,
 }: {
   item: RequestFailure;
   errMap: Record<string, string>;
+  /** 조치 테이블(TRX_REQ_FAILURE_INF)이 존재하는가 */
   triageAvailable: boolean;
+  /** 조치를 남길 권한이 있는가 (ADMIN). BR 이하는 열람 전용 */
+  canEdit: boolean;
   onSaved: (patch: Partial<RequestFailure>) => void;
 }) {
   const [status, setStatus] = useState<FailureStatus>(item.status);
@@ -319,9 +332,11 @@ function FailureDetail({
   const [copied, setCopied] = useState(false);
 
   const dirty = status !== item.status || note !== (item.note ?? "") || handler !== (item.handler ?? "");
+  // 저장 가능 = 권한 O + 테이블 O. 두 사유를 나눠 두어 안내가 서로를 가리지 않게 한다.
+  const canTriage = triageAvailable && canEdit;
 
   async function onSave() {
-    if (saving || !triageAvailable) return;
+    if (saving || !canTriage) return;
     setSaving(true);
     setMsg(null);
     try {
@@ -411,7 +426,7 @@ function FailureDetail({
               type="button"
               className={"rft-seg-btn " + s.key + (status === s.key ? " active" : "")}
               onClick={() => setStatus(s.key)}
-              disabled={!triageAvailable}
+              disabled={!canTriage}
               role="radio"
               aria-checked={status === s.key}
               title={s.hint}
@@ -424,9 +439,9 @@ function FailureDetail({
           className="rft-note"
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="원인 · 정정/조치 내용을 남겨주세요."
+          placeholder={canEdit ? "원인 · 정정/조치 내용을 남겨주세요." : "기록된 조치 내용이 없습니다."}
           rows={3}
-          disabled={!triageAvailable}
+          disabled={!canTriage}
         />
         <div className="rft-triage-actions">
           <input
@@ -435,18 +450,22 @@ function FailureDetail({
             onChange={(e) => setHandler(e.target.value)}
             placeholder="담당자"
             aria-label="담당자"
-            disabled={!triageAvailable}
-            title="로그인 도입 시 로그인 계정으로 자동 기록됩니다"
+            disabled={!canTriage}
+            title="비워 두면 로그인 계정(사번)으로 자동 기록됩니다"
           />
-          <button
-            type="button"
-            className="btn primary"
-            onClick={onSave}
-            disabled={!triageAvailable || !dirty || saving}
-          >
-            {saving ? "저장 중…" : "조치 저장"}
-            {dirty && !saving && triageAvailable && <span className="rft-dirty-dot" />}
-          </button>
+          {canEdit ? (
+            <button
+              type="button"
+              className="btn primary"
+              onClick={onSave}
+              disabled={!canTriage || !dirty || saving}
+            >
+              {saving ? "저장 중…" : "조치 저장"}
+              {dirty && !saving && canTriage && <span className="rft-dirty-dot" />}
+            </button>
+          ) : (
+            <span className="fm-readonly" title="조치 기록은 운영자(ADMIN)만 남길 수 있습니다">열람 전용</span>
+          )}
         </div>
         {msg && <div className={`rft-triage-msg ${msg.kind}`}>{msg.text}</div>}
       </div>

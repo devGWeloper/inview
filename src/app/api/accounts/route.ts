@@ -9,12 +9,14 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * 계정 목록 (BR 이상).
+ * 계정 목록 (ADMIN).
+ * ⚠️ 계정 관리는 쓰기 영역이라 통째로 ADMIN 전용이다 — BR 은 목록도 보지 않는다.
+ *    (아래 actorIsAdmin 분기들은 이제 항상 참이지만, min 을 다시 낮출 때를 위한 방어로 남긴다)
  * ⚠️ 자기 범위 밖 계정은 **아예 내리지 않는다** — 에이전트 운영자에게 다른 팀 명단이
  *    보이면 안 되고, 어차피 수정/삭제도 403 이라 목록에만 남기면 혼란만 준다.
  */
 export async function GET(_req: NextRequest) {
-  const guard = await requireRole("BR");
+  const guard = await requireRole("ADMIN");
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   const scope = resolveScope(guard.session);
@@ -30,15 +32,15 @@ export async function GET(_req: NextRequest) {
 }
 
 /**
- * 계정 생성 (BR 이상).
+ * 계정 생성 (ADMIN).
  * - 초기 비밀번호 = 사번(USER_ID). ⚠️ TEMP: 최초 로그인 강제 변경은 임시로 뺐다(CLAUDE.md TEMP 절).
- * - 권한 상향 방지: ADMIN 계정은 ADMIN 만 생성할 수 있다(BR 은 BR/DEV 만).
+ * - 권한 상향 방지(잔여 방어): ADMIN 계정은 ADMIN 만 생성할 수 있다.
  * - 범위 상향 방지: 에이전트 운영자는 **자기 에이전트 소속으로만** 만들 수 있고,
  *   전역 계정은 전역 운영자만 만든다.
  */
 export async function POST(req: NextRequest) {
   const ctx = reqContext(req);
-  const guard = await requireRole("BR");
+  const guard = await requireRole("ADMIN");
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
   const scope = resolveScope(guard.session);
   const actorIsAdmin = roleAtLeast(guard.session.role, "ADMIN");

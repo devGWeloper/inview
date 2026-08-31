@@ -25,6 +25,14 @@ export const ACTION_FAIL_RULES = [
   { action: "AutoQual 실행", phrase: "AutoQual 실행 실패", code: "FAIL_AQ_RUN" },
 ] as const;
 
+/**
+ * 가상 코드 → 사람이 읽는 라벨. TRX_ERRMSG_COD 에 없는 코드라 마스터로는 설명이 안 붙는다.
+ * 실적 화면(/insights)의 "주요 실패 원인" 이 코드 대신 이 문구를 보여준다.
+ */
+export const ACTION_FAIL_LABELS: Record<string, string> = Object.fromEntries(
+  ACTION_FAIL_RULES.map((r) => [r.code, `${r.action} 실패`])
+);
+
 /** FTE 집계(monthlyActionSuccess)에서 성공 제외용으로 쓰는 실패 문구 목록 */
 export const ACTION_FAIL_PHRASES: readonly string[] = ACTION_FAIL_RULES.map((r) => r.phrase);
 

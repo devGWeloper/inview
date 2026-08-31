@@ -3,6 +3,12 @@
 //
 //   ADMIN(운영자) > BR(상위 권한자) > DEV(개발자/일반 READ) > FIELD(일반 사용자)
 //
+// **BR = 전 화면 열람 · 데이터 수정 불가.** 실적(/insights)·Timeout 을 포함해 모든 조회 화면을
+// 볼 수 있지만 쓰기(프로필 편집 · 계정 관리 · 이벤트-FAB 저장 · 조치정보 저장)는 전부 ADMIN 이다.
+// ⚠️ 그래서 **쓰기 경로를 ROUTE_RULES 에 BR 로 두지 말 것** — 쓰기는 API 의 requireRole("ADMIN")
+//    / requireBiz("ADMIN") / requireAgentAdmin() 이 막고, ROUTE_RULES 는 '화면을 볼 수 있나' 만 정한다.
+//    (읽기·쓰기가 한 화면에 섞이면 화면은 BR 로 열고 그 화면의 PUT 만 ADMIN 으로 올린다)
+//
 // FIELD(일반 사용자)는 **개발자가 아닌 실사용/실적 열람자**다. 원문 메시지(JSON envelope), 다른
 // 사용자의 요청/질의, 에러 코드 같은 내부 정보를 보면 안 되고 집계된 실적만 본다.
 //
@@ -38,7 +44,7 @@ export const ROLE_LABEL: Record<Role, string> = {
 /** 권한 선택 UI 등에서 쓰는 짧은 설명 */
 export const ROLE_DESC: Record<Role, string> = {
   ADMIN: "전체 관리 · 계정/프로필 편집",
-  BR: "리포트 · 개선센터 · 이벤트-FAB 열람/편집",
+  BR: "전 화면 열람 (데이터 수정 불가)",
   DEV: "Traces · Dashboard · Tokens · Agent 조회",
   FIELD: "실적 요약만 열람 (메시지 원문 · 타 사용자 정보 비노출)",
 };
@@ -64,19 +70,18 @@ export interface RouteRule {
 }
 
 export const ROUTE_RULES: RouteRule[] = [
-  // 운영자 전용
-  { prefix: "/admin", min: "ADMIN" }, // 프로필 편집
+  // 운영자 전용 — **쓰기가 목적인 화면/API**. 조회만 하는 화면을 여기 두지 말 것.
+  { prefix: "/admin", min: "ADMIN" }, // 프로필 편집 (편집 전용 화면)
   // public/ 정적 파일이지만 middleware matcher 가 .html 을 제외하지 않아 여기 규칙이 걸린다.
   { prefix: "/design-preview.html", min: "ADMIN" }, // 레이아웃 개편 시안 뷰어 (검토용)
-  // 타임아웃 추적 — 노드 귀속이 추정값이라 오해 소지가 있어 운영자만 본다
-  { prefix: "/timeouts", min: "ADMIN" },
-  { prefix: "/api/timeouts", min: "ADMIN" },
-  // BR 이상
-  { prefix: "/accounts", min: "BR" }, // 계정 관리 화면 (등록 권한 ADMIN/BR)
-  { prefix: "/api/accounts", min: "BR" }, // 계정 CRUD API
-  { prefix: "/report", min: "BR" }, // 실적 리포트
-  { prefix: "/improvement", min: "BR" }, // Improvement Center
-  { prefix: "/event-fabs", min: "BR" }, // 이벤트-FAB 매핑
+  { prefix: "/accounts", min: "ADMIN" }, // 계정 관리 (등록/수정/삭제/비번초기화)
+  { prefix: "/api/accounts", min: "ADMIN" }, // 계정 CRUD API
+  // BR 이상 — **열람용**. 이 화면들의 쓰기(PUT)는 라우트가 따로 ADMIN 을 요구한다.
+  { prefix: "/timeouts", min: "BR" }, // 타임아웃 추적 (조회 전용)
+  { prefix: "/api/timeouts", min: "BR" },
+  { prefix: "/report", min: "BR" }, // 실적 리포트 (조회 전용)
+  { prefix: "/improvement", min: "BR" }, // Improvement Center — 조치 저장 PUT 은 ADMIN
+  { prefix: "/event-fabs", min: "BR" }, // 이벤트-FAB 매핑 — 저장 PUT 은 ADMIN
 ];
 
 /** 해당 경로에 필요한 최소 권한. 규칙에 없으면 null(= 인증만 되면 접근 가능). */
@@ -96,8 +101,8 @@ export function requiredRoleForPath(pathname: string): Role | null {
 //
 // 열려 있는 것:
 //   /insights      집계 실적 화면 (원문 · 사용자 ID · 에러 코드 없음)
-//                  ⚠️ 이 둘은 위 canViewInsights() 가 한 번 더 좁힌다 — 일반 사용자와
-//                     **전역 운영자**만 열 수 있다(BR·DEV·에이전트 ADMIN 은 못 본다).
+//                  ⚠️ 이 둘은 아래 canViewInsights() 가 한 번 더 좁힌다 — 일반 사용자와
+//                     BR 이상만 열 수 있다(DEV 는 못 본다 — Dashboard 로 같은 수치를 더 자세히 본다).
 //   /api/insights  그 화면의 유일한 데이터 소스 (서버가 필드를 화이트리스트로 추림)
 //   /agent         에이전트 소개 카드 + FTE (공개용 프로필)
 //   /api/profile   위 카드의 데이터 (GET 만 — PUT 은 requireAgentAdmin 이 따로 막는다)
@@ -120,14 +125,17 @@ export function isFieldAllowedPath(pathname: string): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 실적 화면(/insights) — 일반 사용자 본인 + **전역 운영자**만.
+// 실적 화면(/insights) — 일반 사용자 본인 + **BR 이상**.
 //
-// 일반 사용자에게 보여주는 화면이므로, 그 위 권한이 전부 볼 필요는 없다. 다만 운영자는
-// "일반 사용자에게 무엇이 보이는가" 를 확인할 수 있어야 하므로 **전역 ADMIN 에게만** 연다.
-// (별도 미리보기를 만들면 두 화면이 어긋나므로 같은 화면을 함께 본다)
+// 일반 사용자에게 보여주는 화면이지만, 관리자·상위 권한자는 "일반 사용자에게 무엇이 보이는가"
+// 를 같은 화면으로 확인할 수 있어야 한다(별도 미리보기를 만들면 두 화면이 어긋난다).
 //
-// ⚠️ BR·DEV·에이전트 ADMIN 은 못 본다 — 이들은 Dashboard/Report 로 같은 수치를 더 자세히 본다.
-//    그래서 이 판정만은 role 서열이 아니라 **role + 전역 여부**를 함께 본다.
+// ⚠️ DEV 만 못 본다 — 개발자는 Dashboard 로 같은 수치를 더 자세히 본다. 그래서 이 판정은
+//    ROUTE_RULES(서열, fail-open)에 못 싣는다: 규칙에 없으면 통과라 DEV 까지 열리기 때문이다.
+//    여기서 role 을 직접 보고, canAccessPath() 가 다른 규칙보다 **먼저** 이 판정을 쓴다.
+//
+// ⚠️ 예전에는 "일반 사용자 + 전역 ADMIN" 이라 전역 여부까지 봤다. BR 이 전 화면 열람이 되면서
+//    그 조건은 사라졌다 — /insights 는 BIZ 경로라 비기본 에이전트 소속은 requireBiz 가 막는다.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const INSIGHTS_PREFIXES = ["/insights", "/api/insights"];
@@ -136,21 +144,20 @@ export function isInsightsPath(pathname: string): boolean {
   return INSIGHTS_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
-/** 실적 화면을 볼 수 있는가. `global` 은 계정의 전역 여부(AgentScope.global). */
-export function canViewInsights(role: Role, global: boolean): boolean {
-  if (role === "FIELD") return true;       // 이 화면의 주인
-  return role === "ADMIN" && global;       // 전역 운영자만 함께 본다
+/** 실적 화면을 볼 수 있는가. 일반 사용자(주인) + BR 이상. */
+export function canViewInsights(role: Role): boolean {
+  if (role === "FIELD") return true;        // 이 화면의 주인
+  return roleAtLeast(role, "BR");           // BR · ADMIN 은 함께 본다 (DEV 제외)
 }
 
 /**
  * 이 권한으로 이 경로에 들어갈 수 있는가 — 경로 인가의 **단일 판정 지점**.
  * 미들웨어(실제 차단)와 TabNav(메뉴 노출)가 같은 답을 쓰도록 한 곳으로 모은다.
  *
- * ⚠️ `global` 은 /insights 판정에만 쓰인다. 기본값이 false 라 넘기는 것을 잊으면
- *    운영자에게 탭이 안 보이는 쪽으로 틀린다 — 열리는 쪽으로 틀리지 않게 한 기본값이다.
+ * 판정 순서: 실적 화면(role 직접 판정) → 일반 사용자 허용 목록(fail-closed) → 서열(ROUTE_RULES).
  */
-export function canAccessPath(role: Role, pathname: string, global: boolean = false): boolean {
-  if (isInsightsPath(pathname)) return canViewInsights(role, global);
+export function canAccessPath(role: Role, pathname: string): boolean {
+  if (isInsightsPath(pathname)) return canViewInsights(role);
   if (role === "FIELD") return isFieldAllowedPath(pathname); // allow-list (fail-closed)
   const min = requiredRoleForPath(pathname);
   return !min || roleAtLeast(role, min);

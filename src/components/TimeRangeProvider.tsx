@@ -26,7 +26,7 @@ export const RANGE_PRESETS: { key: RangePreset; label: string; hours: number }[]
   { key: "30d", label: "30D", hours: 720 },
 ];
 
-/** '직접 설정' 버튼 문구 — 앱의 다른 기간 UI(/report, /insights)와 같은 표기. */
+/** '직접 설정' 버튼 문구 — 앱의 다른 기간 UI(/insights 등)와 같은 표기. */
 export const CUSTOM_LABEL = "직접 설정";
 
 /** 공유 기본값. 두 탭이 한 상태를 쓰므로 기본도 하나여야 한다. */

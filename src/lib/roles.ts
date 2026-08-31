@@ -79,7 +79,6 @@ export const ROUTE_RULES: RouteRule[] = [
   // BR 이상 — **열람용**. 이 화면들의 쓰기(PUT)는 라우트가 따로 ADMIN 을 요구한다.
   { prefix: "/timeouts", min: "BR" }, // 타임아웃 추적 (조회 전용)
   { prefix: "/api/timeouts", min: "BR" },
-  { prefix: "/report", min: "BR" }, // 실적 리포트 (조회 전용)
   { prefix: "/improvement", min: "BR" }, // Improvement Center — 조치 저장 PUT 은 ADMIN
   { prefix: "/event-fabs", min: "BR" }, // 이벤트-FAB 매핑 — 저장 PUT 은 ADMIN
 ];
@@ -246,7 +245,6 @@ const BIZ_PREFIXES = [
   "/dashboard",
   "/insights",   // 일반 사용자 실적 화면 — 집계 대상이 BIZ_AIACTIONTXN_HIS 라 기본 에이전트 전용
   "/api/insights",
-  "/report",
   "/improvement",
   "/event-fabs",
   "/api/traces",

@@ -33,8 +33,6 @@ export default async function AgentPage({
   const profile = readProfile(agentId);
   const fteStats = isDefault ? await computeFteStats(profile) : null;
   const session = await getSession();
-  // 리포트는 BIZ 기반이라 기본 에이전트에서만 의미가 있다.
-  const canReport = isDefault && session ? roleAtLeast(session.role, "BR") : false;
   const canAdmin = session ? roleAtLeast(session.role, "ADMIN") : false;
   const adminHref = isDefault ? "/admin" : `/admin?agent=${encodeURIComponent(agentId)}`;
 
@@ -46,20 +44,12 @@ export default async function AgentPage({
             <div className="agent-page-title">Agent Profile</div>
             <div className="agent-page-sub">우리 팀의 AI 에이전트, {profile.name}</div>
           </div>
-          {(canReport || canAdmin) && (
+          {canAdmin && (
             <div className="agent-page-actions">
-              {canReport && (
-                <Link href="/report" className="agent-action primary" prefetch={false}>
-                  <span className="agent-action-ico" aria-hidden>📋</span>
-                  실적 리포트
-                </Link>
-              )}
-              {canAdmin && (
-                <Link href={adminHref} className="agent-action" prefetch={false}>
-                  <span className="agent-action-ico" aria-hidden>⚙️</span>
-                  관리자 편집
-                </Link>
-              )}
+              <Link href={adminHref} className="agent-action" prefetch={false}>
+                <span className="agent-action-ico" aria-hidden>⚙️</span>
+                관리자 편집
+              </Link>
             </div>
           )}
         </div>

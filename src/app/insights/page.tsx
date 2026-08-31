@@ -10,6 +10,7 @@ import { TokenChart } from "@/components/TokenChart";
 import { TokenLatencyChart, fmtDuration } from "@/components/TokenLatencyChart";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
+import { buildInsightsReport } from "@/lib/insightsReport";
 import { InsightsResponse, ROUTING_FAIL_LABEL } from "@/lib/types";
 
 /**
@@ -32,13 +33,13 @@ import { InsightsResponse, ROUTING_FAIL_LABEL } from "@/lib/types";
 // 기간 선택은 두 갈래다.
 //  ① 최근 구간 — "지금까지" 를 본다 (오늘 / 최근 7일 / 최근 30일 / 이번 달)
 //  ② 주간      — **월~일 한 주를 통째로** 본다. 이번 주/지난주는 버튼 한 번, 그 이전은 ◀ 로
-//                계속 거슬러 올라간다 (몇 주 전이든). /report 의 기간 이동과 같은 조작이다.
+//                계속 거슬러 올라간다 (몇 주 전이든).
 // ⚠️ "최근 7일"(오늘 포함 7일, 창이 매일 밀림)과 "지난주"(고정된 월~일)는 다른 구간이다.
 //    주 단위 보고는 ②를 써야 매주 같은 기준으로 비교된다.
 type RecentKey = "today" | "7d" | "30d" | "month";
 
 /**
- * 선택 상태. week 의 offset 은 `/report` 와 **같은 부호** — 0 = 이번 주, -1 = 지난주, -2 = 2주 전 …
+ * 선택 상태. week 의 offset 은 0 = 이번 주, -1 = 지난주, -2 = 2주 전 …
  * custom 의 from/to 는 `datetime-local` 문자열("YYYY-MM-DDTHH:mm") 그대로다.
  */
 type Sel =
@@ -55,7 +56,7 @@ const RECENT_PRESETS: { key: RecentKey; label: string }[] = [
 
 const DAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
 
-/** 주 뱃지 — /report 의 periodBadge(week) 와 같은 문구 */
+/** 주 뱃지 */
 function weekBadge(offset: number): string {
   if (offset === 0) return "이번 주";
   if (offset === -1) return "지난주";
@@ -76,7 +77,7 @@ function isoNoTz(d: Date): string {
 }
 
 /**
- * offset 주의 [월요일 00:00, 다음 월요일 00:00) — /report 의 weekRange() 와 **같은 정의·같은 부호**.
+ * offset 주의 [월요일 00:00, 다음 월요일 00:00).
  * ⚠️ 두 화면이 "지난주" 를 다르게 자르면 같은 주인데 숫자가 갈린다. 정의를 바꾸려면 양쪽 다.
  */
 function weekRange(offset: number): { from: Date; to: Date } {
@@ -165,6 +166,11 @@ export default function InsightsPage() {
   const [data, setData] = useState<InsightsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // 리포트 복사 — 복사 직후 2초간 버튼 문구를 바꿔 성공을 알린다.
+  const [copied, setCopied] = useState(false);
+  // 미리보기는 **기본 접힘**이다. 항상 펼쳐 두면 화면 끝에 텍스트 덩어리가 붙어
+  // 실적을 훑는 흐름을 끊는다 — 내용을 확인하고 싶을 때만 연다.
+  const [showPreview, setShowPreview] = useState(false);
 
   const load = useCallback(async (p: Sel) => {
     setLoading(true);
@@ -209,7 +215,7 @@ export default function InsightsPage() {
 
   // 일별 표는 하루짜리 조회에선 KPI 와 동어반복이라 2일 이상일 때만 노출한다.
   const showDaily = daily.length > 1;
-  // /report 와 같은 표 = 같은 병합 규칙. 토큰 열은 tokens 가 없으면 자연히 0("-")이 된다.
+  // 표와 리포트 텍스트가 **같은 행**을 공유한다. 토큰 열은 tokens 가 없으면 자연히 0("-")이 된다.
   const dailyRows = useMemo(() => mergeDailyRows(data, tokens), [data, tokens]);
   const maxAction = useMemo(
     () => Math.max(1, ...byAction.map((a) => a.total)),
@@ -221,6 +227,35 @@ export default function InsightsPage() {
     () => Math.max(1, ...topErrors.map((e) => e.count)),
     [topErrors]
   );
+
+  // 보고용 텍스트 — 화면에 그린 것과 **같은 데이터·같은 라벨**로 조립한다.
+  const reportText = useMemo(
+    () => (data ? buildInsightsReport({ data, rangeLabel: rangeLabel(sel), dailyRows, actionLabel }) : ""),
+    [data, sel, dailyRows]
+  );
+
+  async function copyReport() {
+    if (!reportText) return;
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(reportText);
+      ok = true;
+    } catch {
+      // 사내 배포가 HTTP 라 clipboard API 가 막히는 경우가 있다 — 구형 경로로 폴백.
+      const ta = document.createElement("textarea");
+      ta.value = reportText;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { ok = document.execCommand("copy"); } catch { ok = false; }
+      document.body.removeChild(ta);
+    }
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }
 
   // 모델별 현황 — 토큰(사용량·속도)과 타임아웃(끊김)을 모델 키로 합쳐 한 표로 읽는다.
   const modelRows = useMemo(() => {
@@ -298,7 +333,7 @@ export default function InsightsPage() {
               </button>
             </div>
             {/* 주 단위 이동 — 월~일 한 주를 통째로 본다. ◀ 로 몇 주 전이든 거슬러 올라가고
-                ▶ 는 이번 주에서 멈춘다(미래는 볼 것이 없다). /report 의 기간 이동과 같은 조작.
+                ▶ 는 이번 주에서 멈춘다(미래는 볼 것이 없다).
                 ⚠️ 이번 주/지난주 버튼을 따로 두지 않는다 — 화살표가 그 역할을 겸한다. */}
             <div className="week-nav" role="group" aria-label="주 이동">
               <button type="button" onClick={() => goWeek(weekOffset - 1)} aria-label="이전 주">
@@ -336,6 +371,15 @@ export default function InsightsPage() {
             </form>
           )}
           <div className="ins-range" title="조회 구간">{rangeLabel(sel)}</div>
+          <button
+            type="button"
+            className={"btn primary copy-btn" + (copied ? " copied" : "")}
+            onClick={() => void copyReport()}
+            disabled={!data}
+            title="이 화면의 실적을 보고용 텍스트로 복사합니다"
+          >
+            {copied ? "✓ 복사됨" : "📋 리포트 복사"}
+          </button>
           <button type="button" className="btn ghost" onClick={() => void load(sel)}>
             새로고침
           </button>
@@ -547,6 +591,34 @@ export default function InsightsPage() {
                 </div>
               )}
             </Card>
+          </div>
+
+          {/* ═══ 리포트 미리보기 ═════════════════════════════════════
+              복사될 텍스트 전문. 기본은 접혀 있고, 무엇이 복사되는지 확인하고 싶을 때만 연다.
+              ⚠️ 복사 버튼(툴바)과 **같은 reportText** 를 쓴다 — 두 벌로 만들면 어긋난다. */}
+          <div className="ins-report">
+            <button
+              type="button"
+              className={"ins-report-toggle" + (showPreview ? " open" : "")}
+              onClick={() => setShowPreview((v) => !v)}
+              aria-expanded={showPreview}
+            >
+              <span className="ins-report-caret" aria-hidden>▸</span>
+              <span>리포트 미리보기</span>
+              <span className="ins-report-hint">복사될 텍스트 전문</span>
+            </button>
+            {showPreview && (
+              <div className="ins-report-body">
+                <pre className="ins-report-text">{reportText}</pre>
+                <button
+                  type="button"
+                  className={"btn primary copy-btn" + (copied ? " copied" : "")}
+                  onClick={() => void copyReport()}
+                >
+                  {copied ? "✓ 복사됨" : "📋 리포트 복사"}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -111,7 +111,7 @@ For layers that make multiple downstream calls in one trace (e.g. GAIA → MCP t
   기본 에이전트로 스냅백**한다 — 숨긴 화면에 남의 에이전트 컨텍스트가 걸린 상태를 만들지 않는다.
   스냅백 effect 의 deps 는 **`[pathname]` 뿐**이다(agentId 를 넣으면 셀렉터로 고른 직후 되돌아간다).
 - **BIZ_AIACTIONTXN_HIS 기반 화면은 전부 기본 에이전트 전용**이다 — Traces / Dashboard /
-  `/report` / `/improvement` / `/event-fabs`. 경로 목록은 `roles.ts` 의 `isBizPath()` 단일 소스이고,
+  `/improvement` / `/event-fabs`. 경로 목록은 `roles.ts` 의 `isBizPath()` 단일 소스이고,
   ⚠️ **서버에서 막는다**: 각 API 가 `requireBiz()` 로 판정하고(권위), 미들웨어는 세션의
   `bizAllowed` 클레임으로 화면을 `/tokens` 로 되돌린다(UX). 예전엔 클라이언트 스냅백뿐이라
   **URL 을 직접 치면 그대로 열렸다**.
@@ -255,7 +255,7 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
     붙어 있을 뿐). 대신 **영향 질문**(`affectedTraces` = 실패 호출이 있는 고유 TRACE_ID 수)을 둔다:
     사용자 체감 피해량은 호출 수가 아니라 "질문 몇 개가 깨졌나" 다. 개별 대기시간은 목록의 `대기` 열에서 본다.
   - **조회 범위 = 기간 + 노드 + 모델 (전부 서버 필터)**. 기간은 24H/7D/30D 프리셋 + **직접 설정**
-    (`datetime-local` 2개, `/report` 의 `custom-range` 패턴 재사용). 노드/모델은 `DimCard` 행 클릭으로
+    (`datetime-local` 2개, 공용 `custom-range` 패턴). 노드/모델은 `DimCard` 행 클릭으로
     걸리고(둘 다 클릭 가능, 조합 가능) 상단 `to-scope` 칩으로 해제한다 — **노드별·모델별 추이**를 보는 수단이
     이것이다(KPI·차트·분포·목록이 한꺼번에 좁혀진다). 차트 카드 부제에 현재 범위를 적어 무엇의 추이인지 밝힌다.
   - 추이 차트는 `TimeoutTrendChart` (`src/components/TimeoutTrendChart.tsx`) — 대시보드/Tokens 탭과 **같은
@@ -294,16 +294,15 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
 - **화면**: `/agent`(서버 컴포넌트, `ProfileCard` + `WorkShowcase`), 대시보드 상단 `ProfileStrip`(클라이언트), `/admin`(비밀번호 게이트 후 편집 폼, 업무 순서 드래그앤드롭). 사진은 `public/` 에 올리고 `avatarImage` 에 `/파일명` 지정(없거나 로드 실패 시 `avatar` 이모지로 폴백, `AgentAvatar`).
 - **FTE 성과 지표**: `src/lib/fte.ts` `computeFteStats(profile)` 가 **실데이터로 계산**한다. `db.ts.monthlyActionSuccess()` 가 2026-01-01~현재 '액션 성공' 수를 **월별·액션별**로 집계: 성공 판정(에러 없고 CUBE RESP 에 실패 문구 — `ACTION_FAIL_PHRASES`: 'Seasoning 실패'/'AutoQual 취소 실패'/'AutoQual 실행 실패' — 없는 트레이스)·월 귀속(첫 recv)은 **CUBE DB**, 액션 구분은 `ACTION_TYP`(`NEST_Seasoning`/`AutoQual_Abort`/`AutoQual_JobCreate`)을 기록하는 **GAIA DB**(`/api/action-types` 와 동일)에서 조회해 TRACE_ID 로 JS 조인. 연간 FTE `= Σ(액션별 성공 수 × 액션별 환산 분) ÷ 연간 분`, 월별은 환산 분 합 기준 ×12 연환산. **계산식은 프로필 필드로 커스터마이즈**: `fteActionMinutes`(ACTION_TYP→분 목록, 기본 NEST_Seasoning=5·AutoQual_Abort=5·AutoQual_JobCreate=5), `fteDefaultMinutes`(목록에 없는 액션·ACTION_TYP 미상, 기본 5), `fteAnnualMinutes`(기본 65,984) — `/admin` "성과 지표 (FTE)" 섹션에서 편집, `normalizeProfile` 이 잘못된 값을 보정하고 구버전 `fteMinutesPerCase` 는 `fteDefaultMinutes` 로 마이그레이션한다 (수동 폴백 `fte`/`fteNote` 필드는 **제거됨** — CUBE 미연결이면 카드는 `—` + 안내 문구). FTE 1 = 1인·1년. GAIA 미연결이면 전 트레이스가 기본 분으로 계산된다(무해). 차트(`FteChart`)는 최근 12개월만 노출. **위 TEMPORARY WORKAROUND 의 `ACTION_FAIL_PHRASES` 에 의존**(원복 시 5번 항목 참고).
 
-### 실적 리포트 — `/report`
+### 일별 브레이크다운 · 사용자 수 (`/api/stats` · `/api/insights` 공용)
 
-관리자가 매주 수기로 옮겨 적던 실적을 원클릭 복사로 대체하는 종합 리포트 화면. `/agent` 페이지 헤드의 "📋 실적 리포트" 버튼(`agent-action` 스타일 — 관리자 편집 버튼과 한 쌍)으로 진입.
+> ⚠️ 예전에 있던 **`/report`(실적 리포트) 전용 화면은 삭제됐다** — `/insights` 와 내용이 겹쳐
+> 화면 둘을 유지할 이유가 없었다. 그 화면의 유일한 고유 기능이던 **"리포트 복사"** 는
+> `/insights` 로 옮겼다(아래 "일반 사용자(FIELD) 권한" 절의 *리포트 복사* 참고).
+> 함께 사라진 것: 일간 모드(오늘/어제 프리셋, ◀▶ 일 단위 이동)와 리포트 텍스트의
+> [Top 사용자]·[AREA별]·[노드별 토큰] 세 섹션(사번·내부 노드명이라 `/insights` 응답에 없다).
 
-- **접근 제어**: **미들웨어가 인가(BR 이상)** — `/report` 는 `ROUTE_RULES` 로 BR+ 로 막힌다(아래 "인증/인가" 참고). 페이지는 세션 쿠키로 인증된 상태로만 마운트되므로 데이터 fetch 도 정상 진행. (구 `AdminGate` sessionStorage 게이트는 제거됨.)
-- **기간**: 기본 주 단위 — **월요일 00:00 ~ 다음주 월요일 00:00** (`weekRange()`). **일간 모드**(`dayRange()`, 자정~다음날 자정)도 지원: 오늘/어제/이번 주/지난주 프리셋 + ◀▶ 로 현재 단위(일/주) 기준 기간 이동(미래는 비활성). "직접 설정" 모드에서 `datetime-local` 로 시각까지 자유 지정.
-- **데이터**: 적용 기간으로 `GET /api/stats` + `GET /api/tokens` 를 병렬 호출 (필터 없음 = FullScope). 보조로 `/api/profile`(리포트 제목의 에이전트 이름)과 `/api/error-codes`(에러 의미)도 로드하며 실패해도 무해.
-- **일별 브레이크다운**: 주간/기간 조회에서도 하루 단위 실적이 바로 보이도록 `/api/stats` 가 `daily: DailyStat[]` 을 항상 내린다 — buckets 와 별개로 **항상 "일" 단위**(귀속 기준은 buckets 와 동일한 트레이스 시작 시각), 빈 날은 0, `to` 상한 경계는 `-1ms` 로 마지막 빈 날 방지. `DailyStat` = date/total/ok/fail/pending/**users**(그날의 대표 사용자 distinct — Set 이 필요해 서버에서만 집계 가능)/avgCubeLatencyMs. 리포트의 `mergeDailyRows()` 가 여기에 토큰(`tok.buckets` 를 날짜별 합산)을 붙여, **"일별 현황" 표**(`DailyTable` — 실행 상대 바 + peak 배지 + 토/일 색 + 합계 행, KPI 바로 아래)와 복사 텍스트의 **`[일별 현황]`** 섹션이 같은 행을 공유한다. 둘 다 **2일 이상 조회일 때만** 노출(하루짜리는 KPI 와 동어반복).
-- **화면 구성**: ① Action Agent 실적 — KPI 5칸(총 실행/성공률/실패/평균 응답시간/**사용자 수**), 일별 현황 표(위 참고), 사용 추이(`TimeSeriesChart`), 평균 응답 속도(`CubeLatencyChart`), 상태 분포+주요 에러, 액션 타입별+주간 사용자(`TopList`), FAC별/AREA별 ② LLM 토큰 — `TokenStatsCards`/`TokenChart`/`TokenLatencyChart` + **노드별 구분**(`TokenBreakdown`, action 외 judge/setup_guide 노드 실적 분리 — 리포트에선 필터 없이 조회 전용) ③ 리포트 텍스트 미리보기(`<pre>`) — 복사될 내용 그대로 노출. 기존 대시보드/Tokens 탭 컴포넌트를 그대로 재사용한다.
-- **전체 복사**: `buildReportText()` 가 두 응답을 보고용 플레인 텍스트로 조립(일별 현황, 액션별 성공/실패, 주요 에러+의미, Top 사용자, FAC/AREA top5, 노드별/모델별 토큰) → `navigator.clipboard.writeText` (실패 시 textarea+`execCommand` 폴백) → 버튼이 2초간 "✓ 복사됨" 으로 바뀜.
+- **일별 브레이크다운**: 주간/기간 조회에서도 하루 단위 실적이 바로 보이도록 `/api/stats` 가 `daily: DailyStat[]` 을 항상 내린다 — buckets 와 별개로 **항상 "일" 단위**(귀속 기준은 buckets 와 동일한 트레이스 시작 시각), 빈 날은 0, `to` 상한 경계는 `-1ms` 로 마지막 빈 날 방지. `DailyStat` = date/total/ok/fail/pending/**users**(그날의 대표 사용자 distinct — Set 이 필요해 서버에서만 집계 가능)/avgCubeLatencyMs. `mergeDailyRows()` 가 여기에 토큰(`tok.buckets` 를 날짜별 합산)을 붙여, **"일별 현황" 표**(`DailyTable`)와 리포트 복사 텍스트의 **`[일별 현황]`** 섹션이 같은 행을 공유한다. 둘 다 **2일 이상 조회일 때만** 노출(하루짜리는 KPI 와 동어반복).
 - **사용자 수**: `/api/stats` 가 `uniqueUsers`(optional 필드) 를 함께 내린다 — "기간 내 몇 명이 사용했나". 정의: 트레이스별 **대표 사용자의 distinct 수** (한 사용자가 100번 요청해도 1명). 대표 사용자는 `traceUserId()` 가 **진입 레이어(CUBE) 우선**으로 첫 non-null `USER_ID` 를 고르고 공백을 trim 한다 — USER_ID 는 전 레이어가 INSERT 시 기록하므로 행 순서대로 집으면 하위 레이어의 시스템 계정 값이 섞여 부풀 수 있어서다. `topUsers` 도 같은 대표 사용자 기준.
 
 ### 이벤트-FAB 매핑 — `/event-fabs` (⚠️ MCP DB — 앱 자체 DB 아님)
@@ -336,7 +335,7 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
 두 축은 직교한다: "전역 ADMIN"은 모든 에이전트를 오가며 관리하고, "에이전트 ADMIN"은 **자기 에이전트 안에서만** ADMIN 이다. 기존 하드코딩 `ADMIN_PASSWORD`/`AdminGate`(sessionStorage 게이트)는 **완전히 제거**되고 세션 기반 인증으로 대체됐다.
 
 - ⚠️ **BR = 전 화면 열람 · 데이터 수정 불가.** 실적(`/insights`)·Timeout 을 포함해 **모든 조회 화면**을 보되 쓰기는 하나도 못 한다. 그래서 **읽기·쓰기가 한 화면에 섞이면 화면(ROUTE_RULES)은 BR 로 열고 그 화면의 PUT 만 ADMIN 으로 올린다** — 쓰기 경로를 `ROUTE_RULES` 에 BR 로 두지 말 것. 현재 BR 이 못 가는 곳은 **쓰기 전용 화면**뿐이다: `/admin`(프로필 편집) · `/accounts`(계정 관리).
-- **권한 단일 소스 `src/lib/roles.ts`** (클라이언트·Edge 미들웨어·서버 공용 — Node 전용 모듈 import 금지). `Role`, `ROLE_LABEL`, `roleAtLeast(role,min)`, 그리고 **경로→최소권한 매핑 `ROUTE_RULES`**(`requiredRoleForPath`). 접근 범위가 바뀌면 여기만 고친다. 현재: `/admin`·`/accounts`·`/api/accounts`=ADMIN, `/timeouts`·`/api/timeouts`·`/report`·`/improvement`·`/event-fabs`=BR, 그 외=인증만 되면 DEV. **계정 관리는 ADMIN 전용**(목록도 BR 에게 안 보인다) — API 의 권한 상향 방지 가드(`actorIsAdmin` 분기)는 이제 항상 참이지만 min 을 다시 낮출 때를 위한 **잔여 방어**로 남겨 뒀다.
+- **권한 단일 소스 `src/lib/roles.ts`** (클라이언트·Edge 미들웨어·서버 공용 — Node 전용 모듈 import 금지). `Role`, `ROLE_LABEL`, `roleAtLeast(role,min)`, 그리고 **경로→최소권한 매핑 `ROUTE_RULES`**(`requiredRoleForPath`). 접근 범위가 바뀌면 여기만 고친다. 현재: `/admin`·`/accounts`·`/api/accounts`=ADMIN, `/timeouts`·`/api/timeouts`·`/improvement`·`/event-fabs`=BR, 그 외=인증만 되면 DEV. **계정 관리는 ADMIN 전용**(목록도 BR 에게 안 보인다) — API 의 권한 상향 방지 가드(`actorIsAdmin` 분기)는 이제 항상 참이지만 min 을 다시 낮출 때를 위한 **잔여 방어**로 남겨 뒀다.
 - ⚠️ **경로 인가의 진입점은 `canAccessPath(role, pathname)` 하나다** (미들웨어의 실제 차단과 `TabNav` 의 탭 노출이 같은 함수를 쓴다 — 예전처럼 탭별 `minRole` 목록을 따로 두면 `ROUTE_RULES` 와 두 벌이 되어 "메뉴엔 보이는데 누르면 403" 이 생긴다). 내부에서 FIELD 는 서열이 아니라 **허용 목록**으로 갈린다 (아래 절). ⚠️ 예전 3번째 인자 `global` 은 `/insights` 가 "전역 ADMIN 만" 이던 시절의 것으로 **제거됐다**.
 - **계정 저장소 `TRX_USER_MAS`** (`sql/create_trx_user_mas.sql`, **앱 자체 DB=GAIA 에서만 1회 실행**, ADM 소유 + GRANT + PUBLIC SYNONYM — 다른 앱 테이블과 동일 패턴). 컬럼: USER_ID(사번,PK)/USER_NM/WORK_CTN(업무)/ROLE_CD/PWD_HASH/PWD_SALT/USE_YN/MUST_CHG_YN/**AGENT_ID**/**GLOBAL_YN**/LAST_LOGIN_DT/감사일시. `src/lib/users.ts` 가 CRUD·로그인검증·시드를 담당(lazy-`oracledb`-swallow, DB 불가 시 `available=false`).
   - **에이전트 범위 = `GLOBAL_YN` + `AGENT_ID`** (`sql/migrations/2026-08-24_add_user_agent_id.sql`
@@ -389,7 +388,7 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
 - **클라이언트**: `AuthProvider`(`/api/auth/me` 컨텍스트, `useAuth()`) → `AppChrome`(상단바/푸터 셸, `/login` 은 셸 없이 전체화면) → `UserMenu`(계정 칩+드롭다운, 권한별 관리 링크·비번변경·로그아웃). 기존 mutation 클라이언트 fetch 들은 `x-admin-password` 헤더를 떼고 **세션 쿠키 자동 전송**에 의존(401/403 시 안내 문구).
 - **화면**: `/login`(브랜드 히어로+폼 스플릿), `/accounts`(계정 목록·생성/수정/비번초기화/삭제, 권한 3택 카드), `/403`. `/agent` 헤더의 리포트/관리자 버튼은 서버에서 세션 권한으로 조건부 노출.
 - **기존 PUT 게이트 교체**: `/api/profile`=대상 에이전트의 ADMIN(`requireAgentAdmin`),
-  `/api/event-fabs`=BR+BIZ, `/api/request-failures`=BR+BIZ (`requireBiz("BR")`). `/admin`·`/report`·`/event-fabs`·`/improvement` 페이지의 `AdminGate` 래퍼 제거(미들웨어가 인가). **삭제된 파일**: `src/components/AdminGate.tsx`, `src/lib/adminAuth.ts` (⚠️ 사내 복붙 배포는 삭제가 전파 안 되니 그쪽 레포에서도 지울 것 — memory `deploy-copy-paste-sync`).
+  `/api/event-fabs`=BR+BIZ, `/api/request-failures`=BR+BIZ (`requireBiz("BR")`). `/admin`·`/event-fabs`·`/improvement` 페이지의 `AdminGate` 래퍼 제거(미들웨어가 인가). **삭제된 파일**: `src/components/AdminGate.tsx`, `src/lib/adminAuth.ts` (⚠️ 사내 복붙 배포는 삭제가 전파 안 되니 그쪽 레포에서도 지울 것 — memory `deploy-copy-paste-sync`).
 
 ### 일반 사용자(FIELD) 권한 — 실적 화면 `/insights` 하나만 (⚠️ allow-list)
 
@@ -417,8 +416,7 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
   이라, 그대로 `enumerateBucketStarts` 에 넘기면 그 경계가 속한 버킷이 하나 더 붙어 **끝에 항상 0 인
   칸**이 생긴다 — 8/3~8/10(월~월) 조회가 8칸으로 그려지고 마지막 8/10 이 0 이라 차트가 뚝 떨어졌다.
   `to - 1ms` 로 끊는다(`daily` 가 이미 쓰던 방식 — 두 배열의 끝 날짜가 어긋났던 것도 이 때문이다).
-  `to`=now 인 프리셋은 now 와 now-1ms 가 같은 버킷이라 영향이 없다. **`/report` 주간 모드의 같은
-  증상도 이 수정으로 함께 사라진다** (집계가 한 곳이라).
+  `to`=now 인 프리셋은 now 와 now-1ms 가 같은 버킷이라 영향이 없다.
 - **집계는 공유, 응답은 분리** — 대시보드 집계 계산을 라우트에서 끌어내 `src/lib/stats.ts`
   `computeStats()` 로 옮겼다(`/api/stats` 는 이제 파싱+인가만). 집계 규칙이 두 벌이 되면 같은
   기간인데 두 화면의 숫자가 갈리기 때문이다. **다른 건 응답 모양뿐이다**:
@@ -448,13 +446,12 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
 - **화면 `/insights`** (`src/app/insights/page.tsx`, `ins-*`): 기간 선택은 세 갈래다 —
   ① 최근 구간(오늘/최근 7일/최근 30일/이번 달, 끝은 항상 '지금') ② **`◀ ▶` 주 이동**(월~일 한 주를
   통째로, 몇 주 전이든 거슬러 올라간다. `▶` 는 이번 주에서 멈춘다) ③ **Custom**(`datetime-local` 2개,
-  `/report` 의 `custom-range` 패턴 재사용 — 적용 버튼을 눌러야 조회된다).
+  공용 `custom-range` 패턴 — 적용 버튼을 눌러야 조회된다).
   ⚠️ 주간은 **화살표 하나로만** 조작한다 — `이번 주`/`지난주` 버튼을 따로 두면 화살표와 두 벌이 되고,
   고정 프리셋만 있으면 그 이전 주는 볼 방법이 없다.
   상태는 `Sel = {kind:"recent",key} | {kind:"week",offset} | {kind:"custom",from,to}` 이고
-  **offset 부호는 `/report` 와 같다**(0 = 이번 주, -1 = 지난주). `weekRange(offset)` 도 `/report` 의
-  것과 **같은 정의**(월요일 00:00 ~ 다음 월요일 00:00)이며 정의를 바꾸면 양쪽을 같이 고쳐야 한다
-  (두 화면이 "지난주" 를 다르게 자르면 숫자가 갈린다). ⚠️ **지나간 주의 상한을 '지금' 으로 줄이지 말 것**
+  **offset 은 0 = 이번 주, -1 = 지난주**다. `weekRange(offset)` 은 월요일 00:00 ~ 다음 월요일 00:00.
+  ⚠️ **지나간 주의 상한을 '지금' 으로 줄이지 말 것**
   — 매번 다른 구간이 되어 비교가 깨진다. 아직 끝나지 않은 이번 주만 줄인다.
   ⚠️ **Custom 의 상한만은 배타 처리(-1ms)를 하지 않는다** — 사용자가 찍은 시각이라 8/10 을 골랐는데
   라벨이 8/9 로 나오면 "왜 하루가 빠지냐" 가 된다. 툴바 우측 `ins-range`
@@ -468,9 +465,24 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
   기능 코드는 `ACTION_LABEL` 로 한글 표기(시즈닝/AutoQual 실행·취소), 모르는 값은 원문 그대로.
   ⚠️ 카드를 혼자 한 줄에 두면 **가로만 길고 안이 비어 보인다**(FTE 추이가 그랬다) — 조밀하지 않은
   카드는 `.ins-grid-2`(auto-fit minmax 380px, 좁으면 1열)로 짝지어 둘 것.
-- **일별 현황 표는 `/report` 와 공유한다** (`src/components/DailyTable.tsx` — `DailyRow` ·
-  `mergeDailyRows` · `DailyTable`). 원래 `report/page.tsx` 안에 있던 것을 뺐다: 두 벌로 두면 한쪽만
-  고쳐져 같은 기간인데 다른 표가 된다. 일반 사용자 화면은 `labelAction={actionLabel}` 로 기능 코드만 한글로 바꾼다.
+- **리포트 복사** (`src/lib/insightsReport.ts` `buildInsightsReport()`) — 매주 수기로 옮겨 적던 실적을
+  원클릭 복사로 대체한다. 삭제된 `/report` 화면에서 옮겨 온 유일한 기능이다.
+  ⚠️ **입력은 `InsightsResponse` 하나뿐이다** — 다른 API 를 끌어오면 "화면에 보이는 것 = 복사되는 것"
+  관계가 깨지고, 일반 사용자 세션에는 애초에 없는 데이터(사번·내부 노드명·AREA)를 리포트에만 싣게 된다.
+  `/report` 의 [Top 사용자]·[AREA별]·[노드별 토큰] 이 사라진 이유가 이것이다.
+  ⚠️ 라벨도 **화면과 같은 것**을 쓴다 — 기능은 `actionLabel`, 실패 사유는 `topErrors[].label`(코드 아님).
+  일별 현황은 화면 표와 **같은 `DailyRow[]`** 를 넘긴다.
+  섹션 순서: 헤더 → [업무 실적] → [일별 현황](2일 이상) → [기능별 실적] → [주요 실패 원인] →
+  [FAB별 TOP] → [AI 운영 현황] → [모델별] → [타임아웃].
+  **버튼은 전 권한에 노출**한다(일반 사용자 포함) — 화면에 이미 보이는 숫자를 텍스트로 바꿔 줄 뿐이라
+  새로 노출되는 정보가 없다. 복사는 `navigator.clipboard` → 실패 시 textarea + `execCommand` 폴백
+  (사내 배포가 HTTP 라 clipboard API 가 막히는 경우가 있다), 성공 시 2초간 `.copy-btn.copied`.
+  ⚠️ 미리보기(`ins-report-*`)는 **기본 접힘**이고 툴바 버튼과 **같은 `reportText`** 를 쓴다 —
+  항상 펼쳐 두면 화면 끝에 텍스트 덩어리가 붙어 실적을 훑는 흐름이 끊기고, 텍스트를 두 벌로
+  만들면 미리보기와 실제 복사본이 어긋난다.
+- **일별 현황 표는 화면과 리포트 텍스트가 공유한다** (`src/components/DailyTable.tsx` — `DailyRow` ·
+  `mergeDailyRows` · `DailyTable`). 원래 (지금은 삭제된) `report/page.tsx` 안에 있던 것을 뺐다: 두 벌로
+  두면 한쪽만 고쳐져 표와 복사본이 어긋난다. 화면은 `labelAction={actionLabel}` 로 기능 코드만 한글로 바꾼다.
   ⚠️ **실적이 없는 날(`tr.empty`)은 한 줄로 얇게 그린다**(패딩·글자 축소) — 30일 조회에선 빈 날이
   표의 절반을 넘어, 데이터 있는 날과 같은 높이를 주면 스크롤만 길어지고 정작 볼 날이 안 보인다.
   ⚠️ 행 자체를 빼지는 말 것 — 날짜가 건너뛰면 "조회가 덜 됐나" 로 읽히고, 연속된 공백이 보이는

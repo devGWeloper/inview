@@ -3263,15 +3263,6 @@ button.tbd-row:not(:disabled):hover {
   box-shadow: 0 5px 14px rgba(37, 99, 235, 0.4);
 }
 
-.report-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-
-.report-week-badge {
-  display: inline-block; margin-left: 8px; padding: 2px 8px;
-  border-radius: 999px; font-size: 11.5px; font-weight: 700;
-  background: var(--accent-soft); color: var(--accent);
-  vertical-align: 1px;
-}
-
 .week-nav {
   display: inline-flex; align-items: center; gap: 2px;
   background: var(--surface); border: 1px solid var(--border);
@@ -3291,27 +3282,12 @@ button.tbd-row:not(:disabled):hover {
 
 .custom-range .btn { padding: 6px 14px; }
 
+/* 리포트 복사 버튼 (/insights) — 복사 성공 시 2초간 초록으로 바뀐다 */
 .copy-btn { white-space: nowrap; }
 .copy-btn.copied {
   background: var(--ok); border-color: var(--ok);
   color: #fff;
 }
-
-/* 섹션 구분 헤더 (1. Action Agent / 2. LLM 토큰) */
-.report-h {
-  display: flex; align-items: baseline; gap: 10px;
-  margin-top: 10px; padding: 4px 2px 0;
-  border-top: 2px solid var(--border-strong);
-}
-.report-h:first-of-type { border-top: none; margin-top: 0; }
-.report-h-num {
-  display: inline-grid; place-items: center; align-self: center;
-  width: 24px; height: 24px; border-radius: 7px;
-  background: var(--accent); color: #fff;
-  font-size: 13px; font-weight: 800; font-family: var(--mono);
-}
-.report-h-title { font-size: 18px; font-weight: 800; letter-spacing: -0.2px; }
-.report-h-sub { font-size: 12.5px; color: var(--text-3); }
 
 /* 일별 현황 표 — 주간/기간 조회에서 하루 단위 실적을 바로 보여준다 */
 .daily-table-wrap { overflow-x: auto; }
@@ -3407,23 +3383,6 @@ button.tbd-row:not(:disabled):hover {
 }
 /* 첫 액션 행의 액센트는 위에서 시작, 마지막 행은 아래를 살짝 남겨 묶음 느낌 */
 .daily-sub.last .daily-sub-key::before { bottom: 6px; border-radius: 0 0 2px 2px; }
-
-/* 복사 텍스트 미리보기 */
-.report-preview .dash-card-head { align-items: center; }
-.report-preview-text {
-  margin: 0; padding: 14px 16px;
-  background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: 10px;
-  font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
-  color: var(--text-2);
-  white-space: pre-wrap; word-break: break-all;
-  max-height: 420px; overflow-y: auto;
-}
-
-.report-footer {
-  display: flex; gap: 8px; justify-content: flex-start;
-  padding: 4px 2px 16px;
-}
 
 /* ============================================================================
    Improvement Center  (/improvement)  —  ic-* shell,  rft-* Request Failure Tracker
@@ -5000,6 +4959,30 @@ button.tbd-row:not(:disabled):hover {
 .ins-table tr.sat td:first-child { color: var(--accent); }
 .ins-table tr.sun td:first-child { color: var(--err); }
 .ins-table tbody tr:hover td { background: var(--surface-2, #f8fafc); }
+
+/* ── 리포트 미리보기 (접이식) ────────────────────────────────────────────────
+   화면 맨 아래에 붙는 부속이라 카드(.dash-card)보다 톤을 낮춘다. 기본은 접힘 —
+   펼쳤을 때만 복사될 텍스트 전문이 나온다. */
+.ins-report { border-top: 1px dashed var(--border-strong); padding-top: 14px; }
+.ins-report-toggle {
+  display: flex; align-items: center; gap: 8px;
+  border: 0; background: transparent; cursor: pointer;
+  padding: 6px 2px; color: var(--text-2);
+  font-size: 13px; font-weight: 700;
+}
+.ins-report-toggle:hover { color: var(--text); }
+.ins-report-caret { display: inline-block; transition: transform .12s; font-size: 11px; color: var(--text-3); }
+.ins-report-toggle.open .ins-report-caret { transform: rotate(90deg); }
+.ins-report-hint { font-size: 11.5px; font-weight: 500; color: var(--text-3); }
+.ins-report-body { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding-top: 8px; }
+.ins-report-text {
+  margin: 0; padding: 14px 16px; width: 100%; box-sizing: border-box;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.65; color: var(--text-2);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  max-height: 420px; overflow-y: auto;
+}
 
 @media (max-width: 720px) {
   .ins-bar-row { grid-template-columns: 96px 1fr 96px; gap: 8px; }

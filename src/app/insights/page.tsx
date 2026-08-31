@@ -157,6 +157,16 @@ function actionLabel(key: string): string {
   return ACTION_LABEL[key] ?? key;
 }
 
+/**
+ * FAC_ID 는 MCP 가 send 단계에서만 기록한다 — MCP 에 닿지 못한 요청(라우팅 실패 등)은
+ * 팹을 알 수 없어 서버가 "(none)" 으로 내린다. 화면에는 그 원문 대신 '미상' 으로 적고
+ * 흐리게 둔다: 빼 버리면 합이 총 처리 건수와 안 맞아 "왜 숫자가 다르냐" 가 된다.
+ */
+const FAC_NONE = "(none)";
+function facLabel(key: string): string {
+  return key === FAC_NONE ? "미상" : key;
+}
+
 export default function InsightsPage() {
   const { user } = useAuth();
   const [sel, setSel] = useState<Sel>({ kind: "recent", key: "30d" });
@@ -210,6 +220,7 @@ export default function InsightsPage() {
   const daily = asArray<InsightsResponse["daily"][number]>(data?.daily);
   const byAction = asArray<InsightsResponse["byAction"][number]>(data?.byAction);
   const topErrors = asArray<InsightsResponse["topErrors"][number]>(data?.topErrors);
+  const byFac = asArray<InsightsResponse["byFac"][number]>(data?.byFac);
   const tokens = data?.tokens ?? null;
   const timeouts = data?.timeouts ?? null;
 
@@ -227,6 +238,7 @@ export default function InsightsPage() {
     () => Math.max(1, ...topErrors.map((e) => e.count)),
     [topErrors]
   );
+  const maxFac = useMemo(() => Math.max(1, ...byFac.map((f) => f.total)), [byFac]);
 
   // 보고용 텍스트 — 화면에 그린 것과 **같은 데이터·같은 라벨**로 조립한다.
   const reportText = useMemo(
@@ -479,10 +491,35 @@ export default function InsightsPage() {
             </Card>
           </div>
 
-          {/* 절감 효과 추이 — 12개월 막대라 폭을 다 쓰는 편이 읽기 좋다 */}
-          <Card title="절감 효과 추이" sub="월별 FTE (1 FTE = 1인 1년치 업무량)">
-            {data.fte ? <FteChart stats={data.fte} /> : <div className="ins-empty">집계 준비 중입니다.</div>}
-          </Card>
+          {/* ⚠️ 절감 효과 추이는 **혼자 한 줄을 쓰면 가로만 길고 안이 비어 보인다** (실제로 두 번
+              그렇게 만들었다가 되돌렸다). 조밀하지 않은 카드는 반드시 짝을 지어 둘 것. */}
+          <div className="ins-grid-2">
+            <Card title="절감 효과 추이" sub="월별 FTE (1 FTE = 1인 1년치 업무량)">
+              {data.fte ? <FteChart stats={data.fte} /> : <div className="ins-empty">집계 준비 중입니다.</div>}
+            </Card>
+
+            <Card title="FAB별 실적" sub="어느 팹에서 얼마나 처리했나">
+              {byFac.length === 0 ? (
+                <div className="ins-empty">기간 내 처리 내역이 없습니다.</div>
+              ) : (
+                <ul className="ins-bars">
+                  {byFac.map((f) => (
+                    <li key={f.key} className={"ins-bar-row" + (f.key === FAC_NONE ? " muted" : "")}>
+                      <span className="ins-bar-key">{facLabel(f.key)}</span>
+                      <span className="ins-bar-track">
+                        <span className="ins-bar-fill ok" style={{ width: `${(f.ok / maxFac) * 100}%` }} />
+                        <span className="ins-bar-fill fail" style={{ width: `${(f.fail / maxFac) * 100}%` }} />
+                      </span>
+                      <span className="ins-bar-val">
+                        <b>{f.total.toLocaleString()}</b>
+                        <em>성공 {f.ok.toLocaleString()} · 실패 {f.fail.toLocaleString()}</em>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          </div>
 
           {/* ═══ ② AI 운영 현황 ════════════════════════════════════ */}
           <div className="ins-sep">

@@ -16,7 +16,7 @@ import { useAgentScope } from "@/components/agents/AgentScopeProvider";
  * 감춘다 — TabNav 가 같은 이유로 탭을 감추는데 여기만 남기면 "메뉴엔 보이는데 누르면 튀긴다" 가 된다.
  */
 const ADMIN_LINKS: { href: string; label: string; icon: string; min: Role; biz?: true }[] = [
-  { href: "/improvement", label: "Improvement Center", icon: "🚀", min: "BR", biz: true },
+  { href: "/improvement", label: "Improvement Center", icon: "🚀", min: "DEV", biz: true },
   { href: "/event-fabs", label: "이벤트-FAB 매핑", icon: "🗂", min: "BR", biz: true },
   { href: "/accounts", label: "계정 관리", icon: "👤", min: "ADMIN" },
   { href: "/admin", label: "프로필 편집", icon: "✏️", min: "ADMIN" },

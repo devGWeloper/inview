@@ -36,9 +36,10 @@ export async function GET(req: NextRequest) {
   //    400(알 수 없는 id) 판정 **뒤**, DB 조회 **앞**에 둔다 —
   //    "그런 에이전트는 없다" 와 "네 것이 아니다" 는 다른 답이고,
   //    권한 밖 요청은 커넥션을 열기 전에 끊는다.
-  // 조회 전용 화면이지만 BR 이상만 본다 (ROUTE_RULES 와 같은 최소 권한을 서버에서도 명시 —
-  // 미들웨어 리다이렉트에만 기대면 URL 을 직접 친 요청이 그대로 통과한다).
-  const guard = await requireAgent(agentId, "BR");
+  // 조회 전용 화면이라 DEV(개발자) 부터 본다 — LLM 타임아웃을 파는 건 개발자다.
+  // (requireAgent 의 기본 min 이 DEV 이므로 min 을 넘기지 않는다. ROUTE_RULES 의
+  //  /api/timeouts = DEV 와 같은 판정이다.)
+  const guard = await requireAgent(agentId);
   if (!guard.ok) {
     logger.warn("GET /api/timeouts agent scope denied", { ...ctx, want: agentId, status: guard.status });
     return NextResponse.json({ error: guard.error }, { status: guard.status });

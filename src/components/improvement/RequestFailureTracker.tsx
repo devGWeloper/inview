@@ -18,7 +18,7 @@ import { roleAtLeast } from "@/lib/roles";
 // "실패 요청"(ACTION_TYP IS NULL AND RECV_MSG_CTN IS NOT NULL)을 좌측 리스트로 훑고,
 // 우측에서 원본 요청·사용자 요청 흐름을 보며 조치 상태(미조치→조치중→조치완료/무시)를 남긴다.
 //
-// ⚠️ 조회는 BR 이상, **조치 저장은 ADMIN 전용**이다(PUT 이 requireBiz("ADMIN")). BR 은 같은
+// ⚠️ 조회는 DEV 이상, **조치 저장은 ADMIN 전용**이다(PUT 이 requireBiz("ADMIN")). DEV·BR 은 같은
 //    화면을 열람 전용으로 본다 — 아래 canEdit 가 조치 폼을 잠근다(권위는 서버 판정).
 
 const STATUS_LABEL: Record<FailureStatus, string> = Object.fromEntries(
@@ -76,7 +76,7 @@ export function RequestFailureTracker() {
   // 목록 로드 실패 사유 (세션 만료·권한 등) — 빈 목록과 구분해 보여준다
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
-  // 조치 저장은 ADMIN 만. BR 이하는 같은 화면을 열람 전용으로 본다.
+  // 조치 저장은 ADMIN 만. BR·DEV 는 같은 화면을 열람 전용으로 본다.
   const { user } = useAuth();
   const canEdit = !!user && roleAtLeast(user.role, "ADMIN");
 
@@ -320,7 +320,7 @@ function FailureDetail({
   errMap: Record<string, string>;
   /** 조치 테이블(TRX_REQ_FAILURE_INF)이 존재하는가 */
   triageAvailable: boolean;
-  /** 조치를 남길 권한이 있는가 (ADMIN). BR 이하는 열람 전용 */
+  /** 조치를 남길 권한이 있는가 (ADMIN). BR·DEV 는 열람 전용 */
   canEdit: boolean;
   onSaved: (patch: Partial<RequestFailure>) => void;
 }) {

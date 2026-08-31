@@ -224,7 +224,7 @@ The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTI
   - 기존 USER/NODE/MODEL 필터는 그대로 적용된다(`reloadWith()` 가 현재 모드에 맞는 쪽을 다시 조회).
   - **1TICK 이 아닐 때 Tokens 탭은 기존 경로 그대로다** — 기존 화면 로직은 바뀌지 않았다.
 
-### Timeout 탭 — `/timeouts` (ADMIN 전용)
+### Timeout 탭 — `/timeouts` (DEV 이상)
 
 LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에러 한 줄" 로 뭉뚱그려져
 얼마나 심한지·어디서 나는지가 안 보였다. 그래서 타임아웃 전용 화면을 뒀다.
@@ -268,8 +268,9 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
     `QuestionsTable` 의 `qfilter-row`/`qft-*`/`qth-sort`/`qpager` 스타일을 그대로 재사용한다.
     ⚠️ 이건 서버가 내려준 최근 `ITEM_LIMIT`(200)건 안에서 좁히는 **클라이언트 필터**다 — 전체 기간을
     다시 집계하려면 위의 서버 필터(기간/노드/모델)를 쓴다.
-- **접근 권한 = BR 이상**(조회 전용 화면) — `ROUTE_RULES` 에 `/timeouts`, `/api/timeouts` 를 BR 로 등록하고
-  `/api/timeouts` 도 `requireAgent(agentId, "BR")` 로 서버에서 다시 막는다(미들웨어 리다이렉트는 UX).
+- **접근 권한 = DEV 이상**(조회 전용 화면) — LLM 타임아웃을 파는 건 개발자라 BR 에서 내렸다.
+  `ROUTE_RULES` 에 `/timeouts`, `/api/timeouts` 를 DEV 로 등록하고
+  `/api/timeouts` 도 `requireAgent(agentId)`(기본 min = DEV)로 서버에서 다시 막는다(미들웨어 리다이렉트는 UX).
   탭 노출은 `TabNav` 가 `canAccessPath()` 로 판정한다.
 
 ### Oracle integration notes
@@ -318,11 +319,11 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
 
 ### Improvement Center — `/improvement` (⚠️ 앱 자체 DB = GAIA)
 
-**TraceX > Improvement Center > Request Failure Tracker**. Improvement Center 는 AI 에이전트 개선 허브(**확장 가능한 플랫폼 셸**)이고, Request Failure Tracker 는 그 **첫 모듈**이다. 앞으로 개선 모듈이 이 센터에 더 붙는 구조 — `src/app/improvement/page.tsx` 의 `MODULES` 배열에 `{ key, name, tagline, icon, Component }` 한 줄 추가하면 좌측 레일에 붙는다(`PLANNED` 는 로드맵 표시용, 클릭 불가). 진입은 `/admin` 헤더의 "🚀 Improvement Center" 버튼(또는 유저 메뉴), **미들웨어 인가 BR 이상** 뒤(아래 "인증/인가" 참고).
+**TraceX > Improvement Center > Request Failure Tracker**. Improvement Center 는 AI 에이전트 개선 허브(**확장 가능한 플랫폼 셸**)이고, Request Failure Tracker 는 그 **첫 모듈**이다. 앞으로 개선 모듈이 이 센터에 더 붙는 구조 — `src/app/improvement/page.tsx` 의 `MODULES` 배열에 `{ key, name, tagline, icon, Component }` 한 줄 추가하면 좌측 레일에 붙는다(`PLANNED` 는 로드맵 표시용, 클릭 불가). 진입은 `/admin` 헤더의 "🚀 Improvement Center" 버튼(또는 유저 메뉴), **미들웨어 인가 DEV 이상** 뒤(아래 "인증/인가" 참고).
 
 - **실패 요청 정의**: 사용자 정의 그대로 — `ACTION_TYP IS NULL AND RECV_MSG_CTN IS NOT NULL ORDER BY TIMEKEY DESC`. 메시지는 받았는데 ACTION_TYP 을 못 붙인 요청 = **라우팅 실패이거나 LLM 오류로 튕긴 요청**. `ACTION_TYP` 권위 레이어가 **GAIA**(= `/api/action-types`·`monthlyActionSuccess` 와 동일)라서 이 판정은 GAIA DB 에서 한다. GAIA 는 **앱 자체 DB**(`APP_DB_LAYER`)이기도 해서 실패 요청 조회와 조치정보 저장이 **같은 DB·같은 커넥션**(`getAppDbConfig`)이다.
 - **조치정보 테이블 `TRX_REQ_FAILURE_INF`** (`sql/create_trx_req_failure_inf.sql`, **앱 자체 DB=GAIA 에서만 1회 실행**, ADM 소유 + GRANT + PUBLIC SYNONYM 패턴 — TRX_EVENT_MAP 과 동일). `TRACE_ID`(PK) / `STATUS`(open/investigating/resolved/ignored = `FAILURE_STATUSES`) / `NOTE_CTN` / `HANDLER_ID` / 감사일시. 실패 요청 원본은 BIZ 에 있고 이 테이블은 **조치 오버레이**(TRACE_ID 로 LEFT JOIN, JS 병합) — 행 없는 요청 = `open`(미조치).
-- **읽기/쓰기**: `src/lib/requestFailures.ts` → `GET/PUT /api/request-failures`(+ `GET /api/request-failures/[traceId]/context`). 실패행 조회와 조치행 조회는 **격리 실행** — `TRX_REQ_FAILURE_INF` 미생성(ORA-00942)이어도 리스트는 정상 노출되고 `triageAvailable=false` 로 저장만 막는다(lazy-`oracledb`-swallow, `available=false + reason` 안내). 저장은 `TRACE_ID` 기준 **MERGE upsert**(autoCommit). ⚠️ **목록/컨텍스트 조회는 BR, 조치 저장(PUT)은 ADMIN** — `requireBiz("ADMIN")`. 화면도 `canEdit`(ADMIN)이 false 면 조치 세그먼트·메모·담당자·저장이 잠기고 "열람 전용" 배지가 뜬다(권위는 서버).
+- **읽기/쓰기**: `src/lib/requestFailures.ts` → `GET/PUT /api/request-failures`(+ `GET /api/request-failures/[traceId]/context`). 실패행 조회와 조치행 조회는 **격리 실행** — `TRX_REQ_FAILURE_INF` 미생성(ORA-00942)이어도 리스트는 정상 노출되고 `triageAvailable=false` 로 저장만 막는다(lazy-`oracledb`-swallow, `available=false + reason` 안내). 저장은 `TRACE_ID` 기준 **MERGE upsert**(autoCommit). ⚠️ **목록/컨텍스트 조회는 DEV, 조치 저장(PUT)은 ADMIN** — `requireBiz("ADMIN")`. 화면도 `canEdit`(ADMIN)이 false 면 조치 세그먼트·메모·담당자·저장이 잠기고 "열람 전용" 배지가 뜬다(권위는 서버).
 - **사용자 대화 흐름**(`fetchRequestFailureContext`): 선택한 실패 요청의 `USER_ID`·수신시각을 찾고, 같은 사용자가 **±12h** 낸 요청을 TRACE_ID 단위(GROUP BY)로 묶어 시간순으로 내린다. `ACTION_TYP` 없는 요청은 `isFailure` 로 표시 — "무엇을 시도하다 어디서 튕겼나" 를 관리자가 읽게 한다. 화면은 **채팅 로그**다: 턴마다 Q(우측 말풍선) → A(좌측 말풍선)를 시간순으로 쌓고, 문제의 그 요청만 "이 요청" 배지+액센트 링으로 집어준다. **레이어별 JSON 전문(`TraceTimeline`)은 여기 쓰지 않는다** — 이 화면은 비즈니스 관점(무엇을 묻고 무엇을 받았나)이고 envelope 디버깅은 Traces 화면의 일이다. 말풍선은 `pre-wrap`+`overflow-wrap:anywhere` 로 접혀 좁은 분할 패널에서도 밀리지 않는다(고정 다단·`@container` 레이아웃을 두지 않는 이유 — `@container` 는 `.panel-body` 밖에서 발동하지 않는다).
 - **⚠️ 사용자 관점 Q/A 는 CUBE 에서 본다 — 단, "최종 응답 문장" 컬럼은 없다.** 사용자는 **CUBE 와만 대화**하므로 사용자 관점 데이터는 CUBE(= 진입 레이어) 행에서 찾는다: **`CUBE.SEND_MSG_CTN` = 사용자 질문(Q)**. 하지만 **`CUBE.RESP_MSG_CTN` 은 레이어 간 JSON 전문**이고, **CUBE BotServer 가 사용자에게 실제로 렌더해 내보내는 문장을 저장하는 컬럼은 존재하지 않는다.** 그래서 A 는 그 JSON 에서 문장을 긁어내는 **best-effort**(`humanText()`)이며 "사용자가 본 그 문장"이라고 보장할 수 없다 — 추출 실패 시 화면은 비우고 안내한다. 진짜 A 가 필요하면 BotServer 가 렌더 결과를 적재하는 컬럼(예: `ANSWER_CTN`)이 새로 있어야 한다. 하위 레이어(GAIA/MCP/ONEOIS)의 `RESP_MSG_CTN` 은 다운스트림 툴 응답이라 A 후보조차 아니다. `requestFailures.ts` 의 `USER_IF_LAYER`(= `LAYER_ORDER[0]`)와 `attachUserFacingQa()` 가 이 규칙의 구현 지점이며, CUBE 는 앱 자체 DB(GAIA)와 다른 DB 라 커넥션을 따로 열어 `TRACE_ID` 로 JS 조인한다(`monthlyActionSuccess` 와 같은 크로스 DB 방식). CUBE 미구성/조회 실패 시 Q 는 `TRX_TOKEN_DET.QUERY_CTN`(LLM 프롬프트) → `RECV_MSG_CTN` 순으로 폴백하고 A 는 비워 안내한다(무해). SEND/RESP 가 JSON envelope 인 경우 `humanText()` 가 사람이 읽는 문장만 뽑고, 못 찾으면 원문을 보여준다.
 - **화면**(`src/components/improvement/RequestFailureTracker.tsx`, `rft-*` / 셸은 `ic-*`): 상단 KPI(미조치/조치중/조치완료/영향 사용자/기간 내 실패 수) + 기간 프리셋(24h/7d/30d/전체, 서버 `dateFrom`) + 좌(상태칩 필터·검색 리스트)/우(원본 요청·응답·조치 세그먼트+메모+담당자·사용자 대화 흐름) 스플릿. 상태칩/검색은 클라이언트 필터, 조치 저장 시 로컬 카운트 재계산. 에러코드 의미는 `/api/error-codes` 재사용.
@@ -335,7 +336,8 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
 두 축은 직교한다: "전역 ADMIN"은 모든 에이전트를 오가며 관리하고, "에이전트 ADMIN"은 **자기 에이전트 안에서만** ADMIN 이다. 기존 하드코딩 `ADMIN_PASSWORD`/`AdminGate`(sessionStorage 게이트)는 **완전히 제거**되고 세션 기반 인증으로 대체됐다.
 
 - ⚠️ **BR = 전 화면 열람 · 데이터 수정 불가.** 실적(`/insights`)·Timeout 을 포함해 **모든 조회 화면**을 보되 쓰기는 하나도 못 한다. 그래서 **읽기·쓰기가 한 화면에 섞이면 화면(ROUTE_RULES)은 BR 로 열고 그 화면의 PUT 만 ADMIN 으로 올린다** — 쓰기 경로를 `ROUTE_RULES` 에 BR 로 두지 말 것. 현재 BR 이 못 가는 곳은 **쓰기 전용 화면**뿐이다: `/admin`(프로필 편집) · `/accounts`(계정 관리).
-- **권한 단일 소스 `src/lib/roles.ts`** (클라이언트·Edge 미들웨어·서버 공용 — Node 전용 모듈 import 금지). `Role`, `ROLE_LABEL`, `roleAtLeast(role,min)`, 그리고 **경로→최소권한 매핑 `ROUTE_RULES`**(`requiredRoleForPath`). 접근 범위가 바뀌면 여기만 고친다. 현재: `/admin`·`/accounts`·`/api/accounts`=ADMIN, `/timeouts`·`/api/timeouts`·`/improvement`·`/event-fabs`=BR, 그 외=인증만 되면 DEV. **계정 관리는 ADMIN 전용**(목록도 BR 에게 안 보인다) — API 의 권한 상향 방지 가드(`actorIsAdmin` 분기)는 이제 항상 참이지만 min 을 다시 낮출 때를 위한 **잔여 방어**로 남겨 뒀다.
+- ⚠️ **DEV = 개발자의 진단 화면 일체** — Traces · Dashboard · Tokens · **Timeout · Improvement Center**. 뒤의 둘은 예전에 BR 이었으나 LLM 타임아웃·라우팅 실패는 개발자가 파는 대상이라 DEV 로 내렸다(조치 저장 PUT 은 그대로 ADMIN). **BR 만 보고 DEV 는 못 보는 화면은 실적(`/insights`)·이벤트-FAB 둘뿐**이다.
+- **권한 단일 소스 `src/lib/roles.ts`** (클라이언트·Edge 미들웨어·서버 공용 — Node 전용 모듈 import 금지). `Role`, `ROLE_LABEL`, `roleAtLeast(role,min)`, 그리고 **경로→최소권한 매핑 `ROUTE_RULES`**(`requiredRoleForPath`). 접근 범위가 바뀌면 여기만 고친다. 현재: `/admin`·`/accounts`·`/api/accounts`=ADMIN, `/event-fabs`=BR, `/timeouts`·`/api/timeouts`·`/improvement`=DEV(규칙에 없어도 같은 결과지만 예전에 BR 이었던 경로라 의도를 명시해 둔다), 그 외=인증만 되면 DEV. **계정 관리는 ADMIN 전용**(목록도 BR 에게 안 보인다) — API 의 권한 상향 방지 가드(`actorIsAdmin` 분기)는 이제 항상 참이지만 min 을 다시 낮출 때를 위한 **잔여 방어**로 남겨 뒀다.
 - ⚠️ **경로 인가의 진입점은 `canAccessPath(role, pathname)` 하나다** (미들웨어의 실제 차단과 `TabNav` 의 탭 노출이 같은 함수를 쓴다 — 예전처럼 탭별 `minRole` 목록을 따로 두면 `ROUTE_RULES` 와 두 벌이 되어 "메뉴엔 보이는데 누르면 403" 이 생긴다). 내부에서 FIELD 는 서열이 아니라 **허용 목록**으로 갈린다 (아래 절). ⚠️ 예전 3번째 인자 `global` 은 `/insights` 가 "전역 ADMIN 만" 이던 시절의 것으로 **제거됐다**.
 - **계정 저장소 `TRX_USER_MAS`** (`sql/create_trx_user_mas.sql`, **앱 자체 DB=GAIA 에서만 1회 실행**, ADM 소유 + GRANT + PUBLIC SYNONYM — 다른 앱 테이블과 동일 패턴). 컬럼: USER_ID(사번,PK)/USER_NM/WORK_CTN(업무)/ROLE_CD/PWD_HASH/PWD_SALT/USE_YN/MUST_CHG_YN/**AGENT_ID**/**GLOBAL_YN**/LAST_LOGIN_DT/감사일시. `src/lib/users.ts` 가 CRUD·로그인검증·시드를 담당(lazy-`oracledb`-swallow, DB 불가 시 `available=false`).
   - **에이전트 범위 = `GLOBAL_YN` + `AGENT_ID`** (`sql/migrations/2026-08-24_add_user_agent_id.sql`
@@ -388,7 +390,7 @@ LLM 타임아웃이 잦아 추적이 필요한데 기존 대시보드에선 "에
 - **클라이언트**: `AuthProvider`(`/api/auth/me` 컨텍스트, `useAuth()`) → `AppChrome`(상단바/푸터 셸, `/login` 은 셸 없이 전체화면) → `UserMenu`(계정 칩+드롭다운, 권한별 관리 링크·비번변경·로그아웃). 기존 mutation 클라이언트 fetch 들은 `x-admin-password` 헤더를 떼고 **세션 쿠키 자동 전송**에 의존(401/403 시 안내 문구).
 - **화면**: `/login`(브랜드 히어로+폼 스플릿), `/accounts`(계정 목록·생성/수정/비번초기화/삭제, 권한 3택 카드), `/403`. `/agent` 헤더의 리포트/관리자 버튼은 서버에서 세션 권한으로 조건부 노출.
 - **기존 PUT 게이트 교체**: `/api/profile`=대상 에이전트의 ADMIN(`requireAgentAdmin`),
-  `/api/event-fabs`=BR+BIZ, `/api/request-failures`=BR+BIZ (`requireBiz("BR")`). `/admin`·`/event-fabs`·`/improvement` 페이지의 `AdminGate` 래퍼 제거(미들웨어가 인가). **삭제된 파일**: `src/components/AdminGate.tsx`, `src/lib/adminAuth.ts` (⚠️ 사내 복붙 배포는 삭제가 전파 안 되니 그쪽 레포에서도 지울 것 — memory `deploy-copy-paste-sync`).
+  `/api/event-fabs`=BR+BIZ (`requireBiz("BR")`), `/api/request-failures`=DEV+BIZ (`requireBiz()`). `/admin`·`/event-fabs`·`/improvement` 페이지의 `AdminGate` 래퍼 제거(미들웨어가 인가). **삭제된 파일**: `src/components/AdminGate.tsx`, `src/lib/adminAuth.ts` (⚠️ 사내 복붙 배포는 삭제가 전파 안 되니 그쪽 레포에서도 지울 것 — memory `deploy-copy-paste-sync`).
 
 ### 일반 사용자(FIELD) 권한 — 실적 화면 `/insights` 하나만 (⚠️ allow-list)
 

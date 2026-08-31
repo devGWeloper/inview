@@ -5,6 +5,9 @@
 //
 // **BR = 전 화면 열람 · 데이터 수정 불가.** 실적(/insights)·Timeout 을 포함해 모든 조회 화면을
 // 볼 수 있지만 쓰기(프로필 편집 · 계정 관리 · 이벤트-FAB 저장 · 조치정보 저장)는 전부 ADMIN 이다.
+// **DEV = 개발자의 진단 화면 일체** — Traces · Dashboard · Tokens · **Timeout · Improvement Center**.
+// (Timeout/개선센터는 예전에 BR 이었지만, LLM 타임아웃과 라우팅 실패는 개발자가 파는 대상이라 내렸다.
+//  BR 만 보는 것은 실적(/insights)·이벤트-FAB 두 곳이다.)
 // ⚠️ 그래서 **쓰기 경로를 ROUTE_RULES 에 BR 로 두지 말 것** — 쓰기는 API 의 requireRole("ADMIN")
 //    / requireBiz("ADMIN") / requireAgentAdmin() 이 막고, ROUTE_RULES 는 '화면을 볼 수 있나' 만 정한다.
 //    (읽기·쓰기가 한 화면에 섞이면 화면은 BR 로 열고 그 화면의 PUT 만 ADMIN 으로 올린다)
@@ -45,7 +48,7 @@ export const ROLE_LABEL: Record<Role, string> = {
 export const ROLE_DESC: Record<Role, string> = {
   ADMIN: "전체 관리 · 계정/프로필 편집",
   BR: "전 화면 열람 (데이터 수정 불가)",
-  DEV: "Traces · Dashboard · Tokens · Agent 조회",
+  DEV: "Traces · Dashboard · Tokens · Timeout · 개선센터 조회",
   FIELD: "실적 요약만 열람 (메시지 원문 · 타 사용자 정보 비노출)",
 };
 
@@ -77,10 +80,13 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: "/accounts", min: "ADMIN" }, // 계정 관리 (등록/수정/삭제/비번초기화)
   { prefix: "/api/accounts", min: "ADMIN" }, // 계정 CRUD API
   // BR 이상 — **열람용**. 이 화면들의 쓰기(PUT)는 라우트가 따로 ADMIN 을 요구한다.
-  { prefix: "/timeouts", min: "BR" }, // 타임아웃 추적 (조회 전용)
-  { prefix: "/api/timeouts", min: "BR" },
-  { prefix: "/improvement", min: "BR" }, // Improvement Center — 조치 저장 PUT 은 ADMIN
   { prefix: "/event-fabs", min: "BR" }, // 이벤트-FAB 매핑 — 저장 PUT 은 ADMIN
+  // DEV 이상 — 개발자의 진단 화면. 규칙에 없어도 같은 결과지만, 예전에 BR 이었던 경로라
+  // "왜 BR 이 아니지" 를 되묻지 않도록 **의도적으로 DEV** 임을 남겨 둔다.
+  // ⚠️ 쓰기는 그대로 ADMIN 이다 (조치 저장 PUT = requireBiz("ADMIN")).
+  { prefix: "/timeouts", min: "DEV" }, // 타임아웃 추적 (조회 전용) — LLM 타임아웃은 개발자가 본다
+  { prefix: "/api/timeouts", min: "DEV" },
+  { prefix: "/improvement", min: "DEV" }, // Improvement Center — 조치 저장 PUT 은 ADMIN
 ];
 
 /** 해당 경로에 필요한 최소 권한. 규칙에 없으면 null(= 인증만 되면 접근 가능). */

@@ -33,7 +33,7 @@ const PLANNED: { name: string; tagline: string; icon: string }[] = [
   { name: "Knowledge Gaps", tagline: "반복 실패 주제의 지식 보강", icon: "📚" },
 ];
 
-// 접근 제어는 미들웨어(BR 이상)가 담당한다.
+// 접근 제어는 미들웨어(DEV 이상 = 인증된 개발자)가 담당한다. 조치 저장만 ADMIN.
 export default function ImprovementPage() {
   return <ImprovementCenter />;
 }

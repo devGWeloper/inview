@@ -19,7 +19,7 @@ export async function GET(req: NextRequest, { params }: { params: { traceId: str
   const sp = req.nextUrl.searchParams;
 
   // ⚠️ BIZ_AIACTIONTXN_HIS 는 기본 에이전트 전용 — 다른 팀 에이전트 소속 계정은 여기서 끊는다.
-  const bizGuard = await requireBiz("BR");
+  const bizGuard = await requireBiz(); // 조회는 DEV 부터 (목록과 동일)
   if (!bizGuard.ok) return NextResponse.json({ error: bizGuard.error }, { status: bizGuard.status });
 
 

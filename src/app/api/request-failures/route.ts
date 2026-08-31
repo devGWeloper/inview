@@ -15,7 +15,9 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   // ⚠️ BIZ_AIACTIONTXN_HIS 는 기본 에이전트 전용이다. 다른 팀 에이전트 소속 계정은
   //    URL 을 직접 쳐도 여기서 끊는다 (미들웨어 리다이렉트는 UX, 권위는 이 판정).
-  const bizGuard = await requireBiz("BR");
+  // 목록 조회는 DEV(개발자) 부터 — 라우팅 실패는 개발자가 파는 대상이다.
+  // (저장 PUT 은 아래에서 ADMIN 을 따로 요구한다)
+  const bizGuard = await requireBiz();
   if (!bizGuard.ok) return NextResponse.json({ error: bizGuard.error }, { status: bizGuard.status });
 
   const t0 = Date.now();

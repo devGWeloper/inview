@@ -7,39 +7,32 @@ import { TokenBreakdown } from "@/components/TokenBreakdown";
 import { TokenStatsCards } from "@/components/TokenStatsCards";
 import { QuestionsTable } from "@/components/QuestionsTable";
 import { TopList } from "@/components/TopList";
-import { TickMode, TickMonitor, TickWindowMin } from "@/components/TickMonitor";
+import { TICK_WINDOWS, TickMode, TickMonitor, TickWindowMin } from "@/components/TickMonitor";
 import { TickStatsResponse, TokenFilter, TokenRow, TokenStatsResponse } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 import { useAgentScope } from "@/components/agents/AgentScopeProvider";
+import {
+  CUSTOM_LABEL,
+  RANGE_PRESETS,
+  RangePreset,
+  resolveRange,
+  toLocalMin,
+  toLocalSec,
+  useTimeRange,
+} from "@/components/TimeRangeProvider";
 
-// "1tick" 은 다른 프리셋과 성격이 다르다 — 기간을 고르는 게 아니라 화면 자체를
-// 분당 TPM/RPM 모니터로 바꾼다(격자도 응답 형태도 다르므로 /api/tokens/tick 을 쓴다).
-type Preset = "1h" | "6h" | "24h" | "7d" | "30d" | "custom" | "1tick";
+// 조회 기간(프리셋/직접 설정)은 Timeout 탭과 **공유**한다 — TimeRangeProvider 참고.
+// 여기에 프리셋 배열이나 기간 state 를 다시 두지 말 것(두 탭의 구성이 또 갈린다).
+//
+// 1TICK 만은 공유 대상이 아니다 — 기간을 고르는 게 아니라 화면 자체를 분당 TPM/RPM
+// 모니터로 바꾸는 **화면 모드**이고(격자도 응답 형태도 달라 /api/tokens/tick 을 쓴다)
+// Timeout 탭에는 대응물이 없다. 대신 "탭을 옮기면 지워진다" 는 같은 불편이 없도록
+// 1TICK 의 창 길이·모드·구간은 아래 TICK_STORAGE_KEY 로 이 화면 안에서 보존한다.
+//
+// ⚠️ 1TICK 의 시각은 toLocalMin(분 정밀) + ":00" 을 쓰면 안 된다 — 현재 분이 통째로 잘려
+//    방금 난 버스트가 화면에 안 잡힌다. toLocalSec(초 정밀)을 쓴다.
 
-const PRESETS: { key: Preset; label: string; hours: number }[] = [
-  { key: "1h",  label: "1H",  hours: 1   },
-  { key: "6h",  label: "6H",  hours: 6   },
-  { key: "24h", label: "24H", hours: 24  },
-  { key: "7d",  label: "7D",  hours: 168 },
-  { key: "30d", label: "30D", hours: 720 },
-];
-
-function toLocalInput(ms: number): string {
-  const d = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-/**
- * 초까지 살린 로컬 시각 문자열.
- * ⚠️ 1TICK 은 toLocalInput(분 정밀) + ":00" 를 쓰면 안 된다 — 현재 분이 통째로 잘려
- *    방금 난 버스트가 화면에 안 잡힌다.
- */
-function toLocalSec(ms: number): string {
-  const d = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
+const TICK_STORAGE_KEY = "tracex.tick";
 
 /**
  * 1TICK 이 조회할 구간.
@@ -66,12 +59,17 @@ function fmtRange(from: string | null, to: string | null): string {
 
 export default function TokensPage() {
   const { agentId, agent, isDefault, ready } = useAgentScope();
-  const [preset, setPreset] = useState<Preset>("30d");
+  const { sel, ready: rangeReady, setPreset, setCustom } = useTimeRange();
   const [userId, setUserId] = useState("");
   const [nodeNm, setNodeNm] = useState("");
   const [modelNm, setModelNm] = useState("");
+  // 직접 설정 입력은 로컬 초안이고 '조회' 를 눌렀을 때 공유 상태에 커밋된다.
+  // draftCustom = 패널만 열린 상태(아직 적용 전).
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [draftCustom, setDraftCustom] = useState(false);
+  /** 1TICK 화면 모드인가 (기간 프리셋이 아니라 화면 전환이라 공유하지 않는다) */
+  const [tickView, setTickView] = useState(false);
 
   const [stats, setStats] = useState<TokenStatsResponse | null>(null);
   // 1TICK 모니터 전용 상태 (창 길이 / 자동 새로고침 / 응답 (한도는 config 의 agents[] 에서 온다))
@@ -83,6 +81,9 @@ export default function TokensPage() {
   // "그 시간엔 호출이 없었다" 로 오독된다.
   const [tickClamped, setTickClamped] = useState(false);
   const [tickAuto, setTickAuto] = useState(false);
+  // localStorage 의 1TICK 상태 복원이 끝났는가 — 복원 전에 조회하면 기본값으로 한 번,
+  // 복원값으로 한 번 이중 조회가 된다.
+  const [tickReady, setTickReady] = useState(false);
   const [tick, setTick] = useState<TickStatsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -97,22 +98,16 @@ export default function TokensPage() {
   agentIdRef.current = agentId;
 
   const computeFilter = useCallback((): TokenFilter => {
-    const base: TokenFilter = {
+    // 프리셋은 항상 '지금' 기준이라 호출 시점에 푼다 (TimeRangeProvider.resolveRange 참고)
+    const r = resolveRange(sel);
+    return {
       userId: userId || undefined,
       nodeNm: nodeNm || undefined,
       modelNm: modelNm || undefined,
+      dateFrom: r.from,
+      dateTo: r.to,
     };
-    if (preset === "custom") {
-      return { ...base, dateFrom: customFrom || undefined, dateTo: customTo || undefined };
-    }
-    const p = PRESETS.find((x) => x.key === preset)!;
-    const now = Date.now();
-    return {
-      ...base,
-      dateFrom: toLocalInput(now - p.hours * 3_600_000) + ":00",
-      dateTo: toLocalInput(now) + ":00",
-    };
-  }, [preset, customFrom, customTo, userId, nodeNm, modelNm]);
+  }, [sel, userId, nodeNm, modelNm]);
 
   const load = useCallback(async (f: TokenFilter) => {
     const requestFor = agentId; // 이 요청이 향한 에이전트 (응답 도착 시점의 선택과 비교할 기준)
@@ -242,7 +237,7 @@ export default function TokensPage() {
   //    setUserId 등은 상태 갱신이 비동기라 이번 tick 의 필터 인자엔 반영되지 않으므로
   //    load/loadTick 에는 override 로 명시해서 넘긴다.
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !rangeReady || !tickReady) return;
     setUserId("");
     setNodeNm("");
     setModelNm("");
@@ -250,22 +245,65 @@ export default function TokensPage() {
     setModelOptions([]);
     setStats(null);
     setTick(null);
-    if (preset === "1tick") {
+    if (tickView) {
       loadTick(tickReq(), { userId: undefined, nodeNm: undefined, modelNm: undefined });
     } else {
       load({ ...computeFilter(), userId: undefined, nodeNm: undefined, modelNm: undefined });
     }
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, [ready, agentId]);
+  }, [ready, rangeReady, tickReady, agentId]);
+
+  // 1TICK 상태 복원 — 탭을 옮겼다 돌아와도 창 길이·직접 설정 구간이 그대로 남는다.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(TICK_STORAGE_KEY);
+      if (raw) {
+        const v = JSON.parse(raw) as Partial<{
+          view: boolean; win: TickWindowMin; mode: TickMode; from: string; to: string;
+        }>;
+        if (TICK_WINDOWS.includes(v.win as TickWindowMin)) setTickWin(v.win as TickWindowMin);
+        if (v.mode === "live" || v.mode === "custom") setTickMode(v.mode);
+        if (typeof v.from === "string") setTickFrom(v.from);
+        if (typeof v.to === "string") setTickTo(v.to);
+        // custom 인데 구간이 비어 있으면 조회가 불가능하다 — live 로 되돌린다.
+        if (v.mode === "custom" && !(v.from && v.to)) setTickMode("live");
+        if (v.view === true) setTickView(true);
+      }
+    } catch {
+      /* 복원 실패는 무해 — 기본값(live 60분)으로 시작한다 */
+    }
+    setTickReady(true);
+  }, []);
+
+  // 1TICK 상태 저장. 복원 전에 쓰면 기본값이 저장값을 덮어쓴다.
+  useEffect(() => {
+    if (!tickReady) return;
+    try {
+      window.localStorage.setItem(
+        TICK_STORAGE_KEY,
+        JSON.stringify({ view: tickView, win: tickWin, mode: tickMode, from: tickFrom, to: tickTo })
+      );
+    } catch {
+      /* 저장 실패(프라이빗 모드 등)는 무해 */
+    }
+  }, [tickReady, tickView, tickWin, tickMode, tickFrom, tickTo]);
+
+  // 직접 설정 초안은 공유된 값으로 채워 둔다 — 탭을 옮겼다 와도 다시 입력할 필요가 없다.
+  useEffect(() => {
+    if (sel.preset === "custom" && sel.customFrom && sel.customTo) {
+      setCustomFrom(sel.customFrom);
+      setCustomTo(sel.customTo);
+    }
+  }, [sel.preset, sel.customFrom, sel.customTo]);
 
   // 자동 새로고침 (1TICK 의 live 모드에서만). 창이 계속 앞으로 밀리므로 매번 새로 계산해 부른다.
   // ⚠️ custom 에서는 돌리지 않는다 — 고정된 과거 구간을 다시 부를 이유가 없고,
   //    라이브 갱신은 '지금' 으로 창을 다시 잡아 사용자가 지정한 구간을 덮어쓴다.
   useEffect(() => {
-    if (preset !== "1tick" || tickMode !== "live" || !tickAuto) return;
+    if (!tickView || tickMode !== "live" || !tickAuto) return;
     const id = setInterval(() => loadTick({ mode: "live", win: tickWin }), 30_000);
     return () => clearInterval(id);
-  }, [preset, tickMode, tickAuto, tickWin, loadTick]);
+  }, [tickView, tickMode, tickAuto, tickWin, loadTick]);
 
   // 질문 행 펼침: traceId 로만 그 질문의 호출별 행을 가져온다.
   // 화면 필터(기간/노드/모델)를 같이 보내지 않는 이유: 한 질문을 펼치면 그 질문이 거친 호출
@@ -278,29 +316,69 @@ export default function TokensPage() {
     return asArray<TokenRow>(data.calls);
   }, [agentId]);
 
+  /**
+   * '조회' — 직접 설정 패널이 열려 있으면 초안을 공유 상태에 커밋하고 그 구간으로 조회한다.
+   * (초안 커밋 지점은 여기 한 곳뿐이다 — 입력할 때마다 커밋하면 옆 탭까지 반쯤 입력된
+   *  구간으로 흔들린다.)
+   */
   const onApply = (e: React.FormEvent) => {
     e.preventDefault();
-    if (preset === "1tick") submitTick();
-    else load(computeFilter());
-  };
-
-  const onPresetClick = (k: Preset) => {
-    setPreset(k);
-    if (k === "1tick") {
+    if (tickView) {
       submitTick();
       return;
     }
-    if (k !== "custom") {
-      const p = PRESETS.find((x) => x.key === k)!;
-      const now = Date.now();
+    if (draftCustom) {
+      if (!customFrom || !customTo) {
+        setErr("시작·끝 시각을 모두 입력하세요.");
+        return;
+      }
+      setCustom(customFrom, customTo);
+      setDraftCustom(false);
+      // ⚠️ resolveRange 는 {from,to} 이고 TokenFilter 는 {dateFrom,dateTo} 다 — 펼쳐 넣지 말 것.
+      //    둘 다 옵셔널이라 타입 검사에 안 걸리고, 기간이 조용히 빠져 서버 기본(24h)으로 조회된다.
+      const r = resolveRange({ preset: "custom", customFrom, customTo });
       load({
-        dateFrom: toLocalInput(now - p.hours * 3_600_000) + ":00",
-        dateTo: toLocalInput(now) + ":00",
+        dateFrom: r.from,
+        dateTo: r.to,
         userId: userId || undefined,
         nodeNm: nodeNm || undefined,
         modelNm: modelNm || undefined,
       });
+      return;
     }
+    load(computeFilter());
+  };
+
+  const onPresetClick = (k: RangePreset) => {
+    // setPreset 은 비동기라 sel 이 아직 옛 값이다 — 방금 고른 프리셋으로 직접 풀어서 조회한다.
+    const r = resolveRange({ ...sel, preset: k });
+    setPreset(k);
+    setDraftCustom(false);
+    setTickView(false);
+    load({
+      dateFrom: r.from,
+      dateTo: r.to,
+      userId: userId || undefined,
+      nodeNm: nodeNm || undefined,
+      modelNm: modelNm || undefined,
+    });
+  };
+
+  const onTickClick = () => {
+    setTickView(true);
+    setDraftCustom(false);
+    submitTick();
+  };
+
+  /** '직접 설정' 진입 — 초안만 채워 두고 조회는 '조회' 를 눌렀을 때 한다. */
+  const onCustomClick = () => {
+    setTickView(false);
+    if (!customFrom || !customTo) {
+      const r = resolveRange(sel);
+      setCustomFrom(r.from.slice(0, 16));
+      setCustomTo(r.to.slice(0, 16));
+    }
+    setDraftCustom(true);
   };
 
   const onSelectNode = (k: string) => {
@@ -317,7 +395,7 @@ export default function TokensPage() {
 
   /** NODE/MODEL/USER 필터 변경 — 현재 모드에 맞는 쪽을 다시 조회한다 */
   const reloadWith = (over: { userId?: string; nodeNm?: string; modelNm?: string }) => {
-    if (preset === "1tick") submitTick(over);
+    if (tickView) submitTick(over);
     else load({ ...computeFilter(), ...over });
   };
 
@@ -332,12 +410,13 @@ export default function TokensPage() {
     setTickMode("custom");
     if (!tickFrom || !tickTo) {
       const now = Date.now();
-      setTickFrom(toLocalInput(now - tickWin * 60_000));
-      setTickTo(toLocalInput(now));
+      setTickFrom(toLocalMin(now - tickWin * 60_000));
+      setTickTo(toLocalMin(now));
     }
   };
 
 
+  const customOpen = draftCustom || sel.preset === "custom";
   const hasFilter = !!(userId || nodeNm || modelNm);
   const clearFilters = () => {
     setUserId("");
@@ -352,22 +431,22 @@ export default function TokensPage() {
         <div className="dash-title">
           <div className="dash-title-main">Token Usage</div>
           <div className="dash-title-sub">
-            {preset === "1tick"
+            {tickView
               ? tick ? fmtRange(tick.range.from, tick.range.to) : "—"
               : stats ? fmtRange(stats.range.from, stats.range.to) : "—"}
             <span className="dash-title-note">
-              {preset === "1tick" ? " · TPM/RPM" : " · LLM 호출 기준"}
+              {tickView ? " · TPM/RPM" : " · LLM 호출 기준"}
               {!isDefault && agent ? ` · ${agent.name}` : ""}
             </span>
           </div>
         </div>
         <form className="dash-filter" onSubmit={onApply}>
           <div className="preset-group" role="tablist" aria-label="time preset">
-            {PRESETS.map((p) => (
+            {RANGE_PRESETS.map((p) => (
               <button
                 key={p.key}
                 type="button"
-                className={"preset-btn" + (preset === p.key ? " active" : "")}
+                className={"preset-btn" + (!tickView && !customOpen && sel.preset === p.key ? " active" : "")}
                 onClick={() => onPresetClick(p.key)}
               >
                 {p.label}
@@ -375,21 +454,21 @@ export default function TokensPage() {
             ))}
             <button
               type="button"
-              className={"preset-btn tick" + (preset === "1tick" ? " active" : "")}
-              onClick={() => onPresetClick("1tick")}
+              className={"preset-btn tick" + (tickView ? " active" : "")}
+              onClick={onTickClick}
               title="분당 TPM/RPM 모니터"
             >
               1TICK
             </button>
             <button
               type="button"
-              className={"preset-btn" + (preset === "custom" ? " active" : "")}
-              onClick={() => setPreset("custom")}
+              className={"preset-btn" + (!tickView && customOpen ? " active" : "")}
+              onClick={onCustomClick}
             >
-              Custom
+              {CUSTOM_LABEL}
             </button>
           </div>
-          {preset === "custom" && (
+          {!tickView && customOpen && (
             <div className="custom-range">
               <input type="datetime-local" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} aria-label="from" />
               <span className="range-arrow">→</span>
@@ -441,7 +520,7 @@ export default function TokensPage() {
         </div>
       )}
 
-      {preset === "1tick" && tick && (
+      {tickView && tick && (
         <TickMonitor
           stats={tick}
           tpmLimit={agent?.tpmLimit ?? 0}
@@ -463,7 +542,7 @@ export default function TokensPage() {
         />
       )}
 
-      {preset !== "1tick" && stats && (
+      {!tickView && stats && (
         <>
           <TokenStatsCards stats={stats} />
 

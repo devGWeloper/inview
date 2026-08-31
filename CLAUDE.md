@@ -142,6 +142,37 @@ The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTI
   - **타임아웃 추적은 Tokens 탭이 아니라 `/timeouts` 탭이 담당한다** (아래 "Timeout 탭" 참고).
   - The Tokens 탭 has two halves: **현황**(KPI/추이 — `TokenStatsCards`/`TokenChart`, LLM 속도 추이 차트 `TokenLatencyChart`, 노드별/모델별 리더보드 카드 `TokenBreakdown` — `byNode`/`byModel` 를 각각 별도 카드(노드=파랑, 모델=보라)로 렌더, 순위 배지 + 큰 값 + 1위 대비 상대 바 + 비중%, 토큰/호출/토큰·호출/속도 공유 메트릭 토글, 행 클릭 = 노드/모델 필터. **노드×모델 교차 집계**(`TokenDimStat.sub`, 별도 `GROUP BY NODE_NM, MODEL_NM` 쿼리)로 각 노드가 실제 쓴 모델 구성(역방향도)을 행 안에 칩+비중% 로 노출 — 한 질문이 여러 노드/모델을 거치므로(예: actionRouterNode=qwen3.6 → SeasoningNode=qwen3.5) "노드=모델 1개" 로 오해하지 않게 하는 장치) and **질문별 토큰**(`QuestionsTable`). A "질문" = one `TRACE_ID`; 한 질문의 호출은 라우터→실행 노드처럼 **여러 노드/모델을 거칠 수 있어** `questions` 는 대표값(MAX) 대신 거쳐간 노드/모델 **전부**를 내린다(`nodes[]`/`models[]`, `LISTAGG ... ON OVERFLOW TRUNCATE` 후 JS 중복 제거, 첫 호출 순) — 표에는 칩으로 나열. `fetchTokenStats` returns `questions` (grouped by `TRACE_ID`, null-trace rows treated as one-call-per-question, **최신 LAST_TM desc 상위 500건** — 토큰순 로드였을 때 최근 질문이 잘려 보이는 착시가 있어 최신순으로 변경). 집계 쿼리들은 `run()` 헬퍼로 **쿼리별 격리 실행**되어 한 쿼리가 SQL 에러여도 그 섹션만 비고 나머지는 정상, 로그에 `fetchTokenStats [섹션명] query failed` + ORA 코드가 남는다. **질의 = 질문의 대표 정보** 관점: 한 질문의 호출들은 같은 `QUERY_CTN` 을 공유하는 게 보통이라, `questions` 가 **원본 질의**(`queryCtn` — 가장 이른 non-null 호출의 QUERY_CTN, `MIN ... KEEP (DENSE_RANK FIRST ORDER BY NVL2(QUERY_CTN,0,1), CALL_TM)`)를 질문 단위로 내리고 표의 질문 셀은 **질의(크게) + TRACE_ID(작게) 2줄**로 그린다. `QuestionsTable` 은 **컬럼별 필터**(질문(질의+TRACE_ID)/USER 텍스트, NODE/MODEL 셀렉트 — 로드된 상위 질문 범위 내 클라이언트 필터) + **헤더 클릭 정렬**(LAST_TM/IN/OUT/TOTAL/CALLS, 재클릭 = 방향 토글, 기본 = LAST_TM desc) 구조. Passing `?traceId=` narrows everything and fills `calls` (per-call rows, incl. `queryCtn`/`latencyMs`) used to expand a question inline. ⚠️ **`calls` 쿼리만은 `TRACE_ID` 단독 조회**다 — 기간/노드/모델 필터를 걸지 않는다. 질문을 펼치는 목적은 그 질문이 실제로 거친 호출 **전부**(라우터→실행 노드)를 보는 것이고, 나머지 필터는 "질문을 찾는" 조건일 뿐이다. 예전엔 창을 그대로 적용한 데다 클라이언트가 **펼침 시점의 `Date.now()`로 창을 다시 계산**해서, 화면을 띄워두고 시간이 흐르면 같은 질문의 호출이 1건/2건으로 잘려 보였다(프리셋 창이 앞으로 밀림). 그래서 `fetchCalls` 도 `traceId` 만 보낸다. 대신 표의 `CALLS`(기간 내 집계)보다 상세가 많을 수 있어 `CallsDetail` 이 "조회 조건 밖 N건 포함" 배지로 차이를 밝힌다 — 펼침(`CallsDetail`)은 **원본 질의 블록**(액센트 보더, 전체 노출 — 280자 초과 시만 3줄 접힘+더 보기 `QueryText`)을 헤드라인으로 두고, 아래에 **호출 타임라인**: 요약 스트립(호출 수 · 노드 흐름 · 총 토큰 · 첫→마지막 구간) + 시간순 `#N` 레일 + 호출 카드(노드→모델 · ⏱응답시간 · 직전 호출과의 간격 · 토큰 바). 호출 카드의 쿼리는 **원본과 다를 때만**(공백 정규화 비교) "이 호출의 쿼리" 로 다시 표시. **any** trace-linked question 에서 가능(호출 1건이어도). `QUERY_CTN` 은 `calls` 쿼리와 `questions` 의 원본 질의 집계에서만 SELECT 한다.
 
+### ⚠️ 조회 기간은 Tokens ↔ Timeout 공유 (`src/components/TimeRangeProvider.tsx`)
+
+두 탭은 성격이 같고(둘 다 `TRX_TOKEN_DET` 기준 LLM 호출 조회) 오가며 같이 보는데, 예전엔 각자
+로컬 state 라 ① 프리셋 구성·라벨이 갈렸고(Tokens `1H/6H/24H/7D/30D/Custom` vs Timeout
+`24H/7D/30D/직접 설정`) ② 탭을 옮기면 선택이 사라져 직접 설정한 시각을 매번 다시 입력해야 했다.
+
+- **단일 소스는 `TimeRangeProvider`** — `AppChrome` 의 `AgentScopeProvider` 안쪽에 마운트되고
+  `useTimeRange()` 로 `{ sel, ready, setPreset, setCustom, resolve }` 를 공급한다.
+  `RANGE_PRESETS`(1H/6H/24H/7D/30D) · `CUSTOM_LABEL`("직접 설정") · `DEFAULT_PRESET`("7d") 도 여기.
+  ⚠️ **페이지에 프리셋 배열이나 기간 state 를 다시 두지 말 것** — 방금 고친 불일치가 그대로 되살아난다.
+- **저장은 `localStorage["tracex.timeRange"]`**(`{preset, customFrom, customTo}`). 모르는 프리셋,
+  구간이 빈 `custom` 은 기본값으로 되돌린다. SSR 에선 읽을 수 없으므로 **`ready` 가 true 가 된 뒤에
+  조회**한다 — 안 그러면 기본값으로 한 번, 복원값으로 한 번 이중 조회가 된다.
+- ⚠️ **`{from,to}` 실제 시각은 저장하지 않는다.** 프리셋은 항상 '지금' 기준이라 `resolveRange(sel)` 가
+  **호출 시점에** 계산한다 — 결과를 상태에 넣어 두면 어제 열어 둔 탭의 7D 가 어제 기준으로 굳는다.
+  `setPreset` 직후엔 `sel` 이 아직 옛 값이므로 조회는 `resolveRange({ ...sel, preset: k })` 로
+  방금 고른 값을 직접 풀어서 한다.
+- ⚠️ **`resolveRange` 는 `{from,to}` 이고 `TokenFilter` 는 `{dateFrom,dateTo}` 다** — 스프레드로
+  펼쳐 넣지 말 것. 둘 다 옵셔널이라 타입 검사에 안 걸리고 기간이 조용히 빠져 **서버 기본(24h)** 으로
+  조회된다(실제로 냈던 버그).
+- **직접 설정 입력은 로컬 초안**이고 `조회`(Tokens) / `적용`(Timeout) 을 눌렀을 때만 공유 상태에
+  커밋된다 — 입력할 때마다 커밋하면 옆 탭까지 반쯤 입력된 구간으로 흔들린다. 화면 진입 시 초안은
+  공유 값으로 채워지므로 다시 입력할 일이 없다. `draftCustom` = 패널만 열린 상태(아직 적용 전).
+- **노드/모델/USER 필터는 공유하지 않는다** — 에이전트 전환 시 비워야 하고(남의 노드명이 걸리면
+  "사용량 0" 으로 오독된다) 두 화면의 차원 목록도 다르다.
+- **1TICK 은 공유 대상이 아니다** — 기간이 아니라 화면 모드이고 Timeout 엔 대응물이 없다. 다만
+  "갔다 오면 지워진다" 는 같은 불편이 없도록 창 길이·모드·구간·활성 여부를
+  `localStorage["tracex.tick"]` 로 **Tokens 안에서** 보존한다(`tickReady` 후 조회, 같은 이유).
+  Timeout 으로 이동하면 공유 프리셋으로 보이고, Tokens 로 돌아오면 1TICK 이 복원된다.
+- **Dashboard/Report/Insights 는 공유 대상이 아니다** — 기간 개념이 다르다(주 단위 이동, 월~월 경계 등).
+
 ### 1TICK — 분당 TPM/RPM 모니터 (Tokens 탭 프리셋)
 
 사내 LLM 제약이 **TPM/RPM(분당 토큰·호출)** 이라 초과 여부를 화면에서 확인해야 하는데, Tokens 탭의

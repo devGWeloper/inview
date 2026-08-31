@@ -8,6 +8,13 @@ import { TimeoutDimStat, TimeoutItem, TimeoutReason, TimeoutStatsResponse } from
 import { callStatus } from "@/lib/tokenStatus";
 import { apiJson, errMessage } from "@/lib/apiClient";
 import { useAgentScope } from "@/components/agents/AgentScopeProvider";
+import {
+  CUSTOM_LABEL,
+  RANGE_PRESETS,
+  RangePreset,
+  resolveRange,
+  useTimeRange,
+} from "@/components/TimeRangeProvider";
 
 // Timeout 탭 — LLM 호출이 끊긴 지점을 그대로 본다.
 // 출처는 TRX_TOKEN_DET 의 실패 적재(STAT_CD='ERROR' + ERR_CTN + LATENCY_MS) 한 곳이며,
@@ -16,25 +23,10 @@ import { useAgentScope } from "@/components/agents/AgentScopeProvider";
 // 조회 조건(기간·노드·모델)은 서버 필터라 KPI/추이/분포/목록이 전부 같은 범위로 좁혀진다.
 // 목록 안의 컬럼 필터는 그 위에 얹는 클라이언트 필터(로드된 행 범위)다.
 
-type Preset = "24h" | "7d" | "30d";
-const PRESETS: { key: Preset; label: string; hours: number }[] = [
-  { key: "24h", label: "24H", hours: 24 },
-  { key: "7d", label: "7D", hours: 168 },
-  { key: "30d", label: "30D", hours: 720 },
-];
-type Mode = Preset | "custom";
-
+// 조회 기간(프리셋/직접 설정)은 Tokens 탭과 **공유**한다 — TimeRangeProvider 참고.
+// 여기에 프리셋 배열이나 기간 state 를 다시 두지 말 것(두 탭의 구성이 또 갈린다).
 interface Range { from: string; to: string }
 
-function toLocalInput(ms: number): string {
-  const d = new Date(ms);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-}
-function presetRange(p: Preset): Range {
-  const now = Date.now();
-  return { from: toLocalInput(now - PRESETS.find((x) => x.key === p)!.hours * 3_600_000), to: toLocalInput(now) };
-}
 function fmtRange(from: string | null, to: string | null): string {
   if (!from || !to) return "—";
   return `${from.replace("T", " ").slice(0, 16)}  →  ${to.replace("T", " ").slice(0, 16)}`;
@@ -46,10 +38,12 @@ const pct = (n: number, total: number): string => (total > 0 ? ((n / total) * 10
 
 export default function TimeoutsPage() {
   const { agentId, agent, isDefault, ready } = useAgentScope();
-  const [mode, setMode] = useState<Mode>("7d");
-  const [range, setRange] = useState<Range>(() => presetRange("7d"));
+  const { sel, ready: rangeReady, setPreset, setCustom } = useTimeRange();
+  // 직접 설정 입력은 로컬 초안이고, '적용' 을 눌렀을 때만 공유 상태에 커밋된다.
+  // draftCustom = 패널만 열린 상태(아직 적용 전) — 공유 선택은 그대로 프리셋이다.
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [draftCustom, setDraftCustom] = useState(false);
   const [node, setNode] = useState("");
   const [model, setModel] = useState("");
   const [stats, setStats] = useState<TimeoutStatsResponse | null>(null);
@@ -91,38 +85,55 @@ export default function TimeoutsPage() {
   // ⚠️ 에이전트가 바뀌면 노드/모델 필터와 렌더된 데이터를 비운다 — 이유는 tokens 페이지와 동일
   //    (필터가 남으면 "이 에이전트는 사용량이 없다" 로 오독되고, 데이터가 남으면 새 이름 아래
   //    이전 에이전트의 수치가 잠깐 남아 보인다).
+  // 지금 선택된 공유 기간을 실제 구간으로 (프리셋은 항상 '지금' 기준이라 호출 시점에 계산한다)
+  const currentRange = useCallback((): Range => resolveRange(sel), [sel]);
+
+  // 공유 상태가 복원되기 전(rangeReady=false)에 조회하면 기본값으로 한 번, 복원값으로 한 번
+  // 이중 조회가 된다 — 둘 다 준비된 뒤에 부른다.
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !rangeReady) return;
     setNode("");
     setModel("");
     setStats(null);
-    load(range, "", "");
+    load(resolveRange(sel), "", "");
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, [ready, agentId]);
+  }, [ready, rangeReady, agentId]);
 
-  const onPreset = (p: Preset) => {
-    const r = presetRange(p);
-    setMode(p);
-    setRange(r);
+  // 직접 설정 초안은 공유된 값으로 채워 둔다 — 탭을 옮겼다 와도 다시 입력할 필요가 없다.
+  useEffect(() => {
+    if (sel.preset === "custom" && sel.customFrom && sel.customTo) {
+      setCustomFrom(sel.customFrom);
+      setCustomTo(sel.customTo);
+    }
+  }, [sel.preset, sel.customFrom, sel.customTo]);
+
+  const onPreset = (p: RangePreset) => {
+    // setPreset 은 비동기라 sel 이 아직 옛 값이다 — 방금 고른 프리셋으로 직접 풀어서 조회한다.
+    const r = resolveRange({ ...sel, preset: p });
+    setPreset(p);
+    setDraftCustom(false);
     load(r, node, model);
   };
   const enterCustom = () => {
-    setCustomFrom(range.from.slice(0, 16));
-    setCustomTo(range.to.slice(0, 16));
-    setMode("custom");
+    if (!customFrom || !customTo) {
+      const r = currentRange();
+      setCustomFrom(r.from.slice(0, 16));
+      setCustomTo(r.to.slice(0, 16));
+    }
+    // 아직 커밋하지 않는다 — '적용' 을 눌렀을 때 공유 상태에 반영된다.
+    setDraftCustom(true);
   };
   const applyCustom = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customFrom || !customTo) return;
-    // datetime-local 은 'YYYY-MM-DDTHH:MM' — 초 단위 보정
-    const norm = (s: string) => (s.length === 16 ? s + ":00" : s);
-    const r = { from: norm(customFrom), to: norm(customTo) };
-    setRange(r);
-    load(r, node, model);
+    setCustom(customFrom, customTo);
+    setDraftCustom(false);
+    load(resolveRange({ preset: "custom", customFrom, customTo }), node, model);
   };
-  const onNode = (k: string) => { const next = node === k ? "" : k; setNode(next); load(range, next, model); };
-  const onModel = (k: string) => { const next = model === k ? "" : k; setModel(next); load(range, node, next); };
+  const onNode = (k: string) => { const next = node === k ? "" : k; setNode(next); load(currentRange(), next, model); };
+  const onModel = (k: string) => { const next = model === k ? "" : k; setModel(next); load(currentRange(), node, next); };
 
+  const customOpen = draftCustom || sel.preset === "custom";
   const scope = [node && `노드 ${node}`, model && `모델 ${model}`].filter(Boolean).join(" · ");
   const topNode = stats?.byNode[0];
 
@@ -132,7 +143,7 @@ export default function TimeoutsPage() {
         <div className="dash-title">
           <div className="dash-title-main">Timeout</div>
           <div className="dash-title-sub">
-            {stats ? fmtRange(stats.range.from, stats.range.to) : fmtRange(range.from, range.to)}
+            {stats ? fmtRange(stats.range.from, stats.range.to) : fmtRange(currentRange().from, currentRange().to)}
             <span className="dash-title-note">
               {" "}· LLM 호출 실패 적재 기준
               {!isDefault && agent ? ` · ${agent.name}` : ""}
@@ -141,11 +152,11 @@ export default function TimeoutsPage() {
         </div>
         <div className="dash-filter">
           <div className="preset-group" role="tablist" aria-label="time preset">
-            {PRESETS.map((p) => (
+            {RANGE_PRESETS.map((p) => (
               <button
                 key={p.key}
                 type="button"
-                className={"preset-btn" + (mode === p.key ? " active" : "")}
+                className={"preset-btn" + (!customOpen && sel.preset === p.key ? " active" : "")}
                 onClick={() => onPreset(p.key)}
               >
                 {p.label}
@@ -153,13 +164,13 @@ export default function TimeoutsPage() {
             ))}
             <button
               type="button"
-              className={"preset-btn" + (mode === "custom" ? " active" : "")}
+              className={"preset-btn" + (customOpen ? " active" : "")}
               onClick={enterCustom}
             >
-              직접 설정
+              {CUSTOM_LABEL}
             </button>
           </div>
-          {mode === "custom" && (
+          {customOpen && (
             <form className="custom-range" onSubmit={applyCustom}>
               <input
                 type="datetime-local"

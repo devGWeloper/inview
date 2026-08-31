@@ -208,7 +208,9 @@ export default function AccountsPage() {
                 <td className="mono acct-dim">{fmt(u.lastLoginDt)}</td>
                 <td className="acct-actions">
                   {(() => {
-                    // BR 은 운영자(ADMIN) 계정을 관리할 수 없다.
+                    // 잔여 방어: ADMIN 미만은 운영자 계정을 건드릴 수 없다.
+                    // (이 화면 자체가 ADMIN 전용이 되어 지금은 항상 false 지만,
+                    //  /api/accounts 의 같은 가드와 짝을 맞춰 남겨 둔다)
                     const locked = u.role === "ADMIN" && me?.role !== "ADMIN";
                     return (
                       <>
@@ -273,8 +275,8 @@ function AccountEditor({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // BR 은 ADMIN 권한을 부여할 수 없다 — 선택지에서 ADMIN 을 숨긴다
-  // (단, 이미 ADMIN 인 계정을 편집 중이면 표시는 유지).
+  // 잔여 방어: ADMIN 미만은 ADMIN 권한을 부여할 수 없다 — 선택지에서 ADMIN 을 숨긴다
+  // (단, 이미 ADMIN 인 계정을 편집 중이면 표시는 유지). 화면이 ADMIN 전용이라 지금은 항상 노출.
   const assignableRoles = ROLES.filter(
     (r) => r !== "ADMIN" || meRole === "ADMIN" || acc?.role === "ADMIN"
   );

@@ -269,6 +269,34 @@ export function isBizPath(pathname: string): boolean {
  *                        전역 계정을 건드릴 수 있으면 그 계정으로 범위를 벗어날 수 있고,
  *                        미배정 계정은 아직 어느 에이전트의 것도 아니다.
  */
+// ──────────────────────────────────────────────────────────────────────────────
+// 권한 × 범위 조합 검증 — 일반 사용자(FIELD)는 **기본 에이전트 소속만 존재한다**.
+//
+// FIELD 에게 열린 화면은 실적(/insights) 하나뿐이고, 그건 BIZ_AIACTIONTXN_HIS(기본 에이전트)
+// 집계라 isBizPath 에 걸린다. 전역이거나 다른 에이전트 소속이면 로그인 직후 홈(/insights)부터
+// 403 이라 **아무것도 못 하는 계정**이 된다 — 만든 사람도 받는 사람도 이유를 모른다.
+// 그래서 "저장은 됐는데 아무것도 안 보인다" 대신 **저장 시점에 막는다**.
+//
+// ⚠️ 기본 에이전트 id 는 config.yml(Node 전용)이라 이 파일에서 읽을 수 없다 — 호출부가 넘긴다.
+//    집행 지점은 /api/accounts 의 POST/PUT 두 곳이고, 화면(/accounts)의 잠금은 UX 다.
+// ──────────────────────────────────────────────────────────────────────────────
+
+/** role 과 범위의 조합이 성립하는가. 성립하면 null, 아니면 거절 사유. */
+export function scopeErrorForRole(
+  role: Role,
+  scope: { global: boolean; agentId: string | null },
+  defaultAgent: string
+): string | null {
+  if (role !== "FIELD") return null;
+  if (scope.global) {
+    return "일반 사용자 계정은 전역으로 만들 수 없습니다. 기본 에이전트 소속만 가능합니다.";
+  }
+  if (scope.agentId !== defaultAgent) {
+    return "일반 사용자 계정은 기본 에이전트 소속만 가능합니다.";
+  }
+  return null;
+}
+
 export function canActOnAccount(
   actor: AgentScope,
   target: { agentId: string | null; global: boolean }

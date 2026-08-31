@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/current";
 import { updateUser, deleteUser, getUser, UpdateUserInput, validateAgentId } from "@/lib/users";
-import { isRole, roleAtLeast, resolveScope, canActOnAccount } from "@/lib/roles";
+import { isRole, roleAtLeast, resolveScope, canActOnAccount, scopeErrorForRole } from "@/lib/roles";
+import { defaultAgentId } from "@/lib/config";
 import { logger, reqContext } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +66,19 @@ export async function PUT(req: NextRequest, { params }: { params: { userId: stri
       }
       input.global = body.global === true;
     }
+
+    // 권한 × 범위 조합 — 일반 사용자(FIELD)는 **기본 에이전트 소속만 존재한다**.
+    // ⚠️ 요청만이 아니라 **최종 상태**(보내지 않은 값은 기존 값)로 판정한다 —
+    //    권한만 FIELD 로 바꾸는 경우와 FIELD 계정의 소속만 옆으로 옮기는 경우를 둘 다 걸러야 한다.
+    const scopeErr = scopeErrorForRole(
+      input.role ?? target.role,
+      {
+        global: input.global !== undefined ? input.global : target.global,
+        agentId: input.agentId !== undefined ? input.agentId : target.agentId,
+      },
+      defaultAgentId()
+    );
+    if (scopeErr) return NextResponse.json({ error: scopeErr }, { status: 400 });
 
     // 본인 계정을 스스로 강등/비활성화하는 실수 방지
     if (targetId === guard.session.sub) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/current";
 import { listUsers, createUser, validateAgentId } from "@/lib/users";
-import { isRole, roleAtLeast, resolveScope, canActOnAccount, isLockedScope } from "@/lib/roles";
+import { isRole, roleAtLeast, resolveScope, canActOnAccount, isLockedScope, scopeErrorForRole } from "@/lib/roles";
 import { defaultAgentId } from "@/lib/config";
 import { logger, reqContext } from "@/lib/logger";
 
@@ -101,6 +101,15 @@ export async function POST(req: NextRequest) {
       // global 은 넘기지 않는다 — 컬럼 DEFAULT 가 'N' 이라 결과가 같고,
       // 키를 넘기면 ALTER 전 환경에서 생성이 통째로 실패한다.
     }
+
+    // 권한 × 범위 조합 — 일반 사용자(FIELD)는 **기본 에이전트 소속만 존재한다**.
+    // 전역이거나 다른 에이전트로 만들면 홈(/insights)부터 403 이라 아무것도 못 하는 계정이 된다.
+    const scopeErr = scopeErrorForRole(
+      role,
+      { global: scopePatch.global === true, agentId: scopePatch.agentId ?? null },
+      defaultAgentId()
+    );
+    if (scopeErr) return NextResponse.json({ error: scopeErr }, { status: 400 });
 
     const user = await createUser({
       userId,

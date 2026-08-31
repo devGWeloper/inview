@@ -284,6 +284,14 @@ function AccountEditor({
   // 범위 변경은 **전역 운영자**만 한다 (전역 부여도, 다른 에이전트로 옮기는 것도 상향이다).
   // ⚠️ 여기서 막는 건 편의일 뿐이고, 실제 차단은 /api/accounts 의 403 이다.
   const canEditAgent = meRole === "ADMIN" && canGrantGlobal && agentsLoaded;
+  // 일반 사용자(FIELD)는 **기본 에이전트 소속만 존재한다** — 실적(/insights)이 BIZ 경로라
+  // 전역·타 에이전트로 만들면 홈부터 403 이다. 선택을 잠그고 기본 에이전트로 고정한다.
+  // ⚠️ 권위 있는 차단은 /api/accounts 의 scopeErrorForRole 400 이고 이건 실수 방지용이다.
+  const defaultAgent = agents.find((a) => a.isDefault)?.id ?? "";
+  const fieldFixed = role === "FIELD";
+  useEffect(() => {
+    if (fieldFixed && agentsLoaded && agentId !== defaultAgent) setAgentId(defaultAgent);
+  }, [fieldFixed, agentsLoaded, defaultAgent, agentId]);
   // 에이전트 운영자에게는 선택지가 없다 — 새 계정은 항상 자기 에이전트 소속이다.
   const showAgent = canGrantGlobal || agents.length > 1 || !!acc?.agentId || acc?.global === true;
   // 설정에서 사라진 소속이라도 선택 목록에 남겨야 저장 시 조용히 풀리지 않는다.
@@ -385,14 +393,16 @@ function AccountEditor({
         {showAgent && (
           <label className="auth-field">
             <span>에이전트</span>
-            <select value={agentId} disabled={!canEditAgent} onChange={(e) => setAgentId(e.target.value)}>
+            <select value={agentId} disabled={!canEditAgent || fieldFixed} onChange={(e) => setAgentId(e.target.value)}>
               <option value="">전역 (모든 에이전트)</option>
               {agentOptions.map((o) => (
                 <option key={o.id} value={o.id}>{o.label}</option>
               ))}
             </select>
             <em className="auth-hint">
-              {canEditAgent
+              {fieldFixed
+                ? "일반 사용자 계정은 기본 에이전트 소속만 가능합니다 — 실적 화면이 기본 에이전트 집계입니다."
+                : canEditAgent
                 ? "에이전트를 고르면 그 에이전트만 보고 관리합니다. 전역은 모든 에이전트를 오갈 수 있습니다."
                 : "에이전트 범위는 전역 운영자만 변경할 수 있습니다. 새 계정은 내 에이전트 소속으로 만들어집니다."}
             </em>

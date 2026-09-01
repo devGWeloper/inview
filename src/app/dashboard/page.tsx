@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { CubeLatencyChart } from "@/components/CubeLatencyChart"; // Action end-to-end 응답 지연 (Tokens 탭 LLM 지연과 별개)
 import { fmtDuration } from "@/components/TokenLatencyChart";
 import { DimensionBreakdown } from "@/components/DimensionBreakdown";
-import { ProfileStrip } from "@/components/ProfileStrip";
 import { LayerBudget } from "@/components/LayerBudget";
 import { StatsCards } from "@/components/StatsCards";
 import { StatusDonut } from "@/components/StatusDonut";
@@ -277,7 +276,6 @@ export default function DashboardPage() {
 
   return (
     <div className="dash">
-      <ProfileStrip />
       <div className="dash-header stacked">
         {/* 1줄 — 제목 + 보기 전환(우상단 고정). ⚠️ 토글을 조회 줄로 되돌리지 말 것: 폭이 모자라면 그것만 위로 튀어 올라 줄이 깨진다. */}
         <div className="dash-head-row">

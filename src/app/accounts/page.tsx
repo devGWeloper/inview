@@ -43,6 +43,40 @@ function AgentCell({ agents, id, global: isGlobal }: { agents: AgentInfo[]; id: 
   );
 }
 
+type SortKey = "userId" | "name" | "work" | "role" | "agent" | "useYn" | "lastLoginDt";
+type Dir = "asc" | "desc";
+/** "" = 전체 · "__global" = 전역 · "__none" = 미배정 · 그 외 = 에이전트 id */
+type AgentFilter = string;
+
+/** 클릭 시 처음 잡을 방향 — 최근 로그인만 최신순이 자연스럽다. */
+const FIRST_DIR: Record<SortKey, Dir> = {
+  userId: "asc", name: "asc", work: "asc", role: "asc",
+  agent: "asc", useYn: "asc", lastLoginDt: "desc",
+};
+
+/**
+ * 정렬 키 → 비교 문자열. 전부 문자열로 맞춰 비교를 한 갈래로 둔다.
+ * ⚠️ 권한은 사전순이 아니라 **서열순**(ROLES 배열 순서 = ADMIN > BR > DEV > FIELD)이다.
+ * ⚠️ 에이전트도 사전순이 아니라 전역 → 설정 순서 → 알 수 없는 id → 미배정 순이다
+ *    (미배정·미상은 조치가 필요한 값이라 뒤로 모은다).
+ */
+function sortKeyOf(u: Account, key: SortKey, agents: AgentInfo[]): string {
+  switch (key) {
+    case "name": return u.name.toLowerCase();
+    case "work": return (u.work ?? "").toLowerCase();
+    case "role": return String(Math.max(0, ROLES.indexOf(u.role)));
+    case "useYn": return u.useYn === "Y" ? "0" : "1";
+    case "lastLoginDt": return u.lastLoginDt ?? "";
+    case "agent": {
+      if (u.global) return "0";
+      if (!u.agentId) return "3";
+      const i = agents.findIndex((a) => a.id === u.agentId);
+      return i >= 0 ? "1:" + String(i).padStart(3, "0") : "2:" + u.agentId;
+    }
+    default: return u.userId.toLowerCase();
+  }
+}
+
 export default function AccountsPage() {
   const { user: me } = useAuth();
   const [users, setUsers] = useState<Account[]>([]);
@@ -50,6 +84,13 @@ export default function AccountsPage() {
   const [reason, setReason] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
+  // 조회 범위 — 전부 클라이언트 필터다. 계정 수는 많아야 수백이라 서버로 내리지 않는다.
+  const [roleF, setRoleF] = useState<Role | "">("");
+  const [agentF, setAgentF] = useState<AgentFilter>("");
+  const [useF, setUseF] = useState<"" | "Y" | "N">("");
+  // ⚠️ 기본 정렬이 권한순인 건 이 화면의 질문이 "누가 무슨 권한인가" 이기 때문이다.
+  //    사번순으로 두면 권한이 흩어져 매번 눈으로 훑어야 한다.
+  const [sort, setSort] = useState<{ key: SortKey; dir: Dir }>({ key: "role", dir: "asc" });
   // 에이전트 목록 — 결속 선택지/표기용.
   // ⚠️ /api/agents 는 **내 세션 범위**로 필터돼 내려온다. 결속을 다룰 수 있는 건 ADMIN 뿐이고
   //    ADMIN 은 결속이 없어(전체) 목록도 전체로 온다. 못 읽으면 셀렉트를 비활성으로 둔다.
@@ -100,6 +141,12 @@ export default function AccountsPage() {
   }, []);
 
   const filtered = users.filter((u) => {
+    if (roleF && u.role !== roleF) return false;
+    if (useF && u.useYn !== useF) return false;
+    // 전역 계정은 특정 에이전트로 좁힐 때 걸리지 않는다 (한 팀 소속이 아니다).
+    if (agentF === "__global" && !u.global) return false;
+    if (agentF === "__none" && (u.global || u.agentId)) return false;
+    if (agentF && agentF !== "__global" && agentF !== "__none" && (u.global || u.agentId !== agentF)) return false;
     if (!q.trim()) return true;
     const t = q.trim().toLowerCase();
     return (
@@ -108,6 +155,28 @@ export default function AccountsPage() {
       (u.work ?? "").toLowerCase().includes(t)
     );
   });
+
+  // 같은 값끼리는 사번순으로 고정 — 재조회할 때마다 행이 뒤바뀌면 읽기 어렵다.
+  const sorted = [...filtered].sort((a, b) => {
+    const av = sortKeyOf(a, sort.key, agents);
+    const bv = sortKeyOf(b, sort.key, agents);
+    if (av !== bv) return (av < bv ? -1 : 1) * (sort.dir === "asc" ? 1 : -1);
+    return a.userId.localeCompare(b.userId);
+  });
+
+  const onSort = (key: SortKey) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: FIRST_DIR[key] }));
+
+  const SortTh = ({ k, label, className }: { k: SortKey; label: string; className?: string }) => (
+    <th className={className} aria-sort={sort.key === k ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}>
+      <button type="button" className={"qth-sort" + (sort.key === k ? " active" : "")} onClick={() => onSort(k)}>
+        {label}
+        <span className="qth-arrow" aria-hidden>{sort.key === k ? (sort.dir === "asc" ? "▲" : "▼") : "↕"}</span>
+      </button>
+    </th>
+  );
+
+  const filterOn = Boolean(roleF || agentF || useF || q.trim());
 
   // 에이전트가 하나뿐인 배포에서는 결속 열/선택을 감춘다 — 기존 화면과 같아야 한다.
   // 단, 이미 결속된 계정이 있으면(설정이 줄었을 수도) 그 값은 반드시 보인다.
@@ -171,6 +240,27 @@ export default function AccountsPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+        <select className="acct-filter" value={roleF} onChange={(e) => setRoleF(e.target.value as Role | "")} aria-label="권한 필터">
+          <option value="">권한 전체</option>
+          {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+        </select>
+        {showAgent && (
+          <select className="acct-filter" value={agentF} onChange={(e) => setAgentF(e.target.value)} aria-label="에이전트 필터">
+            <option value="">에이전트 전체</option>
+            <option value="__global">전역</option>
+            {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            <option value="__none">미배정</option>
+          </select>
+        )}
+        <select className="acct-filter" value={useF} onChange={(e) => setUseF(e.target.value as "" | "Y" | "N")} aria-label="상태 필터">
+          <option value="">상태 전체</option>
+          <option value="Y">활성</option>
+          <option value="N">비활성</option>
+        </select>
+        {filterOn && (
+          <button type="button" className="acct-filter-clear"
+            onClick={() => { setQ(""); setRoleF(""); setAgentF(""); setUseF(""); }}>필터 해제</button>
+        )}
         <span className="acct-count">{filtered.length} / {users.length}</span>
       </div>
 
@@ -178,22 +268,24 @@ export default function AccountsPage() {
         <table className="acct-table">
           <thead>
             <tr>
-              <th>사번</th>
-              <th>이름</th>
-              <th>업무</th>
-              <th>권한</th>
-              {showAgent && <th>에이전트</th>}
-              <th>상태</th>
-              <th>최근 로그인</th>
+              <SortTh k="userId" label="사번" />
+              <SortTh k="name" label="이름" />
+              <SortTh k="work" label="업무" />
+              <SortTh k="role" label="권한" />
+              {showAgent && <SortTh k="agent" label="에이전트" />}
+              <SortTh k="useYn" label="상태" />
+              <SortTh k="lastLoginDt" label="최근 로그인" />
               <th className="acct-actions-h">관리</th>
             </tr>
           </thead>
           <tbody>
             {loading && <tr><td colSpan={cols} className="acct-empty">불러오는 중…</td></tr>}
-            {!loading && filtered.length === 0 && (
-              <tr><td colSpan={cols} className="acct-empty">계정이 없습니다.</td></tr>
+            {!loading && sorted.length === 0 && (
+              <tr><td colSpan={cols} className="acct-empty">
+                {filterOn ? "조건에 맞는 계정이 없습니다." : "계정이 없습니다."}
+              </td></tr>
             )}
-            {filtered.map((u) => (
+            {sorted.map((u) => (
               <tr key={u.userId} className={u.useYn === "N" ? "off" : ""}>
                 <td className="mono strong">{u.userId}{me?.userId === u.userId && <span className="acct-you">나</span>}</td>
                 <td>{u.name}</td>

@@ -2951,52 +2951,6 @@ button.tbd-row:not(:disabled):hover {
   font-size: 13px; color: var(--text-muted); font-style: italic; padding: 8px;
 }
 
-/* ---- dashboard profile strip (컴팩트) ---- */
-.profile-strip {
-  display: flex; align-items: center; gap: 14px;
-  padding: 12px 16px; border-radius: 12px;
-  background: linear-gradient(135deg, var(--surface), var(--surface-2));
-  border: 1px solid var(--border);
-  box-shadow: 0 1px 0 rgba(17,24,39,0.02);
-  text-decoration: none; color: inherit;
-  transition: border-color .12s, box-shadow .12s, transform .12s;
-}
-.profile-strip:hover {
-  text-decoration: none; border-color: rgba(37,99,235,0.35);
-  box-shadow: 0 4px 16px rgba(17,24,39,0.07); transform: translateY(-1px);
-}
-.profile-strip-avatar {
-  width: 42px; height: 42px; flex-shrink: 0; border-radius: 11px;
-  display: grid; place-items: center; font-size: 23px;
-  overflow: hidden;
-  background: var(--surface); border: 1px solid var(--border);
-}
-.profile-strip-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.profile-strip-id { display: flex; flex-direction: column; min-width: 0; }
-.profile-strip-name { font-size: 15px; font-weight: 800; letter-spacing: -0.2px; }
-.profile-strip-tagline {
-  font-size: 12px; color: var(--text-3);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px;
-}
-.profile-strip-divider { width: 1px; height: 30px; background: var(--border-strong); flex-shrink: 0; }
-.profile-strip-fte { display: flex; align-items: baseline; gap: 4px; flex-shrink: 0; }
-.profile-strip-fte-val {
-  font-family: var(--mono); font-size: 24px; font-weight: 800;
-  letter-spacing: -1px; color: var(--accent); line-height: 1;
-}
-.profile-strip-fte-unit { font-size: 12px; font-weight: 700; color: var(--accent); }
-.profile-strip-meta { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
-.profile-strip-chip {
-  font-size: 12px; font-weight: 600; color: var(--text-2);
-  background: var(--surface-3); border: 1px solid var(--border);
-  border-radius: 6px; padding: 3px 9px; white-space: nowrap;
-}
-.profile-strip-chip.skill { color: var(--accent); background: var(--accent-soft); border-color: rgba(37,99,235,0.2); }
-.profile-strip-cta { font-size: 12.5px; font-weight: 700; color: var(--accent); white-space: nowrap; flex-shrink: 0; }
-@media (max-width: 720px) {
-  .profile-strip-tagline, .profile-strip-divider, .profile-strip-cta { display: none; }
-}
-
 /* ---- /admin form ---- */
 .admin-page {
   flex: 1; min-height: 0; overflow: auto; padding: 18px 22px 28px;
@@ -4086,13 +4040,26 @@ button.tbd-row:not(:disabled):hover {
 .acct-warn-sub { font-size: 12px; color: var(--text-3); margin-top: 5px; }
 .acct-warn code { font-family: var(--mono); background: rgba(0,0,0,.05); padding: 1px 5px; border-radius: 4px; }
 
-.acct-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.acct-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
 .acct-search {
   flex: 1; max-width: 320px; padding: 9px 13px; border: 1px solid var(--border-strong);
   border-radius: 9px; background: var(--surface); font-size: 14px;
 }
 .acct-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.acct-count { font-size: 12.5px; color: var(--text-muted); font-family: var(--mono); }
+.acct-count { font-size: 12.5px; color: var(--text-muted); font-family: var(--mono); margin-left: auto; }
+/* 권한 · 에이전트 · 상태 필터 (툴바) */
+.acct-filter {
+  padding: 8px 11px; border: 1px solid var(--border-strong); border-radius: 9px;
+  background: var(--surface); color: var(--text); font-size: 13px; font-family: inherit;
+}
+.acct-filter:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.acct-filter-clear {
+  padding: 7px 11px; border: 1px solid var(--border); border-radius: 99px;
+  background: var(--surface); color: var(--text-2); font-size: 12.5px; cursor: pointer;
+}
+.acct-filter-clear:hover { border-color: var(--border-strong); background: var(--surface-2); }
+/* 정렬 헤더 — 표 스타일(대문자·자간)을 그대로 물려받는다 (.qth-sort 재사용) */
+.acct-table thead th .qth-sort { color: var(--text-3); }
 
 .acct-table-wrap { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
 .acct-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }

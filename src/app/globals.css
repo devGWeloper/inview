@@ -3688,17 +3688,18 @@ button.tbd-row:not(:disabled):hover {
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 
 /* 레이아웃 개편 시안 뷰어 진입 칩 — 검토 기간 한정 (AppChrome) */
-.design-peek {
+/* 공사장 진입 칩 (상단바, ADMIN 전용). 점선 테두리 = "아직 공사 중" */
+.wip-entry {
   display: inline-flex; align-items: center; gap: 6px;
   height: 30px; padding: 0 11px; border-radius: 8px;
   border: 1px dashed var(--border-strong); background: var(--surface-2);
   color: var(--text-2); font-size: 12.5px; white-space: nowrap;
 }
-.design-peek:hover {
+.wip-entry:hover {
   text-decoration: none; color: var(--accent);
   border-color: var(--accent); background: var(--accent-soft);
 }
-@media (max-width: 1180px) { .design-peek span:last-child { display: none; } }
+@media (max-width: 1180px) { .wip-entry span:last-child { display: none; } }
 
 /* 권한 배지 색 (공용 CSS 변수) */
 .role-ADMIN { --role-c: #7c3aed; --role-bg: #f2ecfe; --role-bd: #e0d1fb; }
@@ -5020,3 +5021,588 @@ button.tbd-row:not(:disabled):hover {
   border: 1px solid var(--border); font-size: 11.5px; font-weight: 700; color: var(--text-3);
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Action 오픈 로드맵 (/roadmap) — rm-*
+
+   위: 월 달력(며칠에 여는지) / 아래: 전체 표(전부 언제인지). 둘은 선택 상태를 공유한다.
+   상태별 건수 같은 통계 줄은 두지 않는다 — 항목이 열 몇 건인 계획표라 세어 봐야 답이 안 나온다.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.rm-page {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 22px 40px;
+  max-width: 1180px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  --rm-done:  var(--ok);
+  --rm-doing: var(--accent);
+  --rm-plan:  #64748b;
+  --rm-late:  var(--warn);
+  --rm-hold:  #8b93a1;
+  /* 브랜드 그라디언트의 보라. 이 화면에서 '오늘' 에만 쓴다 — 상태 색과 절대 안 겹친다. */
+  --rm-today: #7c3aed;
+}
+
+/* 상태 팔레트 — 칩/배지/행이 모두 이 두 변수만 읽는다.
+   ⚠️ 반드시 .rm-page 로 스코프할 것. `is-done` 같은 흔한 이름을 전역에 두면 다른 화면까지 물든다.
+   (팝업은 position:fixed 지만 DOM 상으로는 .rm-page 의 자손이라 그대로 상속된다) */
+.rm-page .is-done  { --c: var(--rm-done);  --c-soft: var(--ok-soft); }
+.rm-page .is-doing { --c: var(--rm-doing); --c-soft: var(--accent-soft); }
+.rm-page .is-plan  { --c: var(--rm-plan);  --c-soft: #eef1f5; }
+.rm-page .is-late  { --c: var(--rm-late);  --c-soft: var(--warn-soft); }
+.rm-page .is-hold  { --c: var(--rm-hold);  --c-soft: #f1f3f6; }
+
+/* ── 머리말 ─────────────────────────────────────────────────────────────── */
+.rm-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.rm-title { margin: 0; font-size: 22px; font-weight: 750; letter-spacing: -0.45px; color: var(--text); }
+.rm-sub { margin: 5px 0 0; font-size: 13px; color: var(--text-3); }
+.rm-head-act { display: flex; align-items: center; gap: 8px; }
+.rm-readonly {
+  font-size: 12px;
+  color: var(--text-3);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  padding: 5px 11px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+
+/* ── 달력 ───────────────────────────────────────────────────────────────── */
+.rm-cal {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.03),
+              0 14px 30px -26px rgba(17, 24, 39, 0.4);
+}
+.rm-cal-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.rm-cal-month {
+  margin: 0 6px;
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  min-width: 118px;
+  text-align: center;
+}
+.rm-cal-nav {
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 7px;
+  color: var(--text-2);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.rm-cal-nav:hover { background: var(--surface-3); color: var(--text); }
+/* 보기 단위 토글 — 년(12달 한눈에) / 월(날짜 격자) */
+.rm-cal-modes {
+  display: inline-flex;
+  margin-left: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.rm-cal-mode {
+  appearance: none;
+  border: 0;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.rm-cal-mode:first-child { border-left: 0; }
+.rm-cal-mode:hover { background: var(--surface-3); color: var(--text-2); }
+.rm-cal-mode.on { background: var(--text); color: #fff; }
+
+.rm-cal-today {
+  appearance: none;
+  margin-left: auto;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.rm-cal-today:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+/* 달만 정해진 항목 — 어느 칸에도 박을 수 없으므로 격자 위에 모은다 */
+.rm-cal-loose {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.rm-cal-loose-l {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding-top: 3px;
+  letter-spacing: 0.02em;
+}
+.rm-cal-loose-items { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.rm-cal-head, .rm-cal-week { display: grid; grid-template-columns: repeat(7, 1fr); }
+.rm-cal-wd {
+  padding: 7px 0;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.rm-cal-wd.off { color: var(--text-muted); }
+
+/* ⚠️ 칸 높이는 넉넉히. 74px 이었을 때 "위아래로 짜부돼 있다" 는 지적을 받았다.
+   달력이 이 화면의 전부이므로 세로 공간을 아낄 이유가 없다. */
+.rm-cal-day {
+  min-height: 118px;
+  padding: 6px 7px 8px;
+  border-right: 1px solid var(--surface-3);
+  border-bottom: 1px solid var(--surface-3);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.rm-cal-week > .rm-cal-day:last-child { border-right: 0; }
+.rm-cal-grid > .rm-cal-week:last-child > .rm-cal-day { border-bottom: 0; }
+/* 이번 달이 아닌 날은 있는 줄만 알면 된다 — 옅게 */
+.rm-cal-day.out { background: var(--surface-2); }
+.rm-cal-day.out .rm-cal-n { color: var(--text-muted); opacity: 0.6; }
+.rm-cal-n {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.rm-cal-day.sun .rm-cal-n { color: #b42318; }
+.rm-cal-day.sat .rm-cal-n { color: #1d4ed8; }
+/* 오늘 — 이 화면에서 보라는 '오늘' 전용이다 */
+.rm-cal-day.today { background: #faf7ff; box-shadow: inset 0 0 0 2px var(--rm-today); }
+.rm-cal-day.today .rm-cal-n {
+  color: #fff;
+  background: var(--rm-today);
+  border-radius: 99px;
+  padding: 1px 7px;
+  align-self: flex-start;
+}
+.rm-cal-items { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+
+.rm-cal-none {
+  margin: 0;
+  padding: 11px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ── 년 보기 — 12달 카드 ────────────────────────────────────────────────
+   달마다 그 달의 Action 을 날짜와 함께 나열한다. 빈 달도 자리를 지켜야
+   "1월부터 12월까지" 라는 격자가 유지된다(빼면 달이 밀려 읽는 위치가 흔들린다). */
+/* ── 년 보기 — 12달치 진짜 달력 ──────────────────────────────────────────
+   미니 달력(며칠인가) + 그 아래 이름 목록(무엇인가)을 한 카드에서 같이 읽는다.
+   ⚠️ 클래스 이름에 `empty` 를 쓰지 말 것 — globals.css 에 이미 전역 `.empty`
+      (가운데 정렬 빈 상태)가 있어 라벨이 통째로 가운데로 끌려간다. 여기선 `blank`. */
+.rm-year {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border-top: 1px solid var(--border);
+}
+.rm-mini {
+  background: var(--surface);
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.rm-mini.blank { background: var(--surface-2); }
+.rm-mini.now { box-shadow: inset 0 0 0 2px var(--rm-today); }
+.rm-mini-h {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  text-align: left;
+}
+.rm-mini-l {
+  font-size: 14px;
+  font-weight: 750;
+  color: var(--text);
+  letter-spacing: -0.2px;
+}
+.rm-mini-h:hover .rm-mini-l { color: var(--accent); }
+.rm-mini.blank .rm-mini-l { color: var(--text-muted); font-weight: 650; }
+.rm-mini-now {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--rm-today);
+  padding: 1.5px 7px;
+  border-radius: 99px;
+}
+
+.rm-mini-grid { display: flex; flex-direction: column; gap: 2px; }
+.rm-mini-wk, .rm-mini-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.rm-mini-wd {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding-bottom: 2px;
+}
+.rm-mini-wd.off { opacity: 0.6; }
+/* 날짜 칸 — 항목이 있으면 상태 색으로 채운다. 이름은 아래 목록이 맡는다. */
+.rm-mini-d {
+  display: grid;
+  place-items: center;
+  height: 27px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  position: relative;
+}
+.rm-mini-d.out { visibility: hidden; }
+.rm-mini-d.sun { color: #b42318; }
+.rm-mini-d.sat { color: #1d4ed8; }
+.rm-mini-d.today { box-shadow: inset 0 0 0 1.5px var(--rm-today); color: var(--rm-today); font-weight: 700; }
+button.rm-mini-d {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+.rm-mini-d.has {
+  background: var(--c);
+  color: #fff;
+  font-weight: 700;
+}
+.rm-mini-d.has.is-plan, .rm-mini-d.has.is-hold { color: #fff; }
+.rm-mini-d.has:hover { filter: brightness(1.12); }
+.rm-mini-d.has.sel { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--c); }
+.rm-mini-d.has.today { box-shadow: inset 0 0 0 1.5px #fff; }
+/* 한 날에 여러 건이면 개수를 모서리에 */
+.rm-mini-more {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 3px;
+  border-radius: 99px;
+  background: var(--text);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.rm-mini-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 8px;
+  border-top: 1px solid var(--surface-3);
+}
+/* 년 보기 목록의 칩은 날짜를 앞에 달고 다닌다 — 격자가 어느 항목인지 말해 주지 않으므로 */
+.rm-chip-d {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+.rm-chip-late {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--err);
+  background: var(--err-soft);
+  padding: 0 5px;
+  border-radius: 99px;
+}
+
+/* 달력 칩 — 그 날 여는 Action */
+.rm-chip {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--c-soft);
+  color: var(--c);
+  font-size: 11.5px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+.rm-chip:hover { border-color: var(--c); }
+.rm-chip.sel { border-color: var(--c); box-shadow: 0 0 0 2px var(--c-soft); }
+.rm-chip-dot { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--c); }
+.rm-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-cal-loose .rm-chip { width: auto; }
+/* 월 보기 칸은 넓다 — 칩도 그만큼 키워 이름이 잘리지 않게 한다 */
+.rm-chip.big { padding: 5px 9px; font-size: 12px; }
+/* 맨 아래 '일정 미정' 줄은 격자 밖이라 위쪽 경계를 갖는다 */
+.rm-cal-loose.bottom { border-bottom: 0; border-top: 1px solid var(--border); }
+
+/* ── 빈 상태 · 꼬리말 ───────────────────────────────────────────────────── */
+.rm-blank {
+  flex-shrink: 0;
+  border: 1px dashed var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface-2);
+  padding: 46px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.rm-blank-main { margin: 0; font-size: 14.5px; font-weight: 650; color: var(--text-2); }
+.rm-blank-sub { margin: 0 0 10px; font-size: 12.5px; color: var(--text-muted); }
+.rm-foot { margin: 0; font-size: 11.5px; color: var(--text-muted); text-align: right; }
+
+/* ── 추가/수정 팝업 ─────────────────────────────────────────────────────── */
+.rm-modal-back {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(17, 24, 39, 0.42);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.rm-modal {
+  width: min(520px, 100%);
+  max-height: calc(100dvh - 40px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  box-shadow: 0 24px 60px -18px rgba(17, 24, 39, 0.45);
+  overflow: hidden;
+}
+.rm-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.rm-modal-title { margin: 0; font-size: 15.5px; font-weight: 700; }
+.rm-modal-x {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.rm-modal-x:hover { background: var(--surface-3); color: var(--text); }
+.rm-modal-body {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  overflow: auto;
+}
+.rm-f { display: flex; flex-direction: column; gap: 7px; }
+.rm-f-l { font-size: 12px; font-weight: 650; color: var(--text-2); }
+.rm-f-opt { font-weight: 500; color: var(--text-muted); margin-left: 4px; }
+.rm-f-in {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 13.5px;
+  color: var(--text);
+}
+.rm-f-in::placeholder { color: var(--text-muted); }
+.rm-f-in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.rm-f-date { font-family: var(--mono); font-size: 13px; }
+.rm-f-note { margin: 0; font-size: 11.5px; color: var(--text-muted); }
+.rm-modal-err {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--err);
+  background: var(--err-soft);
+  border: 1px solid #f4c1bc;
+  padding: 8px 11px;
+  border-radius: 8px;
+}
+.rm-modal-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.rm-modal-gap { flex: 1; }
+.rm-del-confirm { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--err); }
+
+/* 세그먼트 (상태 · 시점 종류) */
+.rm-seg {
+  display: inline-flex;
+  align-self: flex-start;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.rm-seg-btn {
+  appearance: none;
+  border: 0;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rm-seg-btn:first-child { border-left: 0; }
+.rm-seg-btn:hover { background: var(--surface-3); color: var(--text-2); }
+.rm-seg-sm .rm-seg-btn { padding: 6px 12px; font-size: 11.5px; }
+/* ⚠️ .on 규칙은 :hover 뒤에 온다 — 같은 특정도라 순서가 승패를 가른다 */
+.rm-seg-btn.on { color: #fff; }
+.rm-seg-btn.on.is-done  { background: var(--rm-done); }
+.rm-seg-btn.on.is-doing { background: var(--rm-doing); }
+.rm-seg-btn.on.is-plan  { background: var(--rm-plan); }
+.rm-seg-btn.on.is-hold  { background: var(--rm-hold); }
+.rm-seg-btn.on.neutral  { background: var(--text-2); }
+
+/* 공용 .btn 에는 disabled 스타일이 없어 '저장' 이 눌리는 것처럼 보였다.
+   전역 .btn 을 건드리면 다른 화면까지 바뀌므로 이 화면 안에서만 잠근다. */
+.rm-page .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.rm-page .btn:disabled:hover { background: var(--surface); filter: none; }
+.rm-page .btn.primary:disabled:hover { background: var(--accent); }
+
+/* 키보드 이동이 보이도록 — 이 화면의 조작은 대부분 버튼이다 */
+.rm-page :is(button, input, tr):focus-visible,
+.rm-modal :is(button, input):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── 좁은 화면 ──────────────────────────────────────────────────────────── */
+@media (max-width: 860px) {
+  .rm-page { padding: 14px 14px 32px; }
+  .rm-cal-day { min-height: 78px; padding: 5px 4px 6px; }
+  .rm-chip { padding: 2px 5px; font-size: 10.5px; gap: 4px; }
+  .rm-chip.big { padding: 3px 6px; font-size: 11px; }
+  .rm-chip-dot { width: 5px; height: 5px; }
+  .rm-year { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+  .rm-mini { padding: 10px 11px 12px; }
+  .rm-mini-d { height: 23px; font-size: 10px; }
+  .rm-cal-modes { margin-left: 8px; }
+}
+
+/* ── 공사장 (/wip) — 아직 안 연 화면 색인. 임시 보관소라 꾸미지 않는다. ── */
+.wip-page {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 26px 22px 40px;
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
+}
+.wip-head { margin-bottom: 18px; }
+.wip-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 750;
+  letter-spacing: -0.4px;
+}
+.wip-sub { margin: 5px 0 0; font-size: 12.5px; color: var(--text-3); }
+.wip-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.wip-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--text);
+}
+.wip-card:hover {
+  text-decoration: none;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.wip-card-top { display: flex; align-items: baseline; gap: 10px; justify-content: space-between; }
+.wip-card-name { font-size: 14.5px; font-weight: 700; letter-spacing: -0.1px; }
+.wip-card-state {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-3);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 99px;
+}
+.wip-card-what { font-size: 12.5px; color: var(--text-2); }
+.wip-card-href { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }

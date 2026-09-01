@@ -1062,3 +1062,49 @@ export interface AgentsResponse {
   agents: AgentInfo[];
   defaultId: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Action 오픈 로드맵 (/roadmap)
+//
+// Action Agent 가 여는 기능(Action)이 계속 늘어나는데 "언제 무엇이 열렸고 앞으로
+// 무엇을 열 것인가" 를 모아 둔 곳이 없었다. DB 연동 없이 **운영자가 직접 적는**
+// 계획표이며, 저장은 data/roadmap.json (src/lib/roadmap.ts).
+//
+// ⚠️ 읽기는 일반 사용자까지 열려 있다 — 사번·원문 같은 내부 정보를 이 구조에 넣지 말 것.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 마일스톤 상태. 지연(overdue)은 저장하지 않고 오늘 날짜로 파생시킨다. */
+export type MilestoneStatus = "released" | "in_progress" | "planned" | "hold";
+
+export const MILESTONE_STATUSES: MilestoneStatus[] = ["released", "in_progress", "planned", "hold"];
+
+export const MILESTONE_STATUS_LABEL: Record<MilestoneStatus, string> = {
+  released: "오픈 완료",
+  in_progress: "개발 중",
+  planned: "계획",
+  hold: "보류",
+};
+
+export interface Milestone {
+  /** 안정 키 (편집 중 행 식별용). 저장 시 없으면 생성한다 */
+  id: string;
+  /** Action 이름 — 사용자가 부르는 이름을 그대로 쓴다 */
+  name: string;
+  status: MilestoneStatus;
+  /**
+   * 시점. **정밀도가 다른 값을 그대로 받는다** — 오픈 완료 건은 날짜가 확정이지만
+   * 미래 계획은 분기/연도까지만 정해지는 게 보통이라 억지로 날짜를 찍게 하지 않는다.
+   * 허용: `2026-02-14` · `2026-02` · `2026-Q4` · `2026`  (해석은 lib/roadmapTime.ts)
+   */
+  when: string;
+  /** 한 줄 설명 */
+  desc: string;
+}
+
+export interface Roadmap {
+  milestones: Milestone[];
+  /** 마지막 저장 시각 (ISO). 화면 하단에 "마지막 수정" 으로 표기 */
+  updatedAt: string;
+}
+
+export const DEFAULT_ROADMAP: Roadmap = { milestones: [], updatedAt: "" };

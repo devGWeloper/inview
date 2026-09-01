@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { TabNav, AgentNavChip } from "@/components/TabNav";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -38,20 +39,20 @@ export function AppChrome({ version, children }: { version: string; children: Re
           </div>
           <TabNav />
           <div className="topbar-right">
-            {/* 레이아웃 개편 시안 뷰어 (public/design-preview.html) — 검토용 임시 진입점.
-                ADMIN 전용: 여기서 감추는 건 표시 제어일 뿐이고, 실제 접근 차단은
-                ROUTE_RULES 의 /design-preview.html 규칙(ADMIN)을 미들웨어가 강제한다. */}
+            {/* 공사장(/wip) — 아직 안 연 화면(로드맵 · 디자인 시안 …)의 유일한 진입점.
+                만들다 만 화면을 상단바에 하나씩 붙이면 정식 화면과 섞이므로 한 자리에 모은다.
+                ADMIN 전용: 여기서 감추는 건 표시 제어일 뿐이고, 실제 차단은
+                ROUTE_RULES 의 /wip 규칙(ADMIN)을 미들웨어가 강제한다. */}
             {user?.role === "ADMIN" && (
-              <a
-                className="design-peek"
-                href="/design-preview.html"
-                target="_blank"
-                rel="noreferrer"
-                title="레이아웃 개편 시안 4종 보기 (운영자 전용)"
+              <Link
+                className="wip-entry"
+                href="/wip"
+                prefetch={false}
+                title="아직 열지 않은 화면 모음 (운영자 전용)"
               >
-                <span aria-hidden>🎨</span>
-                <span>디자인 시안</span>
-              </a>
+                <span aria-hidden>🚧</span>
+                <span>공사장</span>
+              </Link>
             )}
             <AgentSelector />
             <AgentNavChip />

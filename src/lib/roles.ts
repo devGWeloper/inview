@@ -75,6 +75,8 @@ export interface RouteRule {
 export const ROUTE_RULES: RouteRule[] = [
   // 운영자 전용 — **쓰기가 목적인 화면/API**. 조회만 하는 화면을 여기 두지 말 것.
   { prefix: "/admin", min: "ADMIN" }, // 프로필 편집 (편집 전용 화면)
+  // 공사장 — 아직 안 연 화면을 모아 두는 색인. 정식 오픈 시 그 화면만 밖으로 뺀다.
+  { prefix: "/wip", min: "ADMIN" },
   // public/ 정적 파일이지만 middleware matcher 가 .html 을 제외하지 않아 여기 규칙이 걸린다.
   { prefix: "/design-preview.html", min: "ADMIN" }, // 레이아웃 개편 시안 뷰어 (검토용)
   { prefix: "/accounts", min: "ADMIN" }, // 계정 관리 (등록/수정/삭제/비번초기화)
@@ -112,6 +114,10 @@ export function requiredRoleForPath(pathname: string): Role | null {
 //   /agent         에이전트 소개 카드 + FTE (공개용 프로필)
 //   /api/profile   위 카드의 데이터 (GET 만 — PUT 은 requireAgentAdmin 이 따로 막는다)
 //   /api/agents    상단바 에이전트 셀렉터가 마운트 시 읽는 목록 (비밀 없음)
+//   /roadmap       Action 오픈 로드맵 (운영자가 직접 적는 계획표 — 내부 식별자 없음)
+//   /api/roadmap   그 화면의 데이터 (GET 만 — PUT 은 requireGlobalAdmin 이 따로 막는다)
+//                  ⚠️ 아직 상단 탭에 없다(공사장 /wip 안에 있다). 열람 권한만 미리 열어 둔 것이라
+//                     정식 오픈은 TabNav 에 한 줄 추가하는 것으로 끝난다.
 //   /403           권한 안내 화면 (여기까지 막으면 리다이렉트 루프가 된다)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -121,6 +127,8 @@ export const FIELD_ALLOW_PREFIXES: string[] = [
   "/agent",
   "/api/profile",
   "/api/agents",
+  "/roadmap",
+  "/api/roadmap",
   "/403",
 ];
 

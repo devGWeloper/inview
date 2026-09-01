@@ -71,6 +71,23 @@ export async function requireAgentAdmin(agentId: string): Promise<ScopeGuard> {
 }
 
 /**
+ * **전역 ADMIN** 을 요구한다 — 에이전트에 매이지 않은 앱 전체 자산의 쓰기 권한.
+ *
+ * ⚠️ requireAgentAdmin 과 다르다. 그쪽은 "그 에이전트의 ADMIN" 도 통과시키므로
+ *    에이전트 하나에 속한 운영자가 **앱 전체**가 공유하는 문서를 고칠 수 있게 된다.
+ *    로드맵(data/roadmap.json)처럼 에이전트 구분 없이 1벌뿐인 자원의 쓰기는 이 가드를 쓴다.
+ */
+export async function requireGlobalAdmin(): Promise<ScopeGuard> {
+  const guard = await requireRole("ADMIN");
+  if (!guard.ok) return guard;
+  const scope = resolveScope(guard.session);
+  if (!scope.global) {
+    return { ok: false, status: 403, error: "전역 운영자만 수정할 수 있습니다." };
+  }
+  return { ok: true, session: guard.session, scope };
+}
+
+/**
  * BIZ_AIACTIONTXN_HIS 기반 화면/API 접근 권한을 요구한다 (기본 에이전트 전용).
  *
  * ⚠️ 미들웨어의 bizAllowed 클레임은 로그인 시점에 고정된 캐시라 **권위가 없다**.

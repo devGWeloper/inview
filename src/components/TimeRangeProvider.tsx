@@ -15,23 +15,15 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 //    걸려 "사용량 0" 으로 오독된다) 두 화면의 차원 목록도 다르다.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type RangePreset = "1m" | "5m" | "10m" | "30m" | "1h" | "6h" | "24h" | "7d" | "30d";
+export type RangePreset = "1h" | "6h" | "24h" | "7d" | "30d";
 
-/**
- * 프리셋 라벨/길이의 단일 소스 — 두 페이지가 이 배열을 그대로 렌더한다.
- * ⚠️ 길이는 '분' 이다(hours 가 아니라) — 1M/5M 같은 분 단위 프리셋이 시간으로는 분수가 되어
- *    now - (5/60)*3600000 이 299999.999ms 로 떨어지고, 초 절삭 때문에 구간이 1초 짧아진다.
- */
-export const RANGE_PRESETS: { key: RangePreset; label: string; minutes: number }[] = [
-  { key: "1m", label: "1M", minutes: 1 },
-  { key: "5m", label: "5M", minutes: 5 },
-  { key: "10m", label: "10M", minutes: 10 },
-  { key: "30m", label: "30M", minutes: 30 },
-  { key: "1h", label: "1H", minutes: 60 },
-  { key: "6h", label: "6H", minutes: 360 },
-  { key: "24h", label: "24H", minutes: 1440 },
-  { key: "7d", label: "7D", minutes: 10080 },
-  { key: "30d", label: "30D", minutes: 43200 },
+/** 프리셋 라벨/길이의 단일 소스 — 두 페이지가 이 배열을 그대로 렌더한다. */
+export const RANGE_PRESETS: { key: RangePreset; label: string; hours: number }[] = [
+  { key: "1h", label: "1H", hours: 1 },
+  { key: "6h", label: "6H", hours: 6 },
+  { key: "24h", label: "24H", hours: 24 },
+  { key: "7d", label: "7D", hours: 168 },
+  { key: "30d", label: "30D", hours: 720 },
 ];
 
 /** '직접 설정' 버튼 문구 — 앱의 다른 기간 UI(/insights 등)와 같은 표기. */
@@ -84,9 +76,9 @@ export function resolveRange(sel: TimeRangeSel): ResolvedRange {
   if (sel.preset === "custom" && sel.customFrom && sel.customTo) {
     return { from: withSec(sel.customFrom, "00"), to: withSec(sel.customTo, "59") };
   }
-  const minutes = (RANGE_PRESETS.find((p) => p.key === sel.preset) ?? RANGE_PRESETS.find((p) => p.key === DEFAULT_PRESET)!).minutes;
+  const hours = (RANGE_PRESETS.find((p) => p.key === sel.preset) ?? RANGE_PRESETS.find((p) => p.key === DEFAULT_PRESET)!).hours;
   const now = Date.now();
-  return { from: toLocalSec(now - minutes * 60_000), to: toLocalSec(now) };
+  return { from: toLocalSec(now - hours * 3_600_000), to: toLocalSec(now) };
 }
 
 /** 저장값 복원 — 형식이 다르거나 모르는 프리셋이면 기본값으로 되돌린다. */

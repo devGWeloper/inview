@@ -13,32 +13,20 @@ import { TopList } from "@/components/TopList";
 import { StatsFilter, StatsResponse } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 
-type Preset = "1m" | "5m" | "10m" | "30m" | "1h" | "6h" | "24h" | "7d" | "30d" | "custom";
+type Preset = "1h" | "6h" | "24h" | "7d" | "30d" | "custom";
 
-// ⚠️ 길이는 '분' 이다(시간이 아니라) — 분 단위 프리셋을 시간으로 적으면 5/60*3_600_000 이
-//    299999.999ms 로 떨어져 구간이 1ms 씩 어긋난다.
-const PRESETS: { key: Preset; label: string; minutes: number }[] = [
-  { key: "1m",  label: "1M",  minutes: 1     },
-  { key: "5m",  label: "5M",  minutes: 5     },
-  { key: "10m", label: "10M", minutes: 10    },
-  { key: "30m", label: "30M", minutes: 30    },
-  { key: "1h",  label: "1H",  minutes: 60    },
-  { key: "6h",  label: "6H",  minutes: 360   },
-  { key: "24h", label: "24H", minutes: 1440  },
-  { key: "7d",  label: "7D",  minutes: 10080 },
-  { key: "30d", label: "30D", minutes: 43200 },
+const PRESETS: { key: Preset; label: string; hours: number }[] = [
+  { key: "1h",  label: "1H",  hours: 1   },
+  { key: "6h",  label: "6H",  hours: 6   },
+  { key: "24h", label: "24H", hours: 24  },
+  { key: "7d",  label: "7D",  hours: 168 },
+  { key: "30d", label: "30D", hours: 720 },
 ];
 
-/**
- * ms → 'YYYY-MM-DDTHH:MM:SS' (로컬).
- * ⚠️ 초까지 쓴다 — 분 정밀 + ":00" 이면 상한이 현재 '분의 시작' 으로 잘려 방금 들어온 요청이
- *    통째로 빠진다. 1M/5M 처럼 짧은 프리셋에서는 그게 구간의 절반이 될 수도 있다.
- *    (1TICK 모니터가 toLocalSec 를 쓰는 것과 같은 이유)
- */
 function toLocalInput(ms: number): string {
   const d = new Date(ms);
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function fmtRange(from: string | null, to: string | null): string {
@@ -103,8 +91,8 @@ export default function DashboardPage() {
     const now = Date.now();
     return {
       ...base,
-      dateFrom: toLocalInput(now - p.minutes * 60_000),
-      dateTo:   toLocalInput(now),
+      dateFrom: toLocalInput(now - p.hours * 3_600_000) + ":00",
+      dateTo:   toLocalInput(now) + ":00",
     };
   }, [preset, customFrom, customTo, userId, actionTyp, excludeErrCds]);
 
@@ -143,8 +131,8 @@ export default function DashboardPage() {
       const p = PRESETS.find((x) => x.key === k)!;
       const now = Date.now();
       load({
-        dateFrom: toLocalInput(now - p.minutes * 60_000),
-        dateTo:   toLocalInput(now),
+        dateFrom: toLocalInput(now - p.hours * 3_600_000) + ":00",
+        dateTo:   toLocalInput(now) + ":00",
         userId: userId || undefined,
         actionTyp: actionTyp || undefined,
         excludeErrCds: excludeErrCds.length > 0 ? excludeErrCds : undefined,

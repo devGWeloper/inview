@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fmtDuration } from "@/components/TokenLatencyChart";
 import { TimeoutTrendChart } from "@/components/TimeoutTrendChart";
 import { TimeoutModelHeatmap } from "@/components/TimeoutModelHeatmap";
-import { TimeoutDimStat, TimeoutItem, TimeoutReason, TimeoutStatsResponse } from "@/lib/types";
+import { TickMetricDef, TickStatsResponse, TimeoutDimStat, TimeoutItem, TimeoutReason, TimeoutStatsResponse } from "@/lib/types";
+import { TickMonitor } from "@/components/TickMonitor";
 import { callStatus } from "@/lib/tokenStatus";
 import { apiJson, errMessage } from "@/lib/apiClient";
 import { useAgentScope } from "@/components/agents/AgentScopeProvider";
@@ -15,6 +16,15 @@ import {
   resolveRange,
   useTimeRange,
 } from "@/components/TimeRangeProvider";
+import {
+  TickRange,
+  resolveTickRange,
+  tickRefreshMs,
+  useTick,
+  useTickView,
+} from "@/components/tick/TickProvider";
+import { TickToolbar } from "@/components/tick/TickToolbar";
+import { ViewToggle } from "@/components/tick/ViewToggle";
 
 // Timeout 탭 — LLM 호출이 끊긴 지점을 그대로 본다.
 // 출처는 TRX_TOKEN_DET 의 실패 적재(STAT_CD='ERROR' + ERR_CTN + LATENCY_MS) 한 곳이며,
@@ -25,7 +35,21 @@ import {
 
 // 조회 기간(프리셋/직접 설정)은 Tokens 탭과 **공유**한다 — TimeRangeProvider 참고.
 // 여기에 프리셋 배열이나 기간 state 를 다시 두지 말 것(두 탭의 구성이 또 갈린다).
+//
+// 실시간 뷰는 같은 TRX_TOKEN_DET 를 롤링 60초로 본다. ⚠️ 다만 지표가 Tokens 탭과 다르다 —
+// 여기서 TPM/RPM 을 그대로 복제하면 두 화면의 숫자가 글자 하나까지 같아져 볼 이유가 없다.
+// 이 화면의 실시간은 **분당 타임아웃 / 분당 실패**다(`?view=failure`).
 interface Range { from: string; to: string }
+
+/**
+ * 실시간 뷰의 게이지/차트 정의.
+ * ⚠️ 한도(limit)는 0 이다 — 타임아웃은 사내 rate limit 같은 상한이 있는 값이 아니다.
+ *    0 이면 기준선·초과 판정 없이 추이만 그리고, 목록은 "가장 몰린 순간" 이 된다.
+ */
+const TIMEOUT_METRICS: [TickMetricDef, TickMetricDef] = [
+  { name: "타임아웃", unitText: "건/분", unit: "건", limit: 0 },
+  { name: "실패", unitText: "건/분", unit: "건", limit: 0 },
+];
 
 function fmtRange(from: string | null, to: string | null): string {
   if (!from || !to) return "—";
@@ -49,6 +73,12 @@ export default function TimeoutsPage() {
   const [stats, setStats] = useState<TimeoutStatsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  /** 실시간 뷰인가 (화면별로 기억) + 공유 조회 창 */
+  const [tickView, setTickView, tickViewReady] = useTickView("timeouts");
+  const { sel: tickSel, ready: tickReady, resolve: resolveTick } = useTick();
+  const [tick, setTick] = useState<TickStatsResponse | null>(null);
+  const [tickClamped, setTickClamped] = useState(false);
 
   // 응답 도착 시점의 "현재 선택된 에이전트" 를 읽기 위한 ref — tokens 페이지와 동일 패턴.
   const agentIdRef = useRef(agentId);
@@ -81,6 +111,36 @@ export default function TimeoutsPage() {
     }
   }, [agentId]);
 
+  // 실시간(롤링 60초) 조회 — 같은 TRX_TOKEN_DET 를 ?view=failure 로 본다.
+  // 노드/모델 필터는 그대로 걸린다(기간 분석 뷰와 조회 범위 해석이 갈리지 않게).
+  const loadTick = useCallback(async (r: TickRange, nodeNm: string, modelNm: string) => {
+    const requestFor = agentId;
+    setLoading(true);
+    setErr(null);
+    try {
+      const q = new URLSearchParams({ dateFrom: r.from, dateTo: r.to, view: "failure" });
+      if (agentId) q.set("agent", agentId);
+      if (nodeNm) q.set("nodeNm", nodeNm);
+      if (modelNm) q.set("modelNm", modelNm);
+      const data = await apiJson<TickStatsResponse>(`/api/tokens/tick?${q.toString()}`, { cache: "no-store" });
+      const echoed = data.agentId ?? requestFor;
+      if (agentIdRef.current && echoed !== agentIdRef.current) return;
+      setTick(data);
+      // 요청한 시작 시각보다 응답의 시작이 뒤면 서버가 24시간으로 자른 것이다.
+      // (1분 여유 — 초 정규화 차이를 잘림으로 오인하지 않도록)
+      const want = Date.parse(r.from);
+      const got = data.range.from ? Date.parse(data.range.from) : NaN;
+      setTickClamped(Number.isFinite(want) && Number.isFinite(got) && got - want > 60_000);
+    } catch (e) {
+      if (agentIdRef.current !== requestFor) return;
+      setErr(errMessage(e, "실시간 모니터를 불러오지 못했습니다."));
+      setTick(null);
+      setTickClamped(false);
+    } finally {
+      if (agentIdRef.current === requestFor) setLoading(false);
+    }
+  }, [agentId]);
+
   // 최초 조회 + 에이전트 전환 시 재조회. ready 이전에는 agentId 가 비어 있어 조회하지 않는다.
   // ⚠️ 에이전트가 바뀌면 노드/모델 필터와 렌더된 데이터를 비운다 — 이유는 tokens 페이지와 동일
   //    (필터가 남으면 "이 에이전트는 사용량이 없다" 로 오독되고, 데이터가 남으면 새 이름 아래
@@ -91,13 +151,22 @@ export default function TimeoutsPage() {
   // 공유 상태가 복원되기 전(rangeReady=false)에 조회하면 기본값으로 한 번, 복원값으로 한 번
   // 이중 조회가 된다 — 둘 다 준비된 뒤에 부른다.
   useEffect(() => {
-    if (!ready || !rangeReady) return;
+    if (!ready || !rangeReady || !tickReady || !tickViewReady) return;
     setNode("");
     setModel("");
     setStats(null);
-    load(resolveRange(sel), "", "");
+    setTick(null);
+    if (tickView) loadTick(resolveTick(), "", "");
+    else load(resolveRange(sel), "", "");
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, [ready, rangeReady, agentId]);
+  }, [ready, rangeReady, tickReady, tickViewReady, agentId]);
+
+  // 자동 갱신 — 실시간 뷰의 live 모드에서만 (TickToolbar 의 체크박스). 주기는 창 길이에 맞춘다.
+  useEffect(() => {
+    if (!tickView || tickSel.mode !== "live" || !tickSel.auto) return;
+    const id = setInterval(() => loadTick(resolveTickRange(tickSel), node, model), tickRefreshMs(tickSel.win));
+    return () => clearInterval(id);
+  }, [tickView, tickSel, node, model, loadTick]);
 
   // 직접 설정 초안은 공유된 값으로 채워 둔다 — 탭을 옮겼다 와도 다시 입력할 필요가 없다.
   useEffect(() => {
@@ -130,8 +199,23 @@ export default function TimeoutsPage() {
     setDraftCustom(false);
     load(resolveRange({ preset: "custom", customFrom, customTo }), node, model);
   };
-  const onNode = (k: string) => { const next = node === k ? "" : k; setNode(next); load(currentRange(), next, model); };
-  const onModel = (k: string) => { const next = model === k ? "" : k; setModel(next); load(currentRange(), node, next); };
+  /** 노드/모델 필터 변경 — 현재 뷰에 맞는 쪽을 다시 조회한다 */
+  const reload = (nodeNm: string, modelNm: string) => {
+    if (tickView) loadTick(resolveTick(), nodeNm, modelNm);
+    else load(currentRange(), nodeNm, modelNm);
+  };
+  const onNode = (k: string) => { const next = node === k ? "" : k; setNode(next); reload(next, model); };
+  const onModel = (k: string) => { const next = model === k ? "" : k; setModel(next); reload(node, next); };
+
+  /**
+   * 보기 전환. 켜는 즉시 조회한다 — 토글을 눌렀는데 빈 화면이 남아 있으면 켜진 건지 알 수 없다.
+   */
+  const onView = (live: boolean) => {
+    setTickView(live);
+    setDraftCustom(false);
+    if (live) loadTick(resolveTick(), node, model);
+    else load(currentRange(), node, model);
+  };
 
   const customOpen = draftCustom || sel.preset === "custom";
   const scope = [node && `노드 ${node}`, model && `모델 ${model}`].filter(Boolean).join(" · ");
@@ -143,50 +227,65 @@ export default function TimeoutsPage() {
         <div className="dash-title">
           <div className="dash-title-main">Timeout</div>
           <div className="dash-title-sub">
-            {stats ? fmtRange(stats.range.from, stats.range.to) : fmtRange(currentRange().from, currentRange().to)}
+            {tickView
+              ? tick ? fmtRange(tick.range.from, tick.range.to) : "—"
+              : stats ? fmtRange(stats.range.from, stats.range.to) : fmtRange(currentRange().from, currentRange().to)}
             <span className="dash-title-note">
-              {" "}· LLM 호출 실패 적재 기준
+              {tickView ? " · 분당 타임아웃/실패" : " · LLM 호출 실패 적재 기준"}
               {!isDefault && agent ? ` · ${agent.name}` : ""}
             </span>
           </div>
         </div>
         <div className="dash-filter">
-          <div className="preset-group" role="tablist" aria-label="time preset">
-            {RANGE_PRESETS.map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                className={"preset-btn" + (!customOpen && sel.preset === p.key ? " active" : "")}
-                onClick={() => onPreset(p.key)}
-              >
-                {p.label}
-              </button>
-            ))}
-            <button
-              type="button"
-              className={"preset-btn" + (customOpen ? " active" : "")}
-              onClick={enterCustom}
-            >
-              {CUSTOM_LABEL}
-            </button>
-          </div>
-          {customOpen && (
-            <form className="custom-range" onSubmit={applyCustom}>
-              <input
-                type="datetime-local"
-                value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
-                aria-label="from"
-              />
-              <span className="range-arrow">→</span>
-              <input
-                type="datetime-local"
-                value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
-                aria-label="to"
-              />
-              <button type="submit" className="btn primary">적용</button>
-            </form>
+          {/* 보기 전환은 기간 프리셋 줄 밖 — 성격이 다른 조작이다 (ViewToggle 주석 참고) */}
+          <ViewToggle
+            live={tickView}
+            onChange={onView}
+            pulsing={tickSel.auto && tickSel.mode === "live"}
+          />
+          {/* 프리셋 줄 자리는 보기에 따라 통째로 교체된다 */}
+          {tickView ? (
+            <TickToolbar loading={loading} onSubmit={() => loadTick(resolveTick(), node, model)} />
+          ) : (
+            <>
+              <div className="preset-group" role="tablist" aria-label="time preset">
+                {RANGE_PRESETS.map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    className={"preset-btn" + (!customOpen && sel.preset === p.key ? " active" : "")}
+                    onClick={() => onPreset(p.key)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={"preset-btn" + (customOpen ? " active" : "")}
+                  onClick={enterCustom}
+                >
+                  {CUSTOM_LABEL}
+                </button>
+              </div>
+              {customOpen && (
+                <form className="custom-range" onSubmit={applyCustom}>
+                  <input
+                    type="datetime-local"
+                    value={customFrom}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    aria-label="from"
+                  />
+                  <span className="range-arrow">→</span>
+                  <input
+                    type="datetime-local"
+                    value={customTo}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    aria-label="to"
+                  />
+                  <button type="submit" className="btn primary">적용</button>
+                </form>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -220,14 +319,18 @@ export default function TimeoutsPage() {
         </div>
       )}
 
-      {stats && !stats.available && (
+      {tickView && tick && (
+        <TickMonitor stats={tick} metrics={TIMEOUT_METRICS} rowsLabel="호출" clamped={tickClamped} />
+      )}
+
+      {!tickView && stats && !stats.available && (
         <div className="dash-banner">
           아직 실패 호출이 적재되지 않았습니다 · GAIA 가 <code>TRX_TOKEN_DET.STAT_CD</code> /{" "}
           <code>ERR_CTN</code> 을 적재하면 이 화면이 채워집니다.
         </div>
       )}
 
-      {stats && stats.available && (
+      {!tickView && stats && stats.available && (
         <>
           <div className="kpi-grid">
             <div className="kpi-card tone-err">

@@ -10,8 +10,18 @@ import { StatsCards } from "@/components/StatsCards";
 import { StatusDonut } from "@/components/StatusDonut";
 import { TimeSeriesChart } from "@/components/TimeSeriesChart";
 import { TopList } from "@/components/TopList";
-import { StatsFilter, StatsResponse } from "@/lib/types";
+import { StatsFilter, StatsResponse, TickMetricDef, TickStatsResponse } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
+import { TickMonitor } from "@/components/TickMonitor";
+import {
+  TickRange,
+  resolveTickRange,
+  tickRefreshMs,
+  useTick,
+  useTickView,
+} from "@/components/tick/TickProvider";
+import { TickToolbar } from "@/components/tick/TickToolbar";
+import { ViewToggle } from "@/components/tick/ViewToggle";
 
 type Preset = "1h" | "6h" | "24h" | "7d" | "30d" | "custom";
 
@@ -29,6 +39,16 @@ function toLocalInput(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/**
+ * 실시간 뷰의 게이지/차트 정의 (BIZ 진입 레이어 기준).
+ * ⚠️ 한도(limit)는 0 이다 — 요청 수에는 사내 rate limit 같은 상한이 없다. 0 이면 기준선·초과
+ *    판정 없이 추이만 그리고, 아래 목록은 "가장 몰린 순간" 이 된다.
+ */
+const BIZ_METRICS: [TickMetricDef, TickMetricDef] = [
+  { name: "요청", unitText: "건/분", unit: "건", limit: 0 },
+  { name: "실패", unitText: "건/분", unit: "건", limit: 0 },
+];
+
 function fmtRange(from: string | null, to: string | null): string {
   if (!from || !to) return "—";
   return `${from.replace("T", " ").slice(0, 16)}  →  ${to.replace("T", " ").slice(0, 16)}`;
@@ -43,6 +63,13 @@ export default function DashboardPage() {
   const [excludeErrCds, setExcludeErrCds] = useState<string[]>([]);
 
   const [stats, setStats] = useState<StatsResponse | null>(null);
+
+  /** 실시간 뷰인가 (화면별로 기억) + 공유 조회 창 */
+  const [tickView, setTickView, tickViewReady] = useTickView("dashboard");
+  const { sel: tickSel, ready: tickReady, resolve: resolveTick } = useTick();
+  const [tick, setTick] = useState<TickStatsResponse | null>(null);
+  const [tickClamped, setTickClamped] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [actionTypeOptions, setActionTypeOptions] = useState<string[]>([]);
@@ -118,11 +145,61 @@ export default function DashboardPage() {
     }
   }, []);
 
-  useEffect(() => { load(computeFilter()); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  /**
+   * 실시간(롤링 60초) 조회 — 진입 레이어 기준 분당 요청/실패.
+   * ⚠️ ACTION_TYP 필터는 보내지 않는다 — 진입 레이어 행에는 그 값이 없다(권위 레이어는 GAIA).
+   *    보내면 조건에 맞는 행이 0 이 되어 "요청이 없다" 로 오독된다.
+   */
+  const loadTick = useCallback(async (r: TickRange, u: string) => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const q = new URLSearchParams({ dateFrom: r.from, dateTo: r.to });
+      if (u) q.set("userId", u);
+      const data = await apiJson<TickStatsResponse>(`/api/stats/tick?${q.toString()}`, { cache: "no-store" });
+      setTick(data);
+      // 요청한 시작 시각보다 응답의 시작이 뒤면 서버가 24시간으로 자른 것이다(1분 여유).
+      const want = Date.parse(r.from);
+      const got = data.range.from ? Date.parse(data.range.from) : NaN;
+      setTickClamped(Number.isFinite(want) && Number.isFinite(got) && got - want > 60_000);
+    } catch (e) {
+      setErr(errMessage(e, "실시간 모니터를 불러오지 못했습니다."));
+      setTick(null);
+      setTickClamped(false);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // 최초 조회. 실시간 뷰로 저장돼 있었으면 그쪽을 부른다 —
+  // 복원(tickReady/tickViewReady) 전에 부르면 기본값으로 한 번, 복원값으로 한 번 이중 조회가 된다.
+  useEffect(() => {
+    if (!tickReady || !tickViewReady) return;
+    if (tickView) loadTick(resolveTick(), userId);
+    else load(computeFilter());
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [tickReady, tickViewReady]);
+
+  // 자동 갱신 — 실시간 뷰의 live 모드에서만. 주기는 창 길이에 맞춘다.
+  useEffect(() => {
+    if (!tickView || tickSel.mode !== "live" || !tickSel.auto) return;
+    const id = setInterval(() => loadTick(resolveTickRange(tickSel), userId), tickRefreshMs(tickSel.win));
+    return () => clearInterval(id);
+  }, [tickView, tickSel, userId, loadTick]);
+
+  /**
+   * 보기 전환. 켜는 즉시 조회한다 — 토글을 눌렀는데 빈 화면이 남아 있으면 켜진 건지 알 수 없다.
+   */
+  const onView = (live: boolean) => {
+    setTickView(live);
+    if (live) loadTick(resolveTick(), userId);
+    else load(computeFilter());
+  };
 
   const onApply = (e: React.FormEvent) => {
     e.preventDefault();
-    load(computeFilter());
+    if (tickView) loadTick(resolveTick(), userId);
+    else load(computeFilter());
   };
 
   const onPresetClick = (k: Preset) => {
@@ -177,45 +254,61 @@ export default function DashboardPage() {
         <div className="dash-title">
           <div className="dash-title-main">Usage Dashboard</div>
           <div className="dash-title-sub">
-            {stats ? fmtRange(stats.range.from, stats.range.to) : "—"}
+            {tickView
+              ? tick ? fmtRange(tick.range.from, tick.range.to) : "—"
+              : stats ? fmtRange(stats.range.from, stats.range.to) : "—"}
+            {tickView && <span className="dash-title-note"> · 분당 요청/실패</span>}
           </div>
         </div>
         <form className="dash-filter" onSubmit={onApply}>
-          <div className="preset-group" role="tablist" aria-label="time preset">
-            {PRESETS.map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                className={"preset-btn" + (preset === p.key ? " active" : "")}
-                onClick={() => onPresetClick(p.key)}
-              >
-                {p.label}
-              </button>
-            ))}
-            <button
-              type="button"
-              className={"preset-btn" + (preset === "custom" ? " active" : "")}
-              onClick={() => setPreset("custom")}
-            >
-              Custom
-            </button>
-          </div>
-          {preset === "custom" && (
-            <div className="custom-range">
-              <input
-                type="datetime-local"
-                value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
-                aria-label="from"
-              />
-              <span className="range-arrow">→</span>
-              <input
-                type="datetime-local"
-                value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
-                aria-label="to"
-              />
-            </div>
+          {/* 보기 전환은 기간 프리셋 줄 밖 — 성격이 다른 조작이다 (ViewToggle 주석 참고) */}
+          <ViewToggle
+            live={tickView}
+            onChange={onView}
+            pulsing={tickSel.auto && tickSel.mode === "live"}
+          />
+          {/* 프리셋 줄 자리는 보기에 따라 통째로 교체된다 */}
+          {tickView ? (
+            <TickToolbar loading={loading} onSubmit={() => loadTick(resolveTick(), userId)} />
+          ) : (
+            <>
+              <div className="preset-group" role="tablist" aria-label="time preset">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    className={"preset-btn" + (preset === p.key ? " active" : "")}
+                    onClick={() => onPresetClick(p.key)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={"preset-btn" + (preset === "custom" ? " active" : "")}
+                  onClick={() => setPreset("custom")}
+                >
+                  Custom
+                </button>
+              </div>
+              {preset === "custom" && (
+                <div className="custom-range">
+                  <input
+                    type="datetime-local"
+                    value={customFrom}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    aria-label="from"
+                  />
+                  <span className="range-arrow">→</span>
+                  <input
+                    type="datetime-local"
+                    value={customTo}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    aria-label="to"
+                  />
+                </div>
+              )}
+            </>
           )}
           <input
             type="text"
@@ -224,34 +317,42 @@ export default function DashboardPage() {
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
           />
-          <select
-            className="user-input user-select"
-            value={actionTyp}
-            onChange={(e) => {
-              const v = e.target.value;
-              setActionTyp(v);
-              load({ ...computeFilter(), actionTyp: v || undefined });
-            }}
-            aria-label="ACTION_TYP"
-          >
-            <option value="">ACTION_TYP (전체)</option>
-            {actionTypeOptions.map((opt) => (
-              <option key={opt} value={opt}>{opt}</option>
-            ))}
-          </select>
+          {/* ⚠️ 실시간 뷰에서는 감춘다 — 진입 레이어 행에 ACTION_TYP 이 없어 걸어도 효과가 없고,
+              걸린 것처럼 보이면 "이 액션은 요청이 없다" 로 오독된다. */}
+          {!tickView && (
+            <select
+              className="user-input user-select"
+              value={actionTyp}
+              onChange={(e) => {
+                const v = e.target.value;
+                setActionTyp(v);
+                load({ ...computeFilter(), actionTyp: v || undefined });
+              }}
+              aria-label="ACTION_TYP"
+            >
+              <option value="">ACTION_TYP (전체)</option>
+              {actionTypeOptions.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          )}
           {hasFilter && (
             <button type="button" className="btn ghost" onClick={clearFilters}>
               필터 초기화
             </button>
           )}
-          <button type="submit" className="btn primary">조회</button>
+          {!tickView && <button type="submit" className="btn primary">조회</button>}
         </form>
       </div>
 
       {loading && <div className="dash-banner loading">집계 중…</div>}
       {err && <div className="dash-banner err">불러오기 실패: {err}</div>}
 
-      {stats && (
+      {tickView && tick && (
+        <TickMonitor stats={tick} metrics={BIZ_METRICS} rowsLabel="요청" clamped={tickClamped} />
+      )}
+
+      {!tickView && stats && (
         <>
           {/* 1. Hero KPIs — 한눈에 보는 핵심 지표 */}
           <StatsCards stats={stats} />

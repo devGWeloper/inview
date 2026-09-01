@@ -2,32 +2,27 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { TickCall, TickMinute, TickStatsResponse, TICK_WINDOW_SEC } from "@/lib/types";
+import { TickCall, TickMetricDef, TickMinute, TickStatsResponse, TickTrace, TICK_WINDOW_SEC } from "@/lib/types";
 import { callStatus } from "@/lib/tokenStatus";
-import { TickMetric, TickMonitorChart, fmtCompact, windowLabel } from "@/components/TickMonitorChart";
+import { TickSlot, TickMonitorChart, fmtCompact, windowLabel } from "@/components/TickMonitorChart";
 
-// 1TICK 모니터 뷰 — Tokens 탭에서 "1TICK" 프리셋을 고르면 본문이 이걸로 바뀐다.
+// 실시간(1TICK) 모니터 본문 — Dashboard / Tokens / Timeout 이 공유한다.
 //
 // 화면은 위에서 아래로 세 가지만 답한다:
-//   ① 지금 넘었나?  → 게이지 2장(TPM/RPM). 한도 대비 몇 %인지 막대로 바로 보인다.
-//   ② 언제 넘었나?  → 추이 차트 (게이지를 클릭해 TPM/RPM 전환 — 별도 토글을 두지 않는다)
-//   ③ 왜 넘었나?    → 초과한 순간 목록. 행을 열면 그 60초의 호출이 전부 나온다.
+//   ① 지금 얼마나?  → 게이지 2장. 한도가 있으면 대비 %, 없으면 값과 피크 시각.
+//   ② 언제 몰렸나?  → 추이 차트 (게이지를 클릭해 지표 전환 — 별도 토글을 두지 않는다)
+//   ③ 왜 그랬나?    → 순간 목록. 행을 열면 그 60초의 원본 행이 전부 나온다.
 //
-// 표시되는 TPM/RPM 은 전부 "그 분 안에서 값이 가장 큰 연속 60초" 다(서버 tickStats.ts 계산).
-// 정각 분 합계는 판정에 안 쓰이므로 화면에 그리지 않는다 — 판정값과 비판정값을
-// 나란히 두면 어느 게 기준인지 읽는 사람이 헷갈린다.
+// 표시되는 값은 전부 "그 분 안에서 값이 가장 큰 연속 60초" 다(서버 rollupTick 계산).
+// 정각 분 합계는 판정에 안 쓰이므로 화면에 그리지 않는다.
+//
+// ⚠️ 조회 툴바(창 길이·직접 설정·자동 갱신)는 여기 없다 — 페이지 헤더의 TickToolbar 가
+//    기간 프리셋 줄 자리에서 담당한다. 두 줄로 나뉘어 있으면 어느 쪽이 지금 조회 조건인지
+//    읽는 사람이 헷갈린다.
+// ⚠️ 지표가 무엇인지(TPM / 타임아웃 / 요청…)는 이 컴포넌트가 모른다 — metrics 로 받는다.
 
-export const TICK_WINDOWS = [15, 60, 180] as const;
-export type TickWindowMin = typeof TICK_WINDOWS[number];
-
-/**
- * 조회 방식.
- *   live   — "지금까지 N분" (창이 계속 앞으로 밀린다. 자동 새로고침은 이때만 의미가 있다)
- *   custom — 사용자가 찍은 고정 구간. 과거 이력을 보는 유일한 경로다.
- * ⚠️ 서버(`fetchTickStats`)는 24시간(TICK_MAX_MINUTES)을 넘는 구간을 **뒤쪽(최신)만 남기고**
- *    자른다. 잘린 걸 안 알리면 앞부분이 "그 시간엔 호출이 없었다" 로 오독되므로 clamped 로 밝힌다.
- */
-export type TickMode = "live" | "custom";
+/** 목록에 세울 "몰린 순간" 최대 개수 (한도가 없는 화면에서 쓴다) */
+const TOP_MOMENTS = 5;
 
 /** 'YYYY-MM-DDTHH:MM:SS' 두 개 → 'MM/DD HH:MM → HH:MM' (날이 다르면 뒤쪽에도 날짜) */
 function fmtSpan(from: string | null, to: string | null): string {
@@ -39,30 +34,35 @@ function fmtSpan(from: string | null, to: string | null): string {
     : `${day(from)} ${hm(from)} → ${day(to)} ${hm(to)}`;
 }
 
-/** 한도를 넘은 분들을 연속 구간으로 병합한 것 */
-interface Segment {
+/** 목록 1줄 — 한도 초과 구간이거나(한도 있음) 가장 몰린 순간이거나(한도 없음) */
+interface Moment {
+  /** 그 구간이 시작된 분 (목록 key) */
   startTs: string;
+  /** 연속 초과가 몇 분간 이어졌나 (한도 없는 화면은 항상 1) */
   minuteCount: number;
   peak: number;
   /** 피크를 만든 60초 구간의 시작 시각 (드릴다운 기준) */
   peakAt: string | null;
 }
 
-function buildSegments(minutes: TickMinute[], metric: TickMetric, limit: number): Segment[] {
+const rollOf = (m: TickMinute, slot: TickSlot) => (slot === "a" ? m.rollA : m.rollB);
+const rollAtOf = (m: TickMinute, slot: TickSlot) => (slot === "a" ? m.rollAAt : m.rollBAt);
+
+/** 한도를 넘은 분들을 연속 구간으로 병합 (한도가 있을 때) */
+function buildSegments(minutes: TickMinute[], slot: TickSlot, limit: number): Moment[] {
   if (limit <= 0) return [];
-  const out: Segment[] = [];
-  let cur: Segment | null = null;
+  const out: Moment[] = [];
+  let cur: Moment | null = null;
   for (const m of minutes) {
-    const v = metric === "tpm" ? m.rollTokens : m.rollCalls;
-    const at = metric === "tpm" ? m.rollTokensAt : m.rollCallsAt;
+    const v = rollOf(m, slot);
     if (v > limit) {
       if (!cur) {
-        cur = { startTs: m.ts, minuteCount: 1, peak: v, peakAt: at };
+        cur = { startTs: m.ts, minuteCount: 1, peak: v, peakAt: rollAtOf(m, slot) };
       } else {
         cur.minuteCount += 1;
         if (v > cur.peak) {
           cur.peak = v;
-          cur.peakAt = at;
+          cur.peakAt = rollAtOf(m, slot);
         }
       }
     } else if (cur) {
@@ -75,15 +75,39 @@ function buildSegments(minutes: TickMinute[], metric: TickMetric, limit: number)
   return out.reverse();
 }
 
-/** peakAt 부터 60초 안에 들어간 호출만 추린다 (= 초과를 만든 호출들) */
-function callsInWindow(calls: TickCall[], startTs: string | null): TickCall[] {
+/**
+ * 한도가 없는 화면용 — 값이 가장 큰 순간 TOP N.
+ * ⚠️ 같은 버스트의 이웃한 분들이 목록을 채우지 않도록, 이미 고른 순간과 60초 안에서
+ *    겹치는 후보는 건너뛴다. 안 그러면 "가장 몰린 5개" 가 사실상 한 사건이 된다.
+ */
+function topMoments(minutes: TickMinute[], slot: TickSlot): Moment[] {
+  const cands = minutes
+    .map((m) => ({ ts: m.ts, v: rollOf(m, slot), at: rollAtOf(m, slot) }))
+    .filter((c) => c.v > 0)
+    .sort((a, b) => b.v - a.v);
+
+  const out: Moment[] = [];
+  const chosen: number[] = [];
+  for (const c of cands) {
+    if (out.length >= TOP_MOMENTS) break;
+    const at = c.at ? Date.parse(c.at) : NaN;
+    if (Number.isFinite(at) && chosen.some((x) => Math.abs(x - at) < TICK_WINDOW_SEC * 1000)) continue;
+    if (Number.isFinite(at)) chosen.push(at);
+    out.push({ startTs: c.ts, minuteCount: 1, peak: c.v, peakAt: c.at });
+  }
+  return out;
+}
+
+/** peakAt 부터 60초 안에 들어간 행만 추린다 (= 그 순간을 만든 행들) */
+function inWindow<T>(items: T[], tsOf: (x: T) => string | null, startTs: string | null): T[] {
   if (!startTs) return [];
   const from = Date.parse(startTs);
   if (!Number.isFinite(from)) return [];
   const to = from + TICK_WINDOW_SEC * 1000;
-  return calls.filter((c) => {
-    if (!c.callTm) return false;
-    const t = Date.parse(c.callTm);
+  return items.filter((it) => {
+    const raw = tsOf(it);
+    if (!raw) return false;
+    const t = Date.parse(raw);
     return Number.isFinite(t) && t >= from && t < to;
   });
 }
@@ -91,145 +115,90 @@ function callsInWindow(calls: TickCall[], startTs: string | null): TickCall[] {
 const fmtInt = (n: number) => Math.round(n).toLocaleString();
 
 export function TickMonitor({
-  stats, tpmLimit, rpmLimit,
-  mode, windowMin, onWindowMin,
-  customFrom, customTo, onCustomFrom, onCustomTo, onCustomMode, onCustomSubmit, clamped,
-  auto, onAuto, loading, onRefresh,
+  stats, metrics, rowsLabel, clamped, limitHref,
 }: {
   stats: TickStatsResponse;
-  tpmLimit: number;
-  rpmLimit: number;
-  mode: TickMode;
-  windowMin: TickWindowMin;
-  onWindowMin: (w: TickWindowMin) => void;
-  customFrom: string;
-  customTo: string;
-  onCustomFrom: (v: string) => void;
-  onCustomTo: (v: string) => void;
-  onCustomMode: () => void;
-  onCustomSubmit: () => void;
+  /** [A, B] — 게이지 순서 그대로. 의미·단위·한도를 화면이 정한다. */
+  metrics: [TickMetricDef, TickMetricDef];
+  /** 요약 줄의 행 단위 문구 ("호출" | "요청") */
+  rowsLabel: string;
+  /** 서버가 24시간으로 잘랐는가 */
   clamped: boolean;
-  auto: boolean;
-  onAuto: (v: boolean) => void;
-  loading: boolean;
-  onRefresh: () => void;
+  /** 한도를 설정하러 갈 곳. 없으면 "한도 미설정" 안내를 띄우지 않는다. */
+  limitHref?: string;
 }) {
-  const [metric, setMetric] = useState<TickMetric>("tpm");
-  const [openSeg, setOpenSeg] = useState<string | null>(null);
+  const [slot, setSlot] = useState<TickSlot>("a");
+  const [openMoment, setOpenMoment] = useState<string | null>(null);
 
-  const limit = metric === "tpm" ? tpmLimit : rpmLimit;
-  const peak = metric === "tpm" ? stats.peakTpm : stats.peakRpm;
+  const def = slot === "a" ? metrics[0] : metrics[1];
+  const limit = def.limit;
+  const peak = slot === "a" ? stats.peakA : stats.peakB;
 
-  const tpmSegs = useMemo(() => buildSegments(stats.minutes, "tpm", tpmLimit), [stats.minutes, tpmLimit]);
-  const rpmSegs = useMemo(() => buildSegments(stats.minutes, "rpm", rpmLimit), [stats.minutes, rpmLimit]);
-  const segments = metric === "tpm" ? tpmSegs : rpmSegs;
+  const segA = useMemo(() => buildSegments(stats.minutes, "a", metrics[0].limit), [stats.minutes, metrics]);
+  const segB = useMemo(() => buildSegments(stats.minutes, "b", metrics[1].limit), [stats.minutes, metrics]);
+  const overCount = slot === "a" ? segA.length : segB.length;
 
-  const noLimit = tpmLimit <= 0 && rpmLimit <= 0;
-  const winText = windowMin < 60 ? `${windowMin}분` : `${windowMin / 60}시간`;
-  // ⚠️ 직접 설정 구간은 입력칸 값이 아니라 **응답이 준 stats.range** 로 적는다 —
-  //    입력만 고치고 조회를 안 눌렀을 때 화면의 데이터와 문구가 어긋나면 안 된다.
-  const rangeText = mode === "live" ? `최근 ${winText}` : fmtSpan(stats.range.from, stats.range.to);
+  const moments = useMemo(
+    () => (limit > 0 ? (slot === "a" ? segA : segB) : topMoments(stats.minutes, slot)),
+    [limit, slot, segA, segB, stats.minutes]
+  );
 
-  const pick = (m: TickMetric) => {
-    setMetric(m);
-    setOpenSeg(null);
+  const noLimit = metrics[0].limit <= 0 && metrics[1].limit <= 0;
+
+  const pick = (s: TickSlot) => {
+    setSlot(s);
+    setOpenMoment(null);
   };
 
   return (
     <>
-      <div className="tick-bar">
-        <span className="tick-bar-range">{rangeText} · 호출 {fmtInt(stats.totals.calls)}건</span>
-        <div className="tick-bar-right">
-          <div className="tick-seg" role="tablist" aria-label="조회 범위">
-            {TICK_WINDOWS.map((w) => (
-              <button
-                key={w}
-                type="button"
-                className={"tick-seg-btn" + (mode === "live" && windowMin === w ? " active" : "")}
-                onClick={() => onWindowMin(w)}
-              >
-                {w < 60 ? `${w}분` : `${w / 60}시간`}
-              </button>
-            ))}
-            <button
-              type="button"
-              className={"tick-seg-btn" + (mode === "custom" ? " active" : "")}
-              onClick={onCustomMode}
-              title="과거 구간을 직접 지정해 조회"
-            >
-              직접 설정
-            </button>
-          </div>
-          {/* ⚠️ 자동 새로고침은 live 에서만 — 고정된 과거 구간을 30초마다 다시 부를 이유가 없고,
-              라이브 갱신은 매번 '지금' 으로 창을 다시 잡아 사용자가 지정한 구간을 덮어쓴다. */}
-          <label className={"tick-auto" + (mode === "custom" ? " off" : "")}>
-            <input
-              type="checkbox"
-              checked={auto && mode === "live"}
-              disabled={mode === "custom"}
-              onChange={(e) => onAuto(e.target.checked)}
-            />
-            자동 새로고침
-          </label>
-          <button type="button" className="btn ghost" onClick={onRefresh} disabled={loading}>
-            {loading ? "조회 중…" : "새로고침"}
-          </button>
-        </div>
+      <div className="tick-summary">
+        <span className="tick-summary-range">{fmtSpan(stats.range.from, stats.range.to)}</span>
+        <span className="tick-summary-sep">·</span>
+        <span>
+          {rowsLabel} <b>{fmtInt(stats.totals.rows)}</b>건
+        </span>
       </div>
-
-      {mode === "custom" && (
-        <div className="tick-range">
-          <div className="custom-range">
-            <input
-              type="datetime-local"
-              value={customFrom}
-              onChange={(e) => onCustomFrom(e.target.value)}
-              aria-label="from"
-            />
-            <span className="range-arrow">→</span>
-            <input
-              type="datetime-local"
-              value={customTo}
-              onChange={(e) => onCustomTo(e.target.value)}
-              aria-label="to"
-            />
-            <button type="button" className="btn primary" onClick={onCustomSubmit} disabled={loading}>
-              조회
-            </button>
-          </div>
-          <span className="tick-range-hint">최대 24시간</span>
-        </div>
-      )}
 
       {clamped && (
         <div className="tick-notice warn">
-          1TICK 은 한 번에 최대 24시간까지 집계합니다 — 지정한 구간 중 <b>뒤쪽 24시간</b>만 표시됩니다.
+          실시간 뷰는 한 번에 최대 24시간까지 집계합니다 — 지정한 구간 중 <b>뒤쪽 24시간</b>만 표시됩니다.
         </div>
       )}
 
-      {noLimit && (
+      {stats.statusAvailable === false && (
+        <div className="tick-notice warn">
+          실패 정보(STAT_CD / ERR_CTN)가 아직 적재되지 않았습니다 — 0 건이 아니라 <b>측정 불가</b>입니다.
+        </div>
+      )}
+
+      {noLimit && limitHref && (
         <div className="tick-notice">
-          한도 미설정 · <Link href="/admin" prefetch={false}>관리자 페이지</Link>에서 설정
+          한도 미설정 · <Link href={limitHref} prefetch={false}>관리자 페이지</Link>에서 설정
         </div>
       )}
 
       <div className="tick-gauges">
         <Gauge
-          name="TPM" unitText="토큰/분"
-          peak={stats.peakTpm.value} limit={tpmLimit} overCount={tpmSegs.length}
-          selected={metric === "tpm"} onSelect={() => pick("tpm")}
+          def={metrics[0]}
+          peak={stats.peakA.value}
+          overCount={segA.length}
+          selected={slot === "a"}
+          onSelect={() => pick("a")}
         />
         <Gauge
-          name="RPM" unitText="호출/분"
-          peak={stats.peakRpm.value} limit={rpmLimit} overCount={rpmSegs.length}
-          selected={metric === "rpm"} onSelect={() => pick("rpm")}
+          def={metrics[1]}
+          peak={stats.peakB.value}
+          overCount={segB.length}
+          selected={slot === "b"}
+          onSelect={() => pick("b")}
         />
       </div>
 
       <section className="dash-card dash-card-hero">
         <div className="dash-card-head">
           <div className="dash-card-title-group">
-            <span className="dash-card-title">{metric.toUpperCase()} 추이</span>
+            <span className="dash-card-title">{def.name} 추이</span>
           </div>
           <div className="dash-card-aux">
             <span className={"aux-pill" + (limit > 0 && peak.value > limit ? " err" : "")}>
@@ -239,93 +208,141 @@ export function TickMonitor({
           </div>
         </div>
         <div className="dash-card-body">
-          <TickMonitorChart minutes={stats.minutes} metric={metric} limit={limit} />
+          <TickMonitorChart
+            minutes={stats.minutes}
+            slot={slot}
+            label={def.name}
+            unit={def.unit}
+            limit={limit}
+          />
         </div>
       </section>
 
       <section className="dash-card">
         <div className="dash-card-head">
           <div className="dash-card-title-group">
-            <span className="dash-card-title">{metric.toUpperCase()} 초과한 순간</span>
+            <span className="dash-card-title">
+              {def.name} {limit > 0 ? "초과한 순간" : "가장 몰린 순간"}
+            </span>
           </div>
+          {limit > 0 && overCount > 0 && (
+            <div className="dash-card-aux">
+              <span className="aux-pill err">
+                <span className="aux-pill-val">{overCount}회</span>
+              </span>
+            </div>
+          )}
         </div>
         <div className="dash-card-body">
-          {limit <= 0 ? (
-            <div className="tick-empty">한도 미설정</div>
-          ) : segments.length === 0 ? (
-            <div className="tick-empty ok">✓ 초과 없음</div>
+          {moments.length === 0 ? (
+            <div className={"tick-empty" + (limit > 0 ? " ok" : "")}>
+              {limit > 0 ? "✓ 초과 없음" : "기록 없음"}
+            </div>
           ) : (
             <div className="tick-seg-list">
-              {segments.map((s) => {
-                const open = openSeg === s.startTs;
-                const inWin = open ? callsInWindow(stats.calls, s.peakAt) : [];
-                const winTokens = inWin.reduce((a, c) => a + c.totalTokens, 0);
-                return (
-                  <div key={s.startTs} className={"tick-seg-item" + (open ? " open" : "")}>
-                    <button
-                      type="button"
-                      className="tick-seg-head"
-                      onClick={() => setOpenSeg(open ? null : s.startTs)}
-                      aria-expanded={open}
-                    >
-                      <span className="tick-seg-caret">{open ? "▾" : "▸"}</span>
-                      <span className="tick-seg-time">{windowLabel(s.peakAt) ?? "—"}</span>
-                      {s.minuteCount > 1 && <span className="tick-seg-dur">{s.minuteCount}분간</span>}
-                      <span className="tick-seg-peak">
-                        <b>{fmtInt(s.peak)}</b>
-                        <span className="tick-seg-slash">/ {fmtInt(limit)}</span>
-                      </span>
-                      <span className="tick-seg-over">{Math.round((s.peak / limit) * 100)}%</span>
-                    </button>
-                    {open && (
-                      <div className="tick-seg-body">
-                        {inWin.length === 0 ? (
-                          <div className="tick-empty">—</div>
-                        ) : (
-                          <>
-                            <div className="tick-win-sum">
-                              호출 <b>{inWin.length}</b>건 · <b>{fmtInt(winTokens)}</b> 토큰
-                            </div>
-                            <CallsTable calls={inWin} />
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {moments.map((m) => (
+                <MomentRow
+                  key={m.startTs}
+                  moment={m}
+                  limit={limit}
+                  unit={def.unit}
+                  open={openMoment === m.startTs}
+                  onToggle={() => setOpenMoment(openMoment === m.startTs ? null : m.startTs)}
+                  stats={stats}
+                />
+              ))}
             </div>
           )}
         </div>
       </section>
 
       {stats.truncated && (
-        <div className="tick-notice warn">
-          호출이 많아 최근 것만 표시됩니다.
-        </div>
+        <div className="tick-notice warn">행이 많아 최근 것만 표시됩니다.</div>
       )}
     </>
   );
 }
 
+/** 목록 1줄 + 펼쳤을 때의 원본 행 (소스에 따라 호출 표 / 요청 표) */
+function MomentRow({
+  moment, limit, unit, open, onToggle, stats,
+}: {
+  moment: Moment;
+  limit: number;
+  unit: string;
+  open: boolean;
+  onToggle: () => void;
+  stats: TickStatsResponse;
+}) {
+  const calls = open && stats.kind === "llm"
+    ? inWindow(stats.calls, (c) => c.callTm, moment.peakAt)
+    : [];
+  const traces = open && stats.kind === "biz"
+    ? inWindow(stats.traces, (t) => t.recvTm, moment.peakAt)
+    : [];
+  const rowCount = stats.kind === "llm" ? calls.length : traces.length;
+
+  return (
+    <div className={"tick-seg-item" + (open ? " open" : "") + (limit > 0 ? "" : " neutral")}>
+      <button type="button" className="tick-seg-head" onClick={onToggle} aria-expanded={open}>
+        <span className="tick-seg-caret">{open ? "▾" : "▸"}</span>
+        <span className="tick-seg-time">{windowLabel(moment.peakAt) ?? "—"}</span>
+        {moment.minuteCount > 1 && <span className="tick-seg-dur">{moment.minuteCount}분간</span>}
+        <span className="tick-seg-peak">
+          <b>{fmtInt(moment.peak)}</b>
+          {limit > 0 ? (
+            <span className="tick-seg-slash">/ {fmtInt(limit)}</span>
+          ) : (
+            <span className="tick-seg-slash">{unit}</span>
+          )}
+        </span>
+        {limit > 0 && (
+          <span className="tick-seg-over">{Math.round((moment.peak / limit) * 100)}%</span>
+        )}
+      </button>
+      {open && (
+        <div className="tick-seg-body">
+          {rowCount === 0 ? (
+            <div className="tick-empty">—</div>
+          ) : stats.kind === "llm" ? (
+            <>
+              <div className="tick-win-sum">
+                호출 <b>{calls.length}</b>건 ·{" "}
+                <b>{fmtInt(calls.reduce((a, c) => a + c.totalTokens, 0))}</b> 토큰
+              </div>
+              <CallsTable calls={calls} />
+            </>
+          ) : (
+            <>
+              <div className="tick-win-sum">
+                요청 <b>{traces.length}</b>건 · 실패 <b>{traces.filter((t) => t.failed).length}</b>건
+              </div>
+              <TracesTable traces={traces} />
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
- * 한도 대비 사용량 게이지 1장 (TPM 또는 RPM).
+ * 지표 1개의 게이지.
  * 클릭하면 아래 차트/목록이 그 지표로 바뀐다 — 별도 토글을 두지 않고 카드가 곧 선택지다.
+ * 한도가 없으면(limit=0) 막대 대신 피크 시각을 적는다 — 채울 기준이 없는 막대는 뜻이 없다.
  */
 function Gauge({
-  name, unitText, peak, limit, overCount, selected, onSelect,
+  def, peak, overCount, selected, onSelect,
 }: {
-  name: string;
-  unitText: string;
+  def: TickMetricDef;
   peak: number;
-  limit: number;
   overCount: number;
   selected: boolean;
   onSelect: () => void;
 }) {
-  const has = limit > 0;
-  const pct = has ? Math.round((peak / limit) * 100) : null;
-  const over = has && peak > limit;
+  const has = def.limit > 0;
+  const pct = has ? Math.round((peak / def.limit) * 100) : null;
+  const over = has && peak > def.limit;
   // 막대는 100% 에서 멈춘다 — 넘친 양은 % 숫자로 읽고, 막대는 "가득 찼다" 만 보이면 된다.
   const fill = pct === null ? 0 : Math.min(100, pct);
 
@@ -339,12 +356,12 @@ function Gauge({
       aria-pressed={selected}
     >
       <div className="tick-gauge-top">
-        <span className="tick-gauge-name">{name}</span>
+        <span className="tick-gauge-name">{def.name}</span>
         {has && <span className="tick-gauge-state">{over ? "한도 초과" : "정상"}</span>}
       </div>
       <div className="tick-gauge-val">
         {fmtCompact(peak)}
-        <span className="tick-gauge-unit">{unitText}</span>
+        <span className="tick-gauge-unit">{def.unitText}</span>
       </div>
       {has ? (
         <>
@@ -353,12 +370,14 @@ function Gauge({
           </div>
           <div className="tick-gauge-foot">
             <span className="tick-gauge-pct">{pct}%</span>
-            <span>한도 {fmtInt(limit)}</span>
+            <span>한도 {fmtInt(def.limit)}</span>
             {overCount > 0 && <span className="tick-gauge-cnt">{overCount}번 초과</span>}
           </div>
         </>
       ) : (
-        <div className="tick-gauge-foot">한도 미설정</div>
+        <div className="tick-gauge-foot">
+          <span className="tick-gauge-quiet">기간 내 최고 60초</span>
+        </div>
       )}
     </button>
   );
@@ -399,12 +418,52 @@ function CallsTable({ calls }: { calls: TickCall[] }) {
                 <td>{c.userId ?? "—"}</td>
                 <td className="num">{fmtInt(c.inputTokens)}</td>
                 <td className="num">{fmtInt(c.outputTokens)}</td>
-                <td className="num strong">{fmtInt(c.totalTokens)}</td>
-                <td className="num">{c.latencyMs == null ? "—" : `${(c.latencyMs / 1000).toFixed(1)}s`}</td>
-                <td className="mono dim">{c.traceId ?? "—"}</td>
+                <td className="num">{fmtInt(c.totalTokens)}</td>
+                <td className="num">{c.latencyMs == null ? "—" : `${fmtInt(c.latencyMs)}ms`}</td>
+                <td className="mono trace">{c.traceId ?? "—"}</td>
               </tr>
             );
           })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * BIZ 요청 표 (kind="biz").
+ * ⚠️ 진입 레이어 행만 읽으므로 액션/FAB 열이 없다 — 둘 다 다른 레이어가 기록하는 값이라
+ *    여기서는 항상 비어 있다. 자세한 내용은 TRACE_ID 로 Traces 화면에서 본다.
+ */
+function TracesTable({ traces }: { traces: TickTrace[] }) {
+  return (
+    <div className="token-recent-wrap">
+      <table className="token-recent tick-calls">
+        <thead>
+          <tr>
+            <th>수신 시각</th>
+            <th>사용자</th>
+            <th>상태</th>
+            <th>에러 코드</th>
+            <th>TRACE_ID</th>
+          </tr>
+        </thead>
+        <tbody>
+          {traces.map((t, i) => (
+            <tr key={i}>
+              <td className="mono">{t.recvTm ? t.recvTm.slice(11, 19) : "—"}</td>
+              <td>{t.userId ?? "—"}</td>
+              <td>
+                {t.failed ? (
+                  <span className="tick-call-flag error">실패</span>
+                ) : (
+                  <span className="tick-ok-mark">정상</span>
+                )}
+              </td>
+              <td className="mono">{t.errCd ?? "—"}</td>
+              <td className="mono trace">{t.traceId ?? "—"}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

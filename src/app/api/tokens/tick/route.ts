@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchTickStats } from "@/lib/tickStats";
-import { TickFilter } from "@/lib/types";
+import { TickFilter, TickView } from "@/lib/types";
 import { logger, reqContext } from "@/lib/logger";
 import { defaultAgentId, getAgent } from "@/lib/config";
 import { requireAgent } from "@/lib/auth/current";
 
 export const dynamic = "force-dynamic";
 
-// 1TICK — 분당 TPM/RPM 모니터. Tokens 탭의 "1TICK" 프리셋이 호출한다.
+// 1TICK — LLM 소스의 롤링 60초 모니터. Tokens/Timeout 탭의 "실시간" 뷰가 호출한다.
 // 집계 대상은 /api/tokens 와 같은 TRX_TOKEN_DET 이지만, 격자가 초/분 단위이고
 // 슬라이딩 60초 최대까지 내려주므로 응답 형태가 달라 라우트를 분리했다.
-// 실패/미구성 시에도 fetchTickStats 가 빈 격자를 돌려주므로 항상 200.
+//   ?view=usage   (기본) A=토큰, B=호출  — Tokens 탭
+//   ?view=failure        A=타임아웃, B=실패 — Timeout 탭
+// ⚠️ 모르는 view 는 조용히 기본으로 떨구지 않고 400 이다 — 실패 수를 사용량으로
+//    읽으면 "타임아웃 0건" 처럼 정반대로 오독된다.
+// 실패/미구성 시에도 fetchTickStats 가 빈 격자를 돌려주므로 그 외에는 항상 200.
 
 function isoNoTz(ms: number): string {
   const d = new Date(ms);
@@ -45,9 +49,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: guard.error }, { status: guard.status });
   }
 
+  const rawView = sp.get("view")?.trim();
+  if (rawView && rawView !== "usage" && rawView !== "failure") {
+    logger.warn("GET /api/tokens/tick unknown view", { ...ctx, view: rawView });
+    return NextResponse.json({ error: `알 수 없는 view: ${rawView}` }, { status: 400 });
+  }
+  const view: TickView = rawView === "failure" ? "failure" : "usage";
+
   const now = Date.now();
   // 기본: 최근 60분 (화면 기본 창과 동일)
   const filter: TickFilter = {
+    view,
     dateFrom: sp.get("dateFrom") || isoNoTz(now - 60 * 60_000),
     dateTo: sp.get("dateTo") || isoNoTz(now),
     userId: sp.get("userId") || undefined,
@@ -63,8 +75,8 @@ export async function GET(req: NextRequest) {
     logger.info("GET /api/tokens/tick done", {
       ...ctx,
       minutes: stats.minutes.length,
-      peakTpm: stats.peakTpm.value,
-      peakRpm: stats.peakRpm.value,
+      peakA: stats.peakA.value,
+      peakB: stats.peakB.value,
       ms: Date.now() - t0,
       status: 200,
     });

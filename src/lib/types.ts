@@ -948,16 +948,45 @@ export interface TimeoutReason {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1TICK — 분당 TPM/RPM 모니터 (Tokens 탭의 "1TICK" 프리셋)
+// 1TICK — 롤링 60초 실시간 모니터 (대시보드 계열 화면의 "실시간" 뷰)
 //
-// ⚠️ 정각 분 버킷만으로는 TPM/RPM 초과를 판정할 수 없다. 사내 제약은 "임의의 연속 60초"
+// ⚠️ 정각 분 버킷만으로는 순간 부하를 판정할 수 없다. TPM/RPM 제약은 "임의의 연속 60초"
 //    기준이라, 12:01:13~12:02:12 에 몰린 버스트는 정각 버킷에선 두 칸으로 쪼개져
-//    어느 칸도 한도를 안 넘는 것처럼 보인다(실제로는 초과). 그래서 이 화면은
-//    **초 단위 집계 위에서 슬라이딩 60초 윈도우의 최대값**을 따로 계산해 같이 그린다.
-//      - fixed*  = 정각 분 합계 (참고용 막대)
-//      - roll*   = 그 분에 시작하는 60초 윈도우 중 최대값 (초과 판정의 실제 기준)
-//    한도(tpmLimit/rpmLimit)는 config.yml 의 agents[] 에서 온다 (단일 소스).
+//    어느 칸도 한도를 안 넘는 것처럼 보인다(실제로는 초과). 그래서 이 뷰는
+//    **초 단위 집계 위에서 슬라이딩 60초 윈도우의 최대값**을 계산해 그린다.
+//      - fixed* = 정각 분 합계 (참고용 — 화면에는 그리지 않는다)
+//      - roll*  = 그 분에 시작하는 60초 윈도우 중 최대값 (판정의 실제 기준)
+//
+// ⚠️ 지표는 **화면마다 다르다.** 그래서 서버는 이름 없는 **A/B 두 슬롯**만 내려주고,
+//    "A 가 무엇인가"(라벨·단위·한도)는 화면이 TickMetricDef 로 정한다. 한도는 프로필과
+//    config.yml 을 병합해 /api/agents 가 만드므로 서버 집계가 알 수 없다 — 그 병합을
+//    tick 집계에 복제하지 않기 위한 분리다.
+//      /tokens    A=TPM(토큰)      B=RPM(호출)       한도 있음
+//      /timeouts  A=타임아웃/분    B=실패/분         한도 없음
+//      /dashboard A=요청/분        B=실패/분         한도 없음
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** 어느 소스를 집계한 응답인가 — 드릴다운 목록의 모양이 갈린다(calls vs traces). */
+export type TickSourceKind = "llm" | "biz";
+
+/**
+ * LLM 소스(TRX_TOKEN_DET)에서 무엇을 A/B 로 셀지.
+ *   usage   — A=토큰 합, B=호출 수   (Tokens 탭: TPM/RPM)
+ *   failure — A=타임아웃 수, B=실패 수 (Timeout 탭)
+ */
+export type TickView = "usage" | "failure";
+
+/** 게이지/차트 1개의 표시 정의. 화면이 정하고 서버는 관여하지 않는다. */
+export interface TickMetricDef {
+  /** 게이지 제목 (예: "TPM", "타임아웃") */
+  name: string;
+  /** 값 아래 단위 문구 (예: "토큰/분") */
+  unitText: string;
+  /** 툴팁의 값 뒤 단위 (예: "토큰") */
+  unit: string;
+  /** 0 = 한도 미설정 — 기준선·초과 판정 없이 추이만 그린다 */
+  limit: number;
+}
 
 /** 1TICK 조회 필터 — TokenFilter 의 시간/차원 필터와 동일 규칙 (traceId 없음) */
 export interface TickFilter {
@@ -966,6 +995,8 @@ export interface TickFilter {
   userId?: string;
   nodeNm?: string;
   modelNm?: string;
+  /** LLM 소스에서 A/B 에 무엇을 담을지 (기본 usage) */
+  view?: TickView;
   /**
    * 어느 에이전트의 TRX_TOKEN_DET 를 볼지 (config.yml agents[].id).
    * ⚠️ WHERE 절 조건이 아니라 **커넥션 선택**이다 — 에이전트는 행이 아니라 DB 단위로 갈린다.
@@ -974,23 +1005,33 @@ export interface TickFilter {
   agentId?: string;
 }
 
-/** 분 1칸. 빈 분도 0 으로 채워 내려간다(차트 격자를 균일하게 유지). */
+/**
+ * BIZ 소스(BIZ_AIACTIONTXN_HIS 진입 레이어) 1TICK 필터.
+ * ⚠️ ACTION_TYP 필터는 없다 — 진입 레이어(CUBE) 행의 ACTION_TYP 은 비어 있고
+ *    (권위 레이어는 GAIA), 실시간 뷰에서 매 갱신마다 크로스 DB 조인을 할 수는 없다.
+ */
+export interface BizTickFilter {
+  dateFrom?: string;
+  dateTo?: string;
+  userId?: string;
+}
+
+/**
+ * 분 1칸. 빈 분도 0 으로 채워 내려간다(차트 격자를 균일하게 유지).
+ * ⚠️ A/B 가 무엇인지는 이 타입이 모른다 — 화면의 TickMetricDef 가 정한다(위 참고).
+ */
 export interface TickMinute {
   /** 분 시작 시각 (ISO 형태, TZ 없음) */
   ts: string;
-  /** 정각 분 [ts, ts+60s) 합계 — 참고용 */
-  fixedTokens: number;
-  fixedCalls: number;
-  fixedInputTokens: number;
-  fixedOutputTokens: number;
-  /** 이 분 안에서 시작하는 60초 윈도우 중 토큰 최대치 (= 그 시점 실제 TPM) */
-  rollTokens: number;
-  /** rollTokens 를 만든 윈도우의 시작 시각 (초 단위 ISO). 값이 0 이면 null */
-  rollTokensAt: string | null;
-  /** 이 분 안에서 시작하는 60초 윈도우 중 호출 수 최대치 (= 그 시점 실제 RPM) */
-  rollCalls: number;
-  /** rollCalls 를 만든 윈도우의 시작 시각 (초 단위 ISO). 값이 0 이면 null */
-  rollCallsAt: string | null;
+  /** 정각 분 [ts, ts+60s) 합계 — 참고용, 화면에는 그리지 않는다 */
+  fixedA: number;
+  fixedB: number;
+  /** 이 분 안에서 시작하는 60초 윈도우 중 A 의 최대치 */
+  rollA: number;
+  /** rollA 를 만든 윈도우의 시작 시각 (초 단위 ISO). 값이 0 이면 null */
+  rollAAt: string | null;
+  rollB: number;
+  rollBAt: string | null;
 }
 
 /** 기간 전체의 롤링 피크 1건 */
@@ -1000,7 +1041,7 @@ export interface TickPeak {
   at: string | null;
 }
 
-/** 드릴다운용 호출 1건 — "왜 초과났나" 를 보려고 초과 윈도우 안의 호출을 나열한다 */
+/** 드릴다운용 LLM 호출 1건 — "왜 몰렸나" 를 보려고 피크 윈도우 안의 호출을 나열한다 */
 export interface TickCall {
   callTm: string | null;
   traceId: string | null;
@@ -1015,19 +1056,43 @@ export interface TickCall {
   errCtn: string | null;
 }
 
+/**
+ * 드릴다운용 BIZ 요청 1건 (kind="biz").
+ * ⚠️ 진입 레이어(CUBE) 행만 읽으므로 ACTION_TYP·FAC_ID 는 담기지 않는다 —
+ *    둘 다 다른 레이어가 기록하는 값이라 여기서는 항상 비어 있다.
+ */
+export interface TickTrace {
+  /** 진입 레이어 수신 시각 */
+  recvTm: string | null;
+  traceId: string | null;
+  userId: string | null;
+  errCd: string | null;
+  /** 실패로 판정됐는지 (ERR_CD 또는 TEMP 액션 실패 문구) */
+  failed: boolean;
+}
+
 export interface TickStatsResponse {
+  /** 드릴다운 목록이 calls 인지 traces 인지 */
+  kind: TickSourceKind;
   range: { from: string | null; to: string | null };
   /** 분 격자 (빈 분 포함, 오름차순) */
   minutes: TickMinute[];
   /** 기간 전체 롤링 60초 피크 */
-  peakTpm: TickPeak;
-  peakRpm: TickPeak;
-  /** 기간 내 총 호출/총 토큰 (KPI 용) */
-  totals: { calls: number; totalTokens: number };
-  /** 드릴다운용 호출 목록 (callTm asc). 상한을 넘으면 잘리고 truncated=true */
+  peakA: TickPeak;
+  peakB: TickPeak;
+  /** 기간 내 A/B 총합 + 원본 행 수 (KPI 용) */
+  totals: { a: number; b: number; rows: number };
+  /** 드릴다운 목록 (시간 asc). kind="llm" 일 때만 채워진다 */
   calls: TickCall[];
-  /** calls 가 상한(TICK_CALL_LIMIT)에 걸려 잘렸는지 */
+  /** 드릴다운 목록 (시간 asc). kind="biz" 일 때만 채워진다 */
+  traces: TickTrace[];
+  /** 목록이 상한(TICK_CALL_LIMIT)에 걸려 잘렸는지 */
   truncated: boolean;
+  /**
+   * failure 뷰 전용 — STAT_CD/ERR_CTN 컬럼이 있는지. false 면 "적재 전" 이라
+   * 0 건과 구분해야 한다(0 건이면 "문제 없음" 으로 오독된다).
+   */
+  statusAvailable?: boolean;
   /** 이 응답이 어느 에이전트를 집계한 것인지 (라우트가 에코). 늦게 도착한 응답 폐기용 */
   agentId?: string;
 }

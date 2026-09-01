@@ -8,6 +8,7 @@ import { UserMenu } from "@/components/auth/UserMenu";
 import { AgentScopeProvider, AgentScopeWarning } from "@/components/agents/AgentScopeProvider";
 import { AgentSelector } from "@/components/agents/AgentSelector";
 import { TimeRangeProvider } from "@/components/TimeRangeProvider";
+import { TickProvider } from "@/components/tick/TickProvider";
 
 /**
  * 앱 셸 (상단바 + 푸터). /login 은 셸 없이 전체화면으로 렌더한다.
@@ -23,6 +24,7 @@ export function AppChrome({ version, children }: { version: string; children: Re
   return (
     <AgentScopeProvider>
      <TimeRangeProvider>
+     <TickProvider>
       <div className="app">
         <header className="topbar">
           <div className="brand">
@@ -74,6 +76,7 @@ export function AppChrome({ version, children }: { version: string; children: Re
           </div>
         </footer>
       </div>
+     </TickProvider>
      </TimeRangeProvider>
     </AgentScopeProvider>
   );

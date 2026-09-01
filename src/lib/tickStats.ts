@@ -9,10 +9,16 @@ import {
   TickPeak,
   TickStatsResponse,
 } from "./types";
+import { SQL_ERR_PRED, SQL_TIMEOUT_PRED } from "./tokenStatus";
 import { isoNoTz, parseTs } from "./timeBuckets";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1TICK — 분당 TPM/RPM 모니터 집계 (Tokens 탭 "1TICK" 프리셋).
+// 1TICK — LLM 소스(TRX_TOKEN_DET)의 롤링 60초 집계.
+//
+// ⚠️ A/B 두 슬롯만 채운다. "A 가 무엇인가" 는 화면이 정한다(types.ts 참고).
+//      view="usage"   A=토큰 합,     B=호출 수   → Tokens 탭 TPM/RPM
+//      view="failure" A=타임아웃 수, B=실패 수   → Timeout 탭
+//    한 함수로 묶은 이유는 테이블·필터·롤업이 전부 같고 SELECT 의 두 식만 다르기 때문이다.
 //
 // ⚠️ 왜 별도 모듈인가: tokens.ts 의 시계열은 5분/1시간/1일 격자라 TPM/RPM 제약을
 //    판정할 수 없다. 그리고 **정각 분 버킷도 판정 기준이 못 된다** — 제약은
@@ -43,7 +49,7 @@ async function getOracle(): Promise<typeof import("oracledb") | null> {
 
 /** 드릴다운용 호출 행 상한. 넘으면 최신 쪽을 남기고 truncated=true 로 알린다. */
 export const TICK_CALL_LIMIT = 3000;
-/** 분 격자 상한 (24시간). 화면은 15/60/180분만 제공하지만 임의 범위 요청을 방어한다. */
+/** 분 격자 상한 (24시간). 화면은 1~180분 프리셋만 제공하지만 임의 범위 요청을 방어한다. */
 export const TICK_MAX_MINUTES = 24 * 60;
 
 const MIN_MS = 60_000;
@@ -55,14 +61,16 @@ const num = (v: unknown): number => {
 };
 const str = (v: unknown): string | null => (v == null ? null : String(v));
 
-/** 초 단위 집계 1행 — rollupTick 의 입력 */
+/**
+ * 초 단위 집계 1행 — rollupTick 의 입력.
+ * ⚠️ a/b 가 무엇인지 여기서는 모른다 (호출부가 정한다) — 그래서 이 롤업이 LLM/BIZ
+ *    양쪽 소스에 그대로 재사용된다.
+ */
 export interface TickSecond {
   /** 그 초의 시작 시각(ms) */
   ms: number;
-  tokens: number;
-  inputTokens: number;
-  outputTokens: number;
-  calls: number;
+  a: number;
+  b: number;
 }
 
 const floorMinute = (ms: number): number => Math.floor(ms / MIN_MS) * MIN_MS;
@@ -71,69 +79,67 @@ const floorMinute = (ms: number): number => Math.floor(ms / MIN_MS) * MIN_MS;
  * 초 단위 집계 → 분 격자 + 롤링 60초 피크.
  *
  * 순수 함수(DB 무관) — 경계 조건 검증이 여기 하나로 끝나도록 분리했다.
- * @param seconds ms 오름차순 정렬된 초 단위 집계 (호출이 있던 초만)
+ * @param seconds ms 오름차순 정렬된 초 단위 집계 (값이 있던 초만)
  */
 export function rollupTick(
   seconds: TickSecond[],
   fromMs: number,
   toMs: number
-): { minutes: TickMinute[]; peakTpm: TickPeak; peakRpm: TickPeak } {
-  // ① 정각 분 합계 (참고용 막대)
-  const fixed = new Map<number, { t: number; p: number; c: number; n: number }>();
+): { minutes: TickMinute[]; peakA: TickPeak; peakB: TickPeak } {
+  // ① 정각 분 합계 (참고용 — 화면에는 안 그린다)
+  const fixed = new Map<number, { a: number; b: number }>();
   for (const s of seconds) {
     const k = floorMinute(s.ms);
-    const cur = fixed.get(k) ?? { t: 0, p: 0, c: 0, n: 0 };
-    cur.t += s.tokens;
-    cur.p += s.inputTokens;
-    cur.c += s.outputTokens;
-    cur.n += s.calls;
+    const cur = fixed.get(k) ?? { a: 0, b: 0 };
+    cur.a += s.a;
+    cur.b += s.b;
     fixed.set(k, cur);
   }
 
   // ② 슬라이딩 60초 — 윈도우 시작을 각 이벤트 초로 잡고 two-pointer 로 훑는다.
   //    분별 최대(그 분에 시작하는 윈도우 중 최대)와 전체 피크를 함께 모은다.
-  type RollCell = { tok: number; tokAt: number | null; call: number; callAt: number | null };
+  type RollCell = { a: number; aAt: number | null; b: number; bAt: number | null };
   const roll = new Map<number, RollCell>();
-  let peakTok = 0;
-  let peakTokAt: number | null = null;
-  let peakCall = 0;
-  let peakCallAt: number | null = null;
+  let peakAVal = 0;
+  let peakAAt: number | null = null;
+  let peakBVal = 0;
+  let peakBAt: number | null = null;
 
   let j = 0;
-  let sumTok = 0;
-  let sumCalls = 0;
+  let sumA = 0;
+  let sumB = 0;
   for (let i = 0; i < seconds.length; i++) {
     const start = seconds[i].ms;
     while (j < seconds.length && seconds[j].ms < start + WIN_MS) {
-      sumTok += seconds[j].tokens;
-      sumCalls += seconds[j].calls;
+      sumA += seconds[j].a;
+      sumB += seconds[j].b;
       j++;
     }
 
     const k = floorMinute(start);
-    const cell = roll.get(k) ?? { tok: 0, tokAt: null, call: 0, callAt: null };
-    if (sumTok > cell.tok) {
-      cell.tok = sumTok;
-      cell.tokAt = start;
+    const cell = roll.get(k) ?? { a: 0, aAt: null, b: 0, bAt: null };
+    if (sumA > cell.a) {
+      cell.a = sumA;
+      cell.aAt = start;
     }
-    if (sumCalls > cell.call) {
-      cell.call = sumCalls;
-      cell.callAt = start;
+    if (sumB > cell.b) {
+      cell.b = sumB;
+      cell.bAt = start;
     }
     roll.set(k, cell);
 
-    if (sumTok > peakTok) {
-      peakTok = sumTok;
-      peakTokAt = start;
+    if (sumA > peakAVal) {
+      peakAVal = sumA;
+      peakAAt = start;
     }
-    if (sumCalls > peakCall) {
-      peakCall = sumCalls;
-      peakCallAt = start;
+    if (sumB > peakBVal) {
+      peakBVal = sumB;
+      peakBAt = start;
     }
 
     // 다음 시작점으로 넘어가기 전에 좌측 끝(i) 을 뺀다
-    sumTok -= seconds[i].tokens;
-    sumCalls -= seconds[i].calls;
+    sumA -= seconds[i].a;
+    sumB -= seconds[i].b;
   }
 
   // ③ 빈 분도 0 으로 채운 격자 (차트가 끊기지 않도록)
@@ -145,38 +151,40 @@ export function rollupTick(
     const r = roll.get(k);
     minutes.push({
       ts: isoNoTz(k),
-      fixedTokens: f?.t ?? 0,
-      fixedCalls: f?.n ?? 0,
-      fixedInputTokens: f?.p ?? 0,
-      fixedOutputTokens: f?.c ?? 0,
-      rollTokens: r?.tok ?? 0,
-      rollTokensAt: r?.tokAt != null ? isoNoTz(r.tokAt) : null,
-      rollCalls: r?.call ?? 0,
-      rollCallsAt: r?.callAt != null ? isoNoTz(r.callAt) : null,
+      fixedA: f?.a ?? 0,
+      fixedB: f?.b ?? 0,
+      rollA: r?.a ?? 0,
+      rollAAt: r?.aAt != null ? isoNoTz(r.aAt) : null,
+      rollB: r?.b ?? 0,
+      rollBAt: r?.bAt != null ? isoNoTz(r.bAt) : null,
     });
   }
 
   return {
     minutes,
-    peakTpm: { value: peakTok, at: peakTokAt != null ? isoNoTz(peakTokAt) : null },
-    peakRpm: { value: peakCall, at: peakCallAt != null ? isoNoTz(peakCallAt) : null },
+    peakA: { value: peakAVal, at: peakAAt != null ? isoNoTz(peakAAt) : null },
+    peakB: { value: peakBVal, at: peakBAt != null ? isoNoTz(peakBAt) : null },
   };
 }
 
-function emptyStats(filter: TickFilter, fromMs: number, toMs: number): TickStatsResponse {
-  const { minutes, peakTpm, peakRpm } = rollupTick([], fromMs, toMs);
+function emptyStats(fromMs: number, toMs: number, statusAvailable = true): TickStatsResponse {
+  const { minutes, peakA, peakB } = rollupTick([], fromMs, toMs);
   return {
+    kind: "llm",
     range: { from: isoNoTz(fromMs), to: isoNoTz(toMs) },
     minutes,
-    peakTpm,
-    peakRpm,
-    totals: { calls: 0, totalTokens: 0 },
+    peakA,
+    peakB,
+    totals: { a: 0, b: 0, rows: 0 },
     calls: [],
+    traces: [],
     truncated: false,
+    statusAvailable,
   };
 }
 
 export async function fetchTickStats(filter: TickFilter): Promise<TickStatsResponse> {
+  const view = filter.view ?? "usage";
   const now = Date.now();
   const toMs = filter.dateTo ? Date.parse(filter.dateTo) : now;
   let fromMs = filter.dateFrom ? Date.parse(filter.dateFrom) : toMs - 60 * MIN_MS;
@@ -184,9 +192,9 @@ export async function fetchTickStats(filter: TickFilter): Promise<TickStatsRespo
   if ((toMs - fromMs) / MIN_MS > TICK_MAX_MINUTES) fromMs = toMs - TICK_MAX_MINUTES * MIN_MS;
 
   const cfg = getAgentDbConfig(filter.agentId);
-  if (!cfg) return emptyStats(filter, fromMs, toMs);
+  if (!cfg) return emptyStats(fromMs, toMs);
   const oracle = await getOracle();
-  if (!oracle) return emptyStats(filter, fromMs, toMs);
+  if (!oracle) return emptyStats(fromMs, toMs);
 
   let conn: Awaited<ReturnType<typeof oracle.getConnection>> | undefined;
   const t0 = Date.now();
@@ -203,6 +211,10 @@ export async function fetchTickStats(filter: TickFilter): Promise<TickStatsRespo
       hasStatus = false;
     }
 
+    // ⚠️ failure 뷰는 STAT_CD/ERR_CTN 이 있어야 성립한다. 컬럼이 없는데 0 을 내려주면
+    //    "타임아웃이 없다(=문제 없음)" 로 오독되므로 statusAvailable=false 로 구분해 알린다.
+    if (view === "failure" && !hasStatus) return emptyStats(fromMs, toMs, false);
+
     // 클램프된 범위를 그대로 WHERE 에 반영 (요청 필터와 실제 집계 범위가 어긋나지 않게)
     const eff: TickFilter = { ...filter, dateFrom: isoNoTz(fromMs), dateTo: isoNoTz(toMs) };
     const { where, binds } = buildWhere(eff);
@@ -217,47 +229,53 @@ export async function fetchTickStats(filter: TickFilter): Promise<TickStatsRespo
       }
     };
 
-    // ① 초 단위 집계 — 호출이 있던 초만 행이 나오므로 범위가 1시간이어도 ≤3600행.
+    // A/B 에 담을 식 — 이 두 줄이 usage 와 failure 의 유일한 차이다.
+    const [exprA, exprB] =
+      view === "failure"
+        ? [
+            `SUM(CASE WHEN ${SQL_ERR_PRED} AND ${SQL_TIMEOUT_PRED} THEN 1 ELSE 0 END)`,
+            `SUM(CASE WHEN ${SQL_ERR_PRED} THEN 1 ELSE 0 END)`,
+          ]
+        : ["SUM(TOTAL_TOKENS)", "COUNT(*)"];
+
+    // ① 초 단위 집계 — 값이 있던 초만 행이 나오므로 범위가 1시간이어도 ≤3600행.
     const secExpr = `TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS')`;
     const secSql =
-      `SELECT ${secExpr} AS S, SUM(TOTAL_TOKENS) AS T, SUM(INPUT_TOKENS) AS P,` +
-      ` SUM(OUTPUT_TOKENS) AS C, COUNT(*) AS N` +
+      `SELECT ${secExpr} AS S, ${exprA} AS A, ${exprB} AS B, COUNT(*) AS N` +
       ` FROM TRX_TOKEN_DET${where} GROUP BY ${secExpr} ORDER BY 1`;
     const seconds: TickSecond[] = [];
+    let rows = 0;
     for (const r of await run("seconds", secSql)) {
       const ms = parseTs(str(r.S ?? r.s));
       if (ms === null) continue;
-      seconds.push({
-        ms,
-        tokens: num(r.T ?? r.t),
-        inputTokens: num(r.P ?? r.p),
-        outputTokens: num(r.C ?? r.c),
-        calls: num(r.N ?? r.n),
-      });
+      rows += num(r.N ?? r.n);
+      seconds.push({ ms, a: num(r.A ?? r.a), b: num(r.B ?? r.b) });
     }
     // ORDER BY 는 ISO 문자열 사전순 = 시간순이지만, 파싱 실패 행을 건너뛴 뒤에도
     // 오름차순이 보장되도록 한 번 더 정렬한다(rollupTick 의 전제).
     seconds.sort((a, b) => a.ms - b.ms);
 
-    const { minutes, peakTpm, peakRpm } = rollupTick(seconds, fromMs, toMs);
+    const { minutes, peakA, peakB } = rollupTick(seconds, fromMs, toMs);
     const totals = seconds.reduce(
-      (acc, s) => {
-        acc.calls += s.calls;
-        acc.totalTokens += s.tokens;
+      (acc, sec) => {
+        acc.a += sec.a;
+        acc.b += sec.b;
         return acc;
       },
-      { calls: 0, totalTokens: 0 }
+      { a: 0, b: 0, rows }
     );
 
-    // ② 드릴다운용 호출 목록 — 초과 윈도우 안을 들여다보는 용도.
-    //   상한을 넘으면 **최신 쪽**을 남긴다(모니터는 방금 난 초과를 먼저 본다).
-    //   화면은 truncated 배지로 "조회 범위를 좁히라" 고 알린다.
+    // ② 드릴다운용 호출 목록 — 피크 윈도우 안을 들여다보는 용도.
+    //   상한을 넘으면 **최신 쪽**을 남긴다(모니터는 방금 난 일을 먼저 본다).
+    //   ⚠️ failure 뷰에서는 실패 호출만 가져온다 — 성공까지 섞으면 목록이 상한에 걸려
+    //      정작 봐야 할 실패 건이 밀려난다.
     const statCols = hasStatus ? ", STAT_CD, ERR_CTN" : "";
+    const callWhere = view === "failure" ? `${where} AND ${SQL_ERR_PRED}` : where;
     const callSql =
       `SELECT * FROM (` +
       `SELECT TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS CTM, TRACE_ID, NODE_NM, MODEL_NM,` +
       ` USER_ID, INPUT_TOKENS, OUTPUT_TOKENS, TOTAL_TOKENS, LATENCY_MS${statCols}` +
-      ` FROM TRX_TOKEN_DET${where} ORDER BY CALL_TM DESC NULLS LAST` +
+      ` FROM TRX_TOKEN_DET${callWhere} ORDER BY CALL_TM DESC NULLS LAST` +
       `) WHERE ROWNUM <= ${TICK_CALL_LIMIT + 1}`;
     const rawCalls = await run("calls", callSql);
     const truncated = rawCalls.length > TICK_CALL_LIMIT;
@@ -278,6 +296,7 @@ export async function fetchTickStats(filter: TickFilter): Promise<TickStatsRespo
     calls.reverse();
 
     logger.info("fetchTickStats done", {
+      view,
       seconds: seconds.length,
       minutes: minutes.length,
       calls: calls.length,
@@ -286,17 +305,22 @@ export async function fetchTickStats(filter: TickFilter): Promise<TickStatsRespo
     });
 
     return {
+      kind: "llm",
       range: { from: eff.dateFrom ?? null, to: eff.dateTo ?? null },
       minutes,
-      peakTpm,
-      peakRpm,
+      peakA,
+      peakB,
       totals,
       calls,
+      traces: [],
       truncated,
+      // ⚠️ usage 뷰에서는 내려보내지 않는다 — 이 값이 false 면 화면이 "실패 정보 미적재"
+      //    경고를 띄우는데, 토큰 사용량 조회에는 STAT_CD 가 필요 없어 헛경고가 된다.
+      statusAvailable: view === "failure" ? hasStatus : undefined,
     };
   } catch (e) {
     logger.error("fetchTickStats failed", { err: String(e), ms: Date.now() - t0 });
-    return emptyStats(filter, fromMs, toMs);
+    return emptyStats(fromMs, toMs);
   } finally {
     if (conn) {
       try {

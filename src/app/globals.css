@@ -4553,48 +4553,74 @@ button.tbd-row:not(:disabled):hover {
 
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   1TICK — 분당 TPM/RPM 모니터 (Tokens 탭)
-   화면은 게이지 → 추이 → 초과한 순간 3단. 초과는 전부 --err 톤 하나로만 표시한다.
+   실시간(1TICK) — 롤링 60초 모니터 (Dashboard / Tokens / Timeout 공용)
+   화면은 게이지 → 추이 → 순간 목록 3단. 한도 초과는 전부 --err 톤 하나로만 표시한다.
    ───────────────────────────────────────────────────────────────────────────── */
 
-/* 프리셋 줄에서 1TICK 만 성격이 다르다(기간이 아니라 모드 전환) */
-.preset-btn.tick { font-family: var(--mono); letter-spacing: 0.3px; }
-.preset-btn.tick.active { background: var(--err); border-color: var(--err); color: #fff; }
-
-.tick-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-.tick-bar-range { font-size: 13px; color: var(--text-3); }
-.tick-bar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-
-.tick-seg {
+/* 보기 전환 (기간 분석 ↔ 실시간).
+   ⚠️ 기간 프리셋 줄(.preset-group)과 **다르게 생겨야 한다** — 예전엔 줄 안의 버튼 하나라
+      기간을 고른 줄 알고 눌렀다가 화면이 통째로 바뀌었다. 바탕을 진하게 깔아 구분한다. */
+.view-toggle {
   display: inline-flex;
   background: var(--surface-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
-  padding: 2px;
+  padding: 3px;
   gap: 2px;
 }
-.tick-seg-btn {
+.view-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: none;
   background: transparent;
   color: var(--text-3);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
-  padding: 5px 12px;
+  padding: 6px 13px;
   border-radius: 6px;
   cursor: pointer;
+  white-space: nowrap;
 }
-.tick-seg-btn:hover { color: var(--text); }
-.tick-seg-btn.active {
+.view-toggle-btn:hover { color: var(--text); }
+.view-toggle-btn.active {
   background: var(--surface);
   color: var(--accent);
   box-shadow: 0 1px 2px rgba(17, 24, 39, 0.08);
 }
+.view-toggle-btn.live.active { color: var(--err); }
+
+/* 실시간 쪽 점 — 자동 갱신이 도는 동안에만 깜빡인다.
+   "지금 살아 있는 값인가" 를 글자 없이 알리는 유일한 표시라 문구로 설명하지 않는다. */
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex: none;
+}
+.view-toggle-btn.live.active .live-dot { background: var(--err); }
+.live-dot.pulse { animation: live-pulse 1.6s ease-in-out infinite; }
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--err-soft); }
+  50%      { opacity: 0.45; box-shadow: 0 0 0 4px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot.pulse { animation: none; }
+}
+
+/* 실시간 본문 맨 위 요약 줄 (조회 구간 · 행 수) */
+.tick-summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.tick-summary-range { font-family: var(--mono); }
+.tick-summary-sep { color: var(--border-strong); }
+.tick-summary b { color: var(--text); font-weight: 700; }
+
 .tick-auto {
   display: inline-flex;
   align-items: center;
@@ -4605,19 +4631,12 @@ button.tbd-row:not(:disabled):hover {
   user-select: none;
 }
 .tick-auto input { accent-color: var(--accent); cursor: pointer; }
-/* 직접 설정(과거 구간) 모드에서는 자동 새로고침이 의미가 없어 잠근다 */
+/* 직접 설정(과거 구간) 모드에서는 자동 갱신이 의미가 없어 잠근다 */
 .tick-auto.off { opacity: 0.45; cursor: not-allowed; }
 .tick-auto.off input { cursor: not-allowed; }
 
-/* '직접 설정' 을 고르면 툴바 아래로 펼쳐지는 From/To 줄 */
-.tick-range {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: -4px;
-}
 .tick-range-hint { font-size: 12px; color: var(--text-muted); }
+.tick-range-err { font-size: 12.5px; color: var(--err); font-weight: 600; }
 
 .tick-notice {
   padding: 11px 15px;
@@ -4731,6 +4750,8 @@ button.tbd-row:not(:disabled):hover {
   color: var(--text-3);
 }
 .tick-gauge-pct { font-family: var(--mono); font-weight: 700; color: var(--text-2); }
+.tick-gauge-quiet { color: var(--text-muted); }
+.tick-ok-mark { color: var(--text-3); }
 .tick-gauge.over .tick-gauge-pct { color: var(--err); }
 .tick-gauge-cnt {
   margin-left: auto;
@@ -4795,6 +4816,9 @@ button.tbd-row:not(:disabled):hover {
 }
 .tick-seg-peak b { font-size: 17px; font-weight: 700; color: var(--err); letter-spacing: -0.4px; }
 .tick-seg-slash { font-size: 12.5px; color: var(--text-muted); }
+/* 한도가 없는 화면(대시보드/타임아웃)의 목록은 '초과' 가 아니라 '가장 몰린 순간' 이다 —
+   빨강을 쓰면 정상값을 사고로 읽게 된다. */
+.tick-seg-item.neutral .tick-seg-peak b { color: var(--text); }
 .tick-seg-over {
   font-family: var(--mono);
   font-size: 12.5px;

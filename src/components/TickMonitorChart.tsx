@@ -14,12 +14,14 @@ import {
 import { TickMinute } from "@/lib/types";
 
 // 1TICK 모니터 차트 — 1분 격자에 값 하나만 그린다.
-//   면/선 = 그 분의 TPM/RPM (= 그 분 안에서 값이 가장 큰 연속 60초. 초과 판정값).
-//   점선  = 한도(/admin 에서 설정). 면이 이 위로 올라간 분이 초과.
+//   면/선 = 그 분의 롤링 60초 최대값 (판정값).
+//   점선  = 한도. 한도가 없는 화면(0)이면 기준선 없이 추이만 그린다.
 // ⚠️ 정각 분 합계(TickMinute.fixed*)는 판정에 안 쓰이므로 **그리지 않는다** —
 //    한 화면에 판정값과 비판정값을 같이 두면 어느 게 기준인지 읽는 사람이 혼란스럽다.
+// ⚠️ 무엇을 그리는지는 이 컴포넌트가 모른다 — 슬롯(a/b)과 라벨을 화면이 준다.
 
-export type TickMetric = "tpm" | "rpm";
+/** A/B 두 슬롯 중 어느 쪽을 그릴지. 의미는 화면의 TickMetricDef 가 정한다. */
+export type TickSlot = "a" | "b";
 
 const ROLL_COLOR = "#2563eb";
 const ROLL_OVER_COLOR = "#b42318";
@@ -57,10 +59,10 @@ type Row = {
   over: boolean;
 };
 
-export function toRows(minutes: TickMinute[], metric: TickMetric, limit: number): Row[] {
+export function toRows(minutes: TickMinute[], slot: TickSlot, limit: number): Row[] {
   return minutes.map((m) => {
-    const roll = metric === "tpm" ? m.rollTokens : m.rollCalls;
-    const at = metric === "tpm" ? m.rollTokensAt : m.rollCallsAt;
+    const roll = slot === "a" ? m.rollA : m.rollB;
+    const at = slot === "a" ? m.rollAAt : m.rollBAt;
     return {
       ts: m.ts,
       tick: hhmm(m.ts),
@@ -72,16 +74,16 @@ export function toRows(minutes: TickMinute[], metric: TickMetric, limit: number)
 }
 
 function TickTooltip({
-  active, payload, metric, limit,
+  active, payload, label, unit, limit,
 }: {
   active?: boolean;
   payload?: Array<{ payload: Row }>;
-  metric: TickMetric;
+  label: string;
+  unit: string;
   limit: number;
 }) {
   if (!active || !payload || payload.length === 0) return null;
   const row = payload[0].payload;
-  const unit = metric === "tpm" ? "토큰" : "호출";
   const pct = limit > 0 ? Math.round((row.roll / limit) * 100) : null;
   return (
     <div className="ts-tooltip">
@@ -90,7 +92,7 @@ function TickTooltip({
       <div className="ts-tooltip-body">
         <div className="ts-tooltip-row">
           <span className="ts-tooltip-swatch" style={{ background: row.over ? ROLL_OVER_COLOR : ROLL_COLOR }} />
-          <span className="ts-tooltip-key">{metric.toUpperCase()}</span>
+          <span className="ts-tooltip-key">{label}</span>
           <span className="ts-tooltip-val">{row.roll.toLocaleString()} {unit}</span>
         </div>
         {pct !== null && (
@@ -107,14 +109,18 @@ function TickTooltip({
 }
 
 export function TickMonitorChart({
-  minutes, metric, limit,
+  minutes, slot, label, unit, limit,
 }: {
   minutes: TickMinute[];
-  metric: TickMetric;
+  slot: TickSlot;
+  /** 범례/툴팁에 쓸 지표 이름 (예: "TPM", "타임아웃") */
+  label: string;
+  /** 값 뒤에 붙는 단위 (예: "토큰", "건") */
+  unit: string;
+  /** 0 이면 기준선·초과 표시 없이 추이만 그린다 */
   limit: number;
 }) {
-  const data = useMemo(() => toRows(minutes, metric, limit), [minutes, metric, limit]);
-  const unit = metric === "tpm" ? "토큰" : "호출";
+  const data = useMemo(() => toRows(minutes, slot, limit), [minutes, slot, limit]);
 
   // 한도가 데이터보다 훨씬 크면 기준선이 화면 밖으로 나가 "얼마나 여유인지" 가 안 보인다.
   // 반대로 데이터가 한도를 크게 넘으면 기준선이 바닥에 깔린다. 둘 다 축 상한에 반영한다.
@@ -126,7 +132,7 @@ export function TickMonitorChart({
       <div className="ts-legend">
         <span className="ts-legend-item static">
           <span className="legend-swatch" style={{ background: ROLL_COLOR }} />
-          {metric.toUpperCase()}
+          {label}
         </span>
         {limit > 0 && (
           <span className="ts-legend-item static">
@@ -166,7 +172,7 @@ export function TickMonitorChart({
               tickFormatter={(v) => fmtCompact(Number(v))}
             />
             <Tooltip
-              content={<TickTooltip metric={metric} limit={limit} />}
+              content={<TickTooltip label={label} unit={unit} limit={limit} />}
               cursor={{ stroke: "var(--accent)", strokeDasharray: "3 3", strokeOpacity: 0.4 }}
             />
             {limit > 0 && (
@@ -188,7 +194,7 @@ export function TickMonitorChart({
             <Area
               type="monotone"
               dataKey="roll"
-              name={metric.toUpperCase()}
+              name={label}
               stroke={ROLL_COLOR}
               strokeWidth={2.1}
               fill="url(#tick-grad)"

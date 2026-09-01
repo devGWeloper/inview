@@ -6,7 +6,7 @@ import { TICK_CALL_LIMIT, TICK_MAX_MINUTES, TickSecond, rollupTick } from "./tic
 import { ACTION_FAIL_PHRASES } from "./tempStatus"; // TEMP(ONEOIS 미연결): 실패 판정이 CUBE RESP 문구를 본다
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1TICK — BIZ 소스(BIZ_AIACTIONTXN_HIS) 의 롤링 60초 집계. Dashboard 의 "실시간" 뷰.
+// 1TICK — BIZ 소스(BIZ_AIACTIONTXN_HIS) 의 롤링 60초 집계. Dashboard 의 "틱" 뷰.
 //
 // A = 분당 요청 수, B = 분당 실패 수. 롤업(rollupTick)은 LLM 소스와 **같은 순수 함수**를
 // 쓴다 — 슬라이딩 60초 정의가 화면마다 갈리면 같은 데이터에서 다른 수치가 나온다.
@@ -17,7 +17,7 @@ import { ACTION_FAIL_PHRASES } from "./tempStatus"; // TEMP(ONEOIS 미연결): �
 //
 // ⚠️ 실패 판정은 화면 나머지와 같은 규칙이다 — ERR_CD 가 있거나, TEMP(ONEOIS 미연결)
 //    규칙의 액션 실패 문구가 CUBE RESP 에 있는 경우. 여기만 ERR_CD 로 좁히면
-//    대시보드 KPI 의 실패 수와 실시간 뷰의 실패 수가 갈린다.
+//    대시보드 KPI 의 실패 수와 틱 뷰의 실패 수가 갈린다.
 //    (ONEOIS 연결 후 원복할 때 tempStatus.ts 의존을 같이 정리할 것 — CLAUDE.md 참고)
 //
 // 다른 모듈과 같은 lazy-oracledb-swallow 패턴 — 드라이버/설정이 없으면 빈 격자를

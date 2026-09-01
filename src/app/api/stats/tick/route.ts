@@ -6,7 +6,7 @@ import { requireBiz } from "@/lib/auth/current";
 
 export const dynamic = "force-dynamic";
 
-// 1TICK(BIZ) — 진입 레이어 기준 분당 요청/실패. Dashboard 의 "실시간" 뷰가 호출한다.
+// 1TICK(BIZ) — 진입 레이어 기준 분당 요청/실패. Dashboard 의 "틱" 뷰가 호출한다.
 //
 // ⚠️ 경로가 /api/stats/tick 이 아닌 이유: 그쪽엔 [traceId] 동적 세그먼트가 있어
 //    "tick" 이라는 이름의 트레이스와 경로가 겹친다. 대시보드 데이터 라우트(/api/stats)의

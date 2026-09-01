@@ -23,7 +23,8 @@ import {
   useTick,
   useTickView,
 } from "@/components/tick/TickProvider";
-import { TickToolbar } from "@/components/tick/TickToolbar";
+import { TickActions, TickPresets } from "@/components/tick/TickToolbar";
+import { analysisMinutesForTickWin, spanMinutes, tickSelFor } from "@/components/tick/rangeSync";
 import { ViewToggle } from "@/components/tick/ViewToggle";
 
 // Timeout 탭 — LLM 호출이 끊긴 지점을 그대로 본다.
@@ -36,13 +37,13 @@ import { ViewToggle } from "@/components/tick/ViewToggle";
 // 조회 기간(프리셋/직접 설정)은 Tokens 탭과 **공유**한다 — TimeRangeProvider 참고.
 // 여기에 프리셋 배열이나 기간 state 를 다시 두지 말 것(두 탭의 구성이 또 갈린다).
 //
-// 실시간 뷰는 같은 TRX_TOKEN_DET 를 롤링 60초로 본다. ⚠️ 다만 지표가 Tokens 탭과 다르다 —
+// 틱 뷰는 같은 TRX_TOKEN_DET 를 롤링 60초로 본다. ⚠️ 다만 지표가 Tokens 탭과 다르다 —
 // 여기서 TPM/RPM 을 그대로 복제하면 두 화면의 숫자가 글자 하나까지 같아져 볼 이유가 없다.
-// 이 화면의 실시간은 **분당 타임아웃 / 분당 실패**다(`?view=failure`).
+// 이 화면의 틱 뷰는 **분당 타임아웃 / 분당 실패**다(`?view=failure`).
 interface Range { from: string; to: string }
 
 /**
- * 실시간 뷰의 게이지/차트 정의.
+ * 틱 뷰의 게이지/차트 정의.
  * ⚠️ 한도(limit)는 0 이다 — 타임아웃은 사내 rate limit 같은 상한이 있는 값이 아니다.
  *    0 이면 기준선·초과 판정 없이 추이만 그리고, 목록은 "가장 몰린 순간" 이 된다.
  */
@@ -74,9 +75,9 @@ export default function TimeoutsPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  /** 실시간 뷰인가 (화면별로 기억) + 공유 조회 창 */
+  /** 틱 뷰인가 (화면별로 기억) + 공유 조회 창 */
   const [tickView, setTickView, tickViewReady] = useTickView("timeouts");
-  const { sel: tickSel, ready: tickReady, resolve: resolveTick } = useTick();
+  const { sel: tickSel, ready: tickReady, resolve: resolveTick, apply: applyTick } = useTick();
   const [tick, setTick] = useState<TickStatsResponse | null>(null);
   const [tickClamped, setTickClamped] = useState(false);
 
@@ -111,7 +112,7 @@ export default function TimeoutsPage() {
     }
   }, [agentId]);
 
-  // 실시간(롤링 60초) 조회 — 같은 TRX_TOKEN_DET 를 ?view=failure 로 본다.
+  // 틱(롤링 60초) 조회 — 같은 TRX_TOKEN_DET 를 ?view=failure 로 본다.
   // 노드/모델 필터는 그대로 걸린다(기간 분석 뷰와 조회 범위 해석이 갈리지 않게).
   const loadTick = useCallback(async (r: TickRange, nodeNm: string, modelNm: string) => {
     const requestFor = agentId;
@@ -133,7 +134,7 @@ export default function TimeoutsPage() {
       setTickClamped(Number.isFinite(want) && Number.isFinite(got) && got - want > 60_000);
     } catch (e) {
       if (agentIdRef.current !== requestFor) return;
-      setErr(errMessage(e, "실시간 모니터를 불러오지 못했습니다."));
+      setErr(errMessage(e, "틱 조회를 불러오지 못했습니다."));
       setTick(null);
       setTickClamped(false);
     } finally {
@@ -161,7 +162,7 @@ export default function TimeoutsPage() {
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [ready, rangeReady, tickReady, tickViewReady, agentId]);
 
-  // 자동 갱신 — 실시간 뷰의 live 모드에서만 (TickToolbar 의 체크박스). 주기는 창 길이에 맞춘다.
+  // 자동 갱신 — 틱 뷰의 live 모드에서만 (TickToolbar 의 체크박스). 주기는 창 길이에 맞춘다.
   useEffect(() => {
     if (!tickView || tickSel.mode !== "live" || !tickSel.auto) return;
     const id = setInterval(() => loadTick(resolveTickRange(tickSel), node, model), tickRefreshMs(tickSel.win));
@@ -209,12 +210,34 @@ export default function TimeoutsPage() {
 
   /**
    * 보기 전환. 켜는 즉시 조회한다 — 토글을 눌렀는데 빈 화면이 남아 있으면 켜진 건지 알 수 없다.
+   *
+   * ⚠️ **조회 구간을 서로 물려준다** (rangeSync.ts) — 토글할 때마다 무관한 구간으로 튀면
+   *    매번 기간을 다시 골라야 한다. 두 뷰의 후보가 겹치지 않아 정확히 같지는 않다.
    */
   const onView = (live: boolean) => {
     setTickView(live);
     setDraftCustom(false);
-    if (live) loadTick(resolveTick(), node, model);
-    else load(currentRange(), node, model);
+    if (live) {
+      const cur = sel.preset === "custom" && sel.customFrom && sel.customTo
+        ? { from: sel.customFrom, to: sel.customTo }
+        : null;
+      const mins = cur
+        ? spanMinutes(cur.from, cur.to) ?? 60
+        : (RANGE_PRESETS.find((p) => p.key === sel.preset) ?? RANGE_PRESETS[0]).hours * 60;
+      applyTick(tickSelFor(mins, cur));
+      loadTick(resolveTick(), node, model);
+      return;
+    }
+    if (tickSel.mode === "custom" && tickSel.from && tickSel.to) {
+      setCustom(tickSel.from, tickSel.to);
+      load(resolveRange({ preset: "custom", customFrom: tickSel.from, customTo: tickSel.to }), node, model);
+      return;
+    }
+    // 틱 창(≤180분)을 덮는 가장 짧은 집계 프리셋으로 옮긴다.
+    const need = analysisMinutesForTickWin(tickSel.win);
+    const p = RANGE_PRESETS.find((x) => x.hours * 60 >= need) ?? RANGE_PRESETS[0];
+    setPreset(p.key);
+    load(resolveRange({ ...sel, preset: p.key }), node, model);
   };
 
   const customOpen = draftCustom || sel.preset === "custom";
@@ -231,7 +254,7 @@ export default function TimeoutsPage() {
               ? tick ? fmtRange(tick.range.from, tick.range.to) : "—"
               : stats ? fmtRange(stats.range.from, stats.range.to) : fmtRange(currentRange().from, currentRange().to)}
             <span className="dash-title-note">
-              {tickView ? " · 분당 타임아웃/실패" : " · LLM 호출 실패 적재 기준"}
+              {tickView ? " · 틱 · 분당 타임아웃/LLM 오류" : " · LLM 호출 실패 적재 기준"}
               {!isDefault && agent ? ` · ${agent.name}` : ""}
             </span>
           </div>
@@ -243,9 +266,12 @@ export default function TimeoutsPage() {
             onChange={onView}
             pulsing={tickSel.auto && tickSel.mode === "live"}
           />
-          {/* 프리셋 줄 자리는 보기에 따라 통째로 교체된다 */}
+          {/* 프리셋 줄 자리는 보기에 따라 통째로 교체된다.
+              ⚠️ .preset-slot 이 두 세트 중 넓은 쪽 폭을 확보한다 — 없으면 토글할 때마다
+                 뒤따르는 컨트롤이 좌우로 밀린다. */}
+          <div className="preset-slot">
           {tickView ? (
-            <TickToolbar loading={loading} onSubmit={() => loadTick(resolveTick(), node, model)} />
+            <TickPresets loading={loading} onSubmit={() => loadTick(resolveTick(), node, model)} />
           ) : (
             <>
               <div className="preset-group" role="tablist" aria-label="time preset">
@@ -287,6 +313,10 @@ export default function TimeoutsPage() {
               )}
             </>
           )}
+          </div>
+          {/* 동작 버튼은 두 보기가 같은 자리를 쓴다 (집계 뷰는 '적용' 이 직접 설정 폼 안에 있어
+              여기는 틱일 때만 렌더된다) */}
+          {tickView && <TickActions loading={loading} onSubmit={() => loadTick(resolveTick(), node, model)} />}
         </div>
       </div>
 
@@ -344,7 +374,7 @@ export default function TimeoutsPage() {
               <div className="kpi-title">실패 호출</div>
               <div className="kpi-value">{stats.failedCalls.toLocaleString()}</div>
               <div className="kpi-sub">
-                타임아웃 외 오류 {(stats.failedCalls - stats.timeoutCalls).toLocaleString()}건 포함
+                타임아웃 외 LLM 오류 {(stats.failedCalls - stats.timeoutCalls).toLocaleString()}건 포함
               </div>
             </div>
             {/* 사용자 체감 피해량 — 호출 수보다 "질문 몇 개가 깨졌나" 가 크기를 말해준다 */}
@@ -479,7 +509,7 @@ function DimCard({
                 title={`실패 ${d.failed.toLocaleString()} / 전체 호출 ${d.calls.toLocaleString()} · 타임아웃 ${d.timeout.toLocaleString()}`}
               >
                 <span className="to-dim-key">{d.key}</span>
-                {/* 막대는 추이 차트와 같은 색 규칙 — 타임아웃(진한 빨강) + 기타 오류(주황) */}
+                {/* 막대는 추이 차트와 같은 색 규칙 — 타임아웃(진한 빨강) + LLM 오류(앰버) */}
                 <span className="to-dim-bar">
                   <span className="seg-t" style={{ width: `${(d.timeout / max) * 100}%` }} />
                   <span className="seg-o" style={{ width: `${(Math.max(0, d.failed - d.timeout) / max) * 100}%` }} />
@@ -632,7 +662,7 @@ function FailedCallsTable({ items }: { items: TimeoutItem[] }) {
                 >
                   <option value="">전체</option>
                   <option value="timeout">타임아웃</option>
-                  <option value="error">오류</option>
+                  <option value="error">LLM 오류</option>
                 </select>
               </th>
               <th>
@@ -678,7 +708,7 @@ function FailedCallsTable({ items }: { items: TimeoutItem[] }) {
                   <td className="mono">{fmtTs(it.callTm)}</td>
                   <td>
                     <span className={"to-st" + (st === "timeout" ? " is-timeout" : "")}>
-                      {st === "timeout" ? "타임아웃" : "오류"}
+                      {st === "timeout" ? "타임아웃" : "LLM 오류"}
                     </span>
                   </td>
                   <td>{it.nodeNm ? <span className="qnode">{it.nodeNm}</span> : "—"}</td>

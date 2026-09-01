@@ -3,13 +3,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 실시간(1TICK) 뷰가 공유하는 조회 창 — Dashboard / Tokens / Timeout 공통.
+// 틱 뷰가 공유하는 조회 창 — Dashboard / Tokens / Timeout 공통.
 //
 // 세 화면이 같은 형식(롤링 60초)을 쓰므로 창 길이·직접 설정 구간·자동 갱신 여부까지
 // 매번 다시 고르게 하면 화면을 옮길 때마다 같은 입력을 반복하게 된다.
 // TimeRangeProvider(기간 분석 뷰) 와 같은 패턴이고, 저장 키만 다르다.
 //
-// ⚠️ **뷰 on/off 는 공유하지 않는다.** 대시보드를 실시간으로 띄워 두고 Tokens 는 기간
+// ⚠️ **뷰 on/off 는 공유하지 않는다.** 대시보드를 틱으로 띄워 두고 Tokens 는 기간
 //    분석으로 보는 조합이 정상이라, 화면마다 따로 기억한다(useTickView).
 // ⚠️ 실제 {from,to} 시각은 저장하지 않는다 — live 창은 항상 '지금' 기준이라 호출 시점에
 //    계산해야 한다. 저장해 두면 어제 열어 둔 탭이 어제 기준으로 굳는다.
@@ -126,6 +126,12 @@ interface TickCtx {
   setWin: (w: TickWindowMin) => void;
   /** 직접 설정 적용 — 초안을 커밋한다 */
   setCustom: (from: string, to: string) => void;
+  /**
+   * 여러 필드를 한 번에 적용 (집계↔틱 전환 시 구간 물려주기 — rangeSync.ts).
+   * setWin + setCustom 을 잇달아 부르면 저장·렌더가 두 번 일어나고 중간 상태로 한 번
+   * 조회될 수 있어, 전환처럼 여러 필드가 같이 바뀌는 경우는 이걸 쓴다.
+   */
+  apply: (patch: Partial<TickSel>) => void;
   setAuto: (v: boolean) => void;
   /** 현재 선택을 실제 조회 구간으로 (호출 시점 기준) */
   resolve: () => TickRange;
@@ -136,6 +142,7 @@ const Ctx = createContext<TickCtx>({
   ready: false,
   setWin: () => {},
   setCustom: () => {},
+  apply: () => {},
   setAuto: () => {},
   resolve: () => resolveTickRange(DEFAULT_SEL),
 });
@@ -178,13 +185,17 @@ export function TickProvider({ children }: { children: React.ReactNode }) {
     (from: string, to: string) => persist({ ...selRef.current, mode: "custom", from, to }),
     [persist]
   );
+  const apply = useCallback(
+    (patch: Partial<TickSel>) => persist({ ...selRef.current, ...patch }),
+    [persist]
+  );
   const setAuto = useCallback((v: boolean) => persist({ ...selRef.current, auto: v }), [persist]);
 
   const resolve = useCallback(() => resolveTickRange(selRef.current), []);
 
   const value = useMemo<TickCtx>(
-    () => ({ sel, ready, setWin, setCustom, setAuto, resolve }),
-    [sel, ready, setWin, setCustom, setAuto, resolve]
+    () => ({ sel, ready, setWin, setCustom, apply, setAuto, resolve }),
+    [sel, ready, setWin, setCustom, apply, setAuto, resolve]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -195,7 +206,7 @@ export function TickProvider({ children }: { children: React.ReactNode }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * "이 화면이 실시간 뷰인가" 를 화면별로 기억한다.
+ * "이 화면이 틱 뷰인가" 를 화면별로 기억한다.
  * @param key 화면 식별자 ("tokens" | "timeouts" | "dashboard")
  * @returns [on, setOn, ready] — ready 이전에는 조회하지 않는다(이중 조회 방지)
  */

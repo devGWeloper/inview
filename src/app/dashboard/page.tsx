@@ -20,7 +20,8 @@ import {
   useTick,
   useTickView,
 } from "@/components/tick/TickProvider";
-import { TickToolbar } from "@/components/tick/TickToolbar";
+import { TickActions, TickPresets } from "@/components/tick/TickToolbar";
+import { analysisMinutesForTickWin, spanMinutes, tickSelFor } from "@/components/tick/rangeSync";
 import { ViewToggle } from "@/components/tick/ViewToggle";
 
 type Preset = "1h" | "6h" | "24h" | "7d" | "30d" | "custom";
@@ -40,7 +41,7 @@ function toLocalInput(ms: number): string {
 }
 
 /**
- * 실시간 뷰의 게이지/차트 정의 (BIZ 진입 레이어 기준).
+ * 틱 뷰의 게이지/차트 정의 (BIZ 진입 레이어 기준).
  * ⚠️ 한도(limit)는 0 이다 — 요청 수에는 사내 rate limit 같은 상한이 없다. 0 이면 기준선·초과
  *    판정 없이 추이만 그리고, 아래 목록은 "가장 몰린 순간" 이 된다.
  */
@@ -64,9 +65,9 @@ export default function DashboardPage() {
 
   const [stats, setStats] = useState<StatsResponse | null>(null);
 
-  /** 실시간 뷰인가 (화면별로 기억) + 공유 조회 창 */
+  /** 틱 뷰인가 (화면별로 기억) + 공유 조회 창 */
   const [tickView, setTickView, tickViewReady] = useTickView("dashboard");
-  const { sel: tickSel, ready: tickReady, resolve: resolveTick } = useTick();
+  const { sel: tickSel, ready: tickReady, resolve: resolveTick, apply: applyTick } = useTick();
   const [tick, setTick] = useState<TickStatsResponse | null>(null);
   const [tickClamped, setTickClamped] = useState(false);
 
@@ -146,7 +147,7 @@ export default function DashboardPage() {
   }, []);
 
   /**
-   * 실시간(롤링 60초) 조회 — 진입 레이어 기준 분당 요청/실패.
+   * 틱(롤링 60초) 조회 — 진입 레이어 기준 분당 요청/실패.
    * ⚠️ ACTION_TYP 필터는 보내지 않는다 — 진입 레이어 행에는 그 값이 없다(권위 레이어는 GAIA).
    *    보내면 조건에 맞는 행이 0 이 되어 "요청이 없다" 로 오독된다.
    */
@@ -163,7 +164,7 @@ export default function DashboardPage() {
       const got = data.range.from ? Date.parse(data.range.from) : NaN;
       setTickClamped(Number.isFinite(want) && Number.isFinite(got) && got - want > 60_000);
     } catch (e) {
-      setErr(errMessage(e, "실시간 모니터를 불러오지 못했습니다."));
+      setErr(errMessage(e, "틱 조회를 불러오지 못했습니다."));
       setTick(null);
       setTickClamped(false);
     } finally {
@@ -171,7 +172,7 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 최초 조회. 실시간 뷰로 저장돼 있었으면 그쪽을 부른다 —
+  // 최초 조회. 틱 뷰로 저장돼 있었으면 그쪽을 부른다 —
   // 복원(tickReady/tickViewReady) 전에 부르면 기본값으로 한 번, 복원값으로 한 번 이중 조회가 된다.
   useEffect(() => {
     if (!tickReady || !tickViewReady) return;
@@ -180,7 +181,7 @@ export default function DashboardPage() {
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [tickReady, tickViewReady]);
 
-  // 자동 갱신 — 실시간 뷰의 live 모드에서만. 주기는 창 길이에 맞춘다.
+  // 자동 갱신 — 틱 뷰의 live 모드에서만. 주기는 창 길이에 맞춘다.
   useEffect(() => {
     if (!tickView || tickSel.mode !== "live" || !tickSel.auto) return;
     const id = setInterval(() => loadTick(resolveTickRange(tickSel), userId), tickRefreshMs(tickSel.win));
@@ -189,11 +190,38 @@ export default function DashboardPage() {
 
   /**
    * 보기 전환. 켜는 즉시 조회한다 — 토글을 눌렀는데 빈 화면이 남아 있으면 켜진 건지 알 수 없다.
+   *
+   * ⚠️ **조회 구간을 서로 물려준다** (rangeSync.ts) — 토글할 때마다 무관한 구간으로 튀면
+   *    매번 기간을 다시 골라야 한다. 두 뷰의 후보가 겹치지 않아 정확히 같지는 않다.
    */
   const onView = (live: boolean) => {
     setTickView(live);
-    if (live) loadTick(resolveTick(), userId);
-    else load(computeFilter());
+    if (live) {
+      const cur = preset === "custom" && customFrom && customTo ? { from: customFrom, to: customTo } : null;
+      const mins = cur
+        ? spanMinutes(cur.from, cur.to) ?? 60
+        : (PRESETS.find((p) => p.key === preset) ?? PRESETS[0]).hours * 60;
+      applyTick(tickSelFor(mins, cur));
+      loadTick(resolveTick(), userId);
+      return;
+    }
+    if (tickSel.mode === "custom" && tickSel.from && tickSel.to) {
+      setPreset("custom");
+      setCustomFrom(tickSel.from);
+      setCustomTo(tickSel.to);
+      load({ ...computeFilter(), dateFrom: `${tickSel.from}:00`, dateTo: `${tickSel.to}:59` });
+      return;
+    }
+    // 틱 창(≤180분)을 덮는 가장 짧은 집계 프리셋으로 옮긴다.
+    const need = analysisMinutesForTickWin(tickSel.win);
+    const p = PRESETS.find((x) => x.hours * 60 >= need) ?? PRESETS[0];
+    setPreset(p.key);
+    const now = Date.now();
+    load({
+      ...computeFilter(),
+      dateFrom: toLocalInput(now - p.hours * 3_600_000) + ":00",
+      dateTo: toLocalInput(now) + ":00",
+    });
   };
 
   const onApply = (e: React.FormEvent) => {
@@ -257,7 +285,7 @@ export default function DashboardPage() {
             {tickView
               ? tick ? fmtRange(tick.range.from, tick.range.to) : "—"
               : stats ? fmtRange(stats.range.from, stats.range.to) : "—"}
-            {tickView && <span className="dash-title-note"> · 분당 요청/실패</span>}
+            {tickView && <span className="dash-title-note"> · 틱 · 분당 요청/실패</span>}
           </div>
         </div>
         <form className="dash-filter" onSubmit={onApply}>
@@ -267,9 +295,12 @@ export default function DashboardPage() {
             onChange={onView}
             pulsing={tickSel.auto && tickSel.mode === "live"}
           />
-          {/* 프리셋 줄 자리는 보기에 따라 통째로 교체된다 */}
+          {/* 프리셋 줄 자리는 보기에 따라 통째로 교체된다.
+              ⚠️ .preset-slot 이 두 세트 중 넓은 쪽 폭을 확보한다 — 없으면 토글할 때마다
+                 뒤따르는 컨트롤이 좌우로 밀린다. */}
+          <div className="preset-slot">
           {tickView ? (
-            <TickToolbar loading={loading} onSubmit={() => loadTick(resolveTick(), userId)} />
+            <TickPresets loading={loading} onSubmit={() => loadTick(resolveTick(), userId)} />
           ) : (
             <>
               <div className="preset-group" role="tablist" aria-label="time preset">
@@ -310,6 +341,7 @@ export default function DashboardPage() {
               )}
             </>
           )}
+          </div>
           <input
             type="text"
             className="user-input"
@@ -317,7 +349,7 @@ export default function DashboardPage() {
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
           />
-          {/* ⚠️ 실시간 뷰에서는 감춘다 — 진입 레이어 행에 ACTION_TYP 이 없어 걸어도 효과가 없고,
+          {/* ⚠️ 틱 뷰에서는 감춘다 — 진입 레이어 행에 ACTION_TYP 이 없어 걸어도 효과가 없고,
               걸린 것처럼 보이면 "이 액션은 요청이 없다" 로 오독된다. */}
           {!tickView && (
             <select
@@ -341,7 +373,10 @@ export default function DashboardPage() {
               필터 초기화
             </button>
           )}
-          {!tickView && <button type="submit" className="btn primary">조회</button>}
+          {/* 동작 버튼은 두 보기가 **같은 자리**를 쓴다 (조회 ↔ 새로고침) */}
+          {tickView
+            ? <TickActions loading={loading} onSubmit={() => loadTick(resolveTick(), userId)} />
+            : <button type="submit" className="btn primary">조회</button>}
         </form>
       </div>
 

@@ -17,14 +17,17 @@ import { TimeoutBucket, TimeoutStatsResponse } from "@/lib/types";
 const SERIES = ["timeout", "other"] as const;
 type SeriesKey = typeof SERIES[number];
 
+// ⚠️ 두 계열은 **명도까지** 벌려 둔다. 예전엔 #b42318 / #c2410c 였는데 색상·명도가 모두
+//    가까워 적층 면적에서 경계가 안 보였다("구분이 안 간다"). 지금은 진한 빨강 vs 앰버라
+//    흑백으로 뽑아도 갈린다. globals.css 의 --llm-err 과 같은 값이어야 한다(막대·배지가 그걸 쓴다).
 const SERIES_COLOR: Record<SeriesKey, string> = {
   timeout: "#b42318",
-  other:   "#c2410c",
+  other:   "#d97706",
 };
 
 const SERIES_LABEL: Record<SeriesKey, string> = {
   timeout: "타임아웃",
-  other:   "기타 오류",
+  other:   "LLM 오류",
 };
 
 type Gran = TimeoutStatsResponse["granularity"];

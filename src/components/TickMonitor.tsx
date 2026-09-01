@@ -6,7 +6,7 @@ import { TickCall, TickMetricDef, TickMinute, TickStatsResponse, TickTrace, TICK
 import { callStatus } from "@/lib/tokenStatus";
 import { TickSlot, TickMonitorChart, fmtCompact, windowLabel } from "@/components/TickMonitorChart";
 
-// 실시간(1TICK) 모니터 본문 — Dashboard / Tokens / Timeout 이 공유한다.
+// 틱 모니터 본문 (집계 ↔ 틱 토글의 "틱" 쪽) — Dashboard / Tokens / Timeout 이 공유한다.
 //
 // 화면은 위에서 아래로 세 가지만 답한다:
 //   ① 지금 얼마나?  → 게이지 2장. 한도가 있으면 대비 %, 없으면 값과 피크 시각.
@@ -162,7 +162,7 @@ export function TickMonitor({
 
       {clamped && (
         <div className="tick-notice warn">
-          실시간 뷰는 한 번에 최대 24시간까지 집계합니다 — 지정한 구간 중 <b>뒤쪽 24시간</b>만 표시됩니다.
+          틱 조회는 한 번에 최대 24시간까지 집계합니다 — 지정한 구간 중 <b>뒤쪽 24시간</b>만 표시됩니다.
         </div>
       )}
 

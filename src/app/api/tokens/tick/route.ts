@@ -7,7 +7,7 @@ import { requireAgent } from "@/lib/auth/current";
 
 export const dynamic = "force-dynamic";
 
-// 1TICK — LLM 소스의 롤링 60초 모니터. Tokens/Timeout 탭의 "실시간" 뷰가 호출한다.
+// 1TICK — LLM 소스의 롤링 60초 모니터. Tokens/Timeout 탭의 "틱" 뷰가 호출한다.
 // 집계 대상은 /api/tokens 와 같은 TRX_TOKEN_DET 이지만, 격자가 초/분 단위이고
 // 슬라이딩 60초 최대까지 내려주므로 응답 형태가 달라 라우트를 분리했다.
 //   ?view=usage   (기본) A=토큰, B=호출  — Tokens 탭

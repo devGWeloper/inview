@@ -25,19 +25,20 @@ import {
   useTick,
   useTickView,
 } from "@/components/tick/TickProvider";
-import { TickToolbar } from "@/components/tick/TickToolbar";
+import { TickActions, TickPresets } from "@/components/tick/TickToolbar";
+import { analysisMinutesForTickWin, spanMinutes, tickSelFor } from "@/components/tick/rangeSync";
 import { ViewToggle } from "@/components/tick/ViewToggle";
 
 // 조회 기간(프리셋/직접 설정)은 Timeout 탭과 **공유**한다 — TimeRangeProvider 참고.
 // 여기에 프리셋 배열이나 기간 state 를 다시 두지 말 것(두 탭의 구성이 또 갈린다).
 //
-// 실시간(1TICK) 뷰는 기간이 아니라 **보기 자체**를 바꾸는 조작이라 ViewToggle 이 담당하고,
+// 틱 뷰는 기간이 아니라 **보기 자체**를 바꾸는 조작이라 ViewToggle 이 담당하고,
 // 조회 창(길이·직접 설정·자동 갱신)은 TickProvider 가 Dashboard/Timeout 과 공유한다.
-// 뷰 on/off 만 화면별로 기억한다(useTickView) — 대시보드를 실시간으로 띄워 두고 여기는
+// 뷰 on/off 만 화면별로 기억한다(useTickView) — 대시보드를 틱으로 띄워 두고 여기는
 // 기간 분석으로 보는 조합이 정상이기 때문이다.
 
 /**
- * 실시간 뷰의 게이지/차트 정의.
+ * 틱 뷰의 게이지/차트 정의.
  * ⚠️ 한도는 프로필과 config.yml 을 병합한 /api/agents 값(= agent.tpmLimit/rpmLimit)이다 —
  *    서버 집계는 그 병합을 모르므로 화면에서 붙인다.
  */
@@ -64,10 +65,10 @@ export default function TokensPage() {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [draftCustom, setDraftCustom] = useState(false);
-  /** 실시간 뷰인가 (화면별로 기억 — 공유 상태가 아니다) */
+  /** 틱 뷰인가 (화면별로 기억 — 공유 상태가 아니다) */
   const [tickView, setTickView, tickViewReady] = useTickView("tokens");
-  // 실시간 조회 창(길이/모드/구간/자동)은 Dashboard·Timeout 과 공유한다.
-  const { sel: tickSel, ready: tickReady, resolve: resolveTick } = useTick();
+  // 틱 조회 창(길이/모드/구간/자동)은 Dashboard·Timeout 과 공유한다.
+  const { sel: tickSel, ready: tickReady, resolve: resolveTick, apply: applyTick } = useTick();
 
   const [stats, setStats] = useState<TokenStatsResponse | null>(null);
   // 서버가 24시간(TICK_MAX_MINUTES)으로 잘랐는지 — 잘린 걸 안 알리면 앞 구간이
@@ -136,7 +137,7 @@ export default function TokensPage() {
     }
   }, [agentId]);
 
-  // 실시간 조회 — 구간은 호출부가 resolveTickRange 로 풀어서 넘긴다(창은 '지금' 기준이라
+  // 틱 조회 — 구간은 호출부가 resolveTickRange 로 풀어서 넘긴다(창은 '지금' 기준이라
   // 상태에 굳혀 두면 안 된다). over 로 방금 바뀐 필터 값을 넘길 수 있다.
   const loadTick = useCallback(
     async (range: TickRange, over?: { userId?: string; nodeNm?: string; modelNm?: string }) => {
@@ -169,7 +170,7 @@ export default function TokensPage() {
         setTickClamped(Number.isFinite(want) && Number.isFinite(got) && got - want > 60_000);
       } catch (e) {
         if (agentIdRef.current !== requestFor) return;
-        setErr(errMessage(e, "실시간 모니터를 불러오지 못했습니다."));
+        setErr(errMessage(e, "틱 조회를 불러오지 못했습니다."));
         setTick(null);
         setTickClamped(false);
       } finally {
@@ -180,7 +181,7 @@ export default function TokensPage() {
   );
 
   /**
-   * 실시간 재조회 — 화면의 모든 실시간 조회(툴바 / 필터 변경 / 에이전트 전환 / 자동 갱신)는
+   * 틱 재조회 — 화면의 모든 틱 조회(툴바 / 필터 변경 / 에이전트 전환 / 자동 갱신)는
    * 이 한 곳을 지난다. "현재 창을 호출 시점에 다시 푼다" 를 한 군데로 모으기 위한 것이다.
    */
   const submitTick = useCallback(
@@ -223,7 +224,7 @@ export default function TokensPage() {
     }
   }, [sel.preset, sel.customFrom, sel.customTo]);
 
-  // 자동 갱신 (실시간 뷰의 live 모드에서만). 창이 계속 앞으로 밀리므로 매번 새로 계산해 부른다.
+  // 자동 갱신 (틱 뷰의 live 모드에서만). 창이 계속 앞으로 밀리므로 매번 새로 계산해 부른다.
   // ⚠️ custom 에서는 돌리지 않는다 — 고정된 과거 구간을 다시 부를 이유가 없고,
   //    라이브 갱신은 '지금' 으로 창을 다시 잡아 사용자가 지정한 구간을 덮어쓴다.
   // 주기는 창 길이에 맞춘다(tickRefreshMs) — 1분 창을 30초마다 갱신하면 반쯤 죽어 보인다.
@@ -294,14 +295,43 @@ export default function TokensPage() {
   };
 
   /**
-   * 보기 전환. 실시간으로 켜면 그 즉시 조회한다 — 토글을 눌렀는데 빈 화면이 남아 있으면
-   * 켜진 건지 아닌지 알 수 없다.
+   * 보기 전환. 켜는 즉시 조회한다 — 토글을 눌렀는데 빈 화면이 남아 있으면 켜진 건지 알 수 없다.
+   *
+   * ⚠️ **조회 구간을 서로 물려준다** (rangeSync.ts). 두 뷰의 구간 후보가 겹치지 않아 정확히
+   *    같을 수는 없지만, 토글할 때마다 무관한 구간으로 튀면 매번 기간을 다시 골라야 한다.
    */
   const onView = (live: boolean) => {
     setTickView(live);
     setDraftCustom(false);
-    if (live) submitTick();
-    else load(computeFilter());
+    if (live) {
+      const cur = sel.preset === "custom" && sel.customFrom && sel.customTo
+        ? { from: sel.customFrom, to: sel.customTo }
+        : null;
+      const mins = cur
+        ? spanMinutes(cur.from, cur.to) ?? 60
+        : (RANGE_PRESETS.find((p) => p.key === sel.preset) ?? RANGE_PRESETS[0]).hours * 60;
+      applyTick(tickSelFor(mins, cur));
+      submitTick();
+    } else {
+      if (tickSel.mode === "custom" && tickSel.from && tickSel.to) {
+        setCustom(tickSel.from, tickSel.to);
+        const r = resolveRange({ preset: "custom", customFrom: tickSel.from, customTo: tickSel.to });
+        load({
+          dateFrom: r.from, dateTo: r.to,
+          userId: userId || undefined, nodeNm: nodeNm || undefined, modelNm: modelNm || undefined,
+        });
+        return;
+      }
+      // 틱 창(≤180분)을 덮는 가장 짧은 집계 프리셋으로 옮긴다.
+      const need = analysisMinutesForTickWin(tickSel.win);
+      const p = RANGE_PRESETS.find((x) => x.hours * 60 >= need) ?? RANGE_PRESETS[0];
+      setPreset(p.key);
+      const r = resolveRange({ ...sel, preset: p.key });
+      load({
+        dateFrom: r.from, dateTo: r.to,
+        userId: userId || undefined, nodeNm: nodeNm || undefined, modelNm: modelNm || undefined,
+      });
+    }
   };
 
   /** '직접 설정' 진입 — 초안만 채워 두고 조회는 '조회' 를 눌렀을 때 한다. */
@@ -366,9 +396,12 @@ export default function TokensPage() {
             onChange={onView}
             pulsing={tickSel.auto && tickSel.mode === "live"}
           />
-          {/* 프리셋 줄 자리는 보기에 따라 통째로 교체된다 (두 줄을 같이 띄우지 않는다) */}
+          {/* 프리셋 줄 자리는 보기에 따라 통째로 교체된다 (두 줄을 같이 띄우지 않는다).
+              ⚠️ .preset-slot 은 두 세트 중 넓은 쪽 폭을 확보한다 — 없으면 토글할 때마다
+                 뒤따르는 USER/NODE/MODEL 이 좌우로 밀린다. */}
+          <div className="preset-slot">
           {tickView ? (
-            <TickToolbar loading={loading} onSubmit={() => submitTick()} />
+            <TickPresets loading={loading} onSubmit={() => submitTick()} />
           ) : (
             <>
               <div className="preset-group" role="tablist" aria-label="time preset">
@@ -399,6 +432,7 @@ export default function TokensPage() {
               )}
             </>
           )}
+          </div>
           <input
             type="text"
             className="user-input"
@@ -427,7 +461,10 @@ export default function TokensPage() {
           {hasFilter && (
             <button type="button" className="btn ghost" onClick={clearFilters}>필터 초기화</button>
           )}
-          {!tickView && <button type="submit" className="btn primary">조회</button>}
+          {/* 동작 버튼은 두 보기가 **같은 자리**를 쓴다 (조회 ↔ 새로고침) */}
+          {tickView
+            ? <TickActions loading={loading} onSubmit={() => submitTick()} />
+            : <button type="submit" className="btn primary">조회</button>}
         </form>
       </div>
 

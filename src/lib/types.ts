@@ -948,7 +948,7 @@ export interface TimeoutReason {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1TICK — 롤링 60초 실시간 모니터 (대시보드 계열 화면의 "실시간" 뷰)
+// 1TICK — 롤링 60초 모니터 (대시보드 계열 화면의 "틱" 뷰 — 토글: 집계 | 틱)
 //
 // ⚠️ 정각 분 버킷만으로는 순간 부하를 판정할 수 없다. TPM/RPM 제약은 "임의의 연속 60초"
 //    기준이라, 12:01:13~12:02:12 에 몰린 버스트는 정각 버킷에선 두 칸으로 쪼개져
@@ -1008,7 +1008,7 @@ export interface TickFilter {
 /**
  * BIZ 소스(BIZ_AIACTIONTXN_HIS 진입 레이어) 1TICK 필터.
  * ⚠️ ACTION_TYP 필터는 없다 — 진입 레이어(CUBE) 행의 ACTION_TYP 은 비어 있고
- *    (권위 레이어는 GAIA), 실시간 뷰에서 매 갱신마다 크로스 DB 조인을 할 수는 없다.
+ *    (권위 레이어는 GAIA), 틱 뷰에서 매 갱신마다 크로스 DB 조인을 할 수는 없다.
  */
 export interface BizTickFilter {
   dateFrom?: string;

@@ -31,6 +31,11 @@
   --err-soft:   #fdecec;
   --fail:       #c2410c;
   --fail-soft:  #ffedd5;
+  /* Timeout 화면의 2계열 구분용. --err(#b42318) 과 --fail(#c2410c) 은 색상·명도가 너무 가까워
+     적층 차트·막대에서 두 계열이 한 덩어리로 보였다. 명도까지 벌린 앰버를 따로 둔다.
+     ⚠️ TimeoutTrendChart.SERIES_COLOR 의 값과 같아야 한다(차트는 JS 상수로 색을 쓴다). */
+  --llm-err:      #d97706;
+  --llm-err-soft: #fef3c7;
 
   /* 레이어별 색상은 src/lib/types.ts 의 LAYERS 배열을 단일 소스로 사용한다
      (.tl-layer-tag 에 inline style 로 주입). 여기서는 색상 변수 정의 없음. */
@@ -1054,6 +1059,18 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
   align-items: center;
   gap: 10px;
 }
+/* 집계 ↔ 틱 토글에서 프리셋 줄이 통째로 교체되는 자리.
+   ⚠️ 두 세트의 버튼 수가 달라(집계 6개 / 틱 8개) 그냥 두면 토글할 때마다 뒤따르는
+      USER/NODE/MODEL·버튼이 좌우로 밀린다. 넓은 쪽 폭을 미리 확보해 화면이 안 흔들리게 한다.
+      좁은 화면에서는 100% 로 접히므로 min() 을 쓴다. */
+.preset-slot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: min(100%, 448px);
+}
+
 .preset-group {
   display: inline-flex;
   background: var(--surface);
@@ -4218,8 +4235,8 @@ button.tbd-row:not(:disabled):hover {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
-  color: var(--fail);
-  background: var(--fail-soft);
+  color: var(--llm-err);
+  background: var(--llm-err-soft);
   white-space: nowrap;
 }
 .to-st.is-timeout { color: var(--err); background: var(--err-soft); }
@@ -4262,7 +4279,7 @@ button.tbd-row:not(:disabled):hover {
 }
 .to-dim-bar > span { display: block; height: 100%; }
 .to-dim-bar > .seg-t { background: var(--err); }
-.to-dim-bar > .seg-o { background: var(--fail); }
+.to-dim-bar > .seg-o { background: var(--llm-err); }
 .to-dim-val { font-size: 13px; font-weight: 700; color: var(--text); }
 .to-dim-rate { font-size: 12px; color: var(--text-muted); min-width: 46px; text-align: right; }
 
@@ -4553,11 +4570,11 @@ button.tbd-row:not(:disabled):hover {
 
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   실시간(1TICK) — 롤링 60초 모니터 (Dashboard / Tokens / Timeout 공용)
+   틱 — 롤링 60초 모니터 (Dashboard / Tokens / Timeout 공용)
    화면은 게이지 → 추이 → 순간 목록 3단. 한도 초과는 전부 --err 톤 하나로만 표시한다.
    ───────────────────────────────────────────────────────────────────────────── */
 
-/* 보기 전환 (기간 분석 ↔ 실시간).
+/* 보기 전환 (집계 ↔ 틱).
    ⚠️ 기간 프리셋 줄(.preset-group)과 **다르게 생겨야 한다** — 예전엔 줄 안의 버튼 하나라
       기간을 고른 줄 알고 눌렀다가 화면이 통째로 바뀌었다. 바탕을 진하게 깔아 구분한다. */
 .view-toggle {
@@ -4590,7 +4607,7 @@ button.tbd-row:not(:disabled):hover {
 }
 .view-toggle-btn.live.active { color: var(--err); }
 
-/* 실시간 쪽 점 — 자동 갱신이 도는 동안에만 깜빡인다.
+/* 틱 쪽 점 — 자동 갱신이 도는 동안에만 깜빡인다.
    "지금 살아 있는 값인가" 를 글자 없이 알리는 유일한 표시라 문구로 설명하지 않는다. */
 .live-dot {
   width: 7px;
@@ -4609,7 +4626,7 @@ button.tbd-row:not(:disabled):hover {
   .live-dot.pulse { animation: none; }
 }
 
-/* 실시간 본문 맨 위 요약 줄 (조회 구간 · 행 수) */
+/* 틱 본문 맨 위 요약 줄 (조회 구간 · 행 수) */
 .tick-summary {
   display: flex;
   align-items: center;

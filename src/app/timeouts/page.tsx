@@ -246,26 +246,30 @@ export default function TimeoutsPage() {
 
   return (
     <div className="dash">
-      <div className="dash-header">
-        <div className="dash-title">
-          <div className="dash-title-main">Timeout</div>
-          <div className="dash-title-sub">
-            {tickView
-              ? tick ? fmtRange(tick.range.from, tick.range.to) : "—"
-              : stats ? fmtRange(stats.range.from, stats.range.to) : fmtRange(currentRange().from, currentRange().to)}
-            <span className="dash-title-note">
-              {tickView ? " · 틱 · 분당 타임아웃/LLM 오류" : " · LLM 호출 실패 적재 기준"}
-              {!isDefault && agent ? ` · ${agent.name}` : ""}
-            </span>
+      <div className="dash-header stacked">
+        {/* 1줄 — 제목 + 보기 전환(우상단 고정). ⚠️ 토글을 조회 줄로 되돌리지 말 것: 폭이 모자라면 그것만 위로 튀어 올라 줄이 깨진다. */}
+        <div className="dash-head-row">
+          <div className="dash-title">
+            <div className="dash-title-main">Timeout</div>
+            <div className="dash-title-sub">
+              {tickView
+                ? tick ? fmtRange(tick.range.from, tick.range.to) : "—"
+                : stats ? fmtRange(stats.range.from, stats.range.to) : fmtRange(currentRange().from, currentRange().to)}
+              <span className="dash-title-note">
+                {tickView ? " · 틱 · 분당 타임아웃/LLM 오류" : " · LLM 호출 실패 적재 기준"}
+                {!isDefault && agent ? ` · ${agent.name}` : ""}
+              </span>
+            </div>
           </div>
-        </div>
-        <div className="dash-filter">
-          {/* 보기 전환은 기간 프리셋 줄 밖 — 성격이 다른 조작이다 (ViewToggle 주석 참고) */}
+          {/* 보기 전환 — 조회 조건이 아니라 화면 자체를 바꾸는 조작이라 우상단 자기 자리에 둔다 */}
           <ViewToggle
             live={tickView}
             onChange={onView}
             pulsing={tickSel.auto && tickSel.mode === "live"}
           />
+        </div>
+
+        <div className="dash-filter">
           {/* 프리셋 줄 자리는 보기에 따라 통째로 교체된다.
               ⚠️ .preset-slot 이 두 세트 중 넓은 쪽 폭을 확보한다 — 없으면 토글할 때마다
                  뒤따르는 컨트롤이 좌우로 밀린다. */}

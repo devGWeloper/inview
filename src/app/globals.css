@@ -1040,6 +1040,24 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
   gap: 16px;
   flex-wrap: wrap;
 }
+/* 틱 토글이 붙는 화면(대시보드/토큰/타임아웃)은 머리말을 **두 줄**로 쌓는다.
+   ⚠️ 조회 조건(.dash-filter)과 보기 전환(.view-toggle)을 한 줄에 두면, 조회 줄이
+      한 줄에 안 들어가는 폭에서 토글만 위로 튀어 올라 줄이 깨져 보인다.
+      1줄 = 제목 + 보기 전환(우상단 고정), 2줄 = 조회 조건 전폭. */
+.dash-header.stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+.dash-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.dash-header.stacked .dash-filter { width: 100%; }
+
 .dash-title-main {
   font-size: 24px;
   font-weight: 700;
@@ -4574,37 +4592,61 @@ button.tbd-row:not(:disabled):hover {
    화면은 게이지 → 추이 → 순간 목록 3단. 한도 초과는 전부 --err 톤 하나로만 표시한다.
    ───────────────────────────────────────────────────────────────────────────── */
 
-/* 보기 전환 (집계 ↔ 틱).
-   ⚠️ 기간 프리셋 줄(.preset-group)과 **다르게 생겨야 한다** — 예전엔 줄 안의 버튼 하나라
-      기간을 고른 줄 알고 눌렀다가 화면이 통째로 바뀌었다. 바탕을 진하게 깔아 구분한다. */
+/* 보기 전환 (집계 ↔ 틱) — thumb 이 미끄러지는 스위치.
+   ⚠️ 자리는 머리말 우상단(.dash-head-row)이다. 조회 줄(.dash-filter) 안에 두면 폭이
+      모자란 화면에서 이 토글만 윗줄로 튀어 올라 줄이 통째로 깨져 보인다.
+   ⚠️ 칸 폭은 grid 로 **강제로 균등**하게 준다 — 글자 수가 달라(집계/틱) 내용 폭에
+      맡기면 thumb 이 미끄러지지 않고 폭이 변한다. */
 .view-toggle {
-  display: inline-flex;
+  position: relative;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   background: var(--surface-3);
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: 999px;
   padding: 3px;
-  gap: 2px;
+  flex: none;
+}
+/* 미끄러지는 배경. 컨테이너의 padding box 기준 50% 라 좌우 padding(3px)을 뺀 값이 정확히 반 칸이다. */
+.view-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.1), 0 0 0 1px rgba(17, 24, 39, 0.04);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.view-toggle.is-live .view-toggle-thumb { transform: translateX(100%); }
+@media (prefers-reduced-motion: reduce) {
+  .view-toggle-thumb { transition: none; }
 }
 .view-toggle-btn {
+  position: relative;      /* thumb 위로 */
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   border: none;
   background: transparent;
   color: var(--text-3);
   font-size: 13px;
   font-weight: 700;
-  padding: 6px 13px;
-  border-radius: 6px;
+  padding: 6px 16px;
+  border-radius: 999px;
   cursor: pointer;
   white-space: nowrap;
+  transition: color 0.18s ease;
 }
 .view-toggle-btn:hover { color: var(--text); }
-.view-toggle-btn.active {
-  background: var(--surface);
-  color: var(--accent);
-  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.08);
+.view-toggle-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
+.view-toggle-btn.active { color: var(--accent); }
 .view-toggle-btn.live.active { color: var(--err); }
 
 /* 틱 쪽 점 — 자동 갱신이 도는 동안에만 깜빡인다.

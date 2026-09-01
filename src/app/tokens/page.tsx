@@ -375,27 +375,30 @@ export default function TokensPage() {
 
   return (
     <div className="dash">
-      <div className="dash-header">
-        <div className="dash-title">
-          <div className="dash-title-main">Token Usage</div>
-          <div className="dash-title-sub">
-            {tickView
-              ? tick ? fmtRange(tick.range.from, tick.range.to) : "—"
-              : stats ? fmtRange(stats.range.from, stats.range.to) : "—"}
-            <span className="dash-title-note">
-              {tickView ? " · TPM/RPM" : " · LLM 호출 기준"}
-              {!isDefault && agent ? ` · ${agent.name}` : ""}
-            </span>
+      <div className="dash-header stacked">
+        {/* 1줄 — 제목 + 보기 전환(우상단 고정). ⚠️ 토글을 조회 줄로 되돌리지 말 것: 폭이 모자라면 그것만 위로 튀어 올라 줄이 깨진다. */}
+        <div className="dash-head-row">
+          <div className="dash-title">
+            <div className="dash-title-main">Token Usage</div>
+            <div className="dash-title-sub">
+              {tickView
+                ? tick ? fmtRange(tick.range.from, tick.range.to) : "—"
+                : stats ? fmtRange(stats.range.from, stats.range.to) : "—"}
+              <span className="dash-title-note">
+                {tickView ? " · TPM/RPM" : " · LLM 호출 기준"}
+                {!isDefault && agent ? ` · ${agent.name}` : ""}
+              </span>
+            </div>
           </div>
-        </div>
-        <form className="dash-filter" onSubmit={onApply}>
-          {/* ⚠️ 보기 전환은 기간 프리셋 줄 **밖**에 둔다 — 예전엔 줄 안의 1TICK 버튼이라
-              기간을 고른 줄 알고 눌렀다가 화면이 통째로 바뀌는 일이 있었다. */}
+          {/* 보기 전환 — 조회 조건이 아니라 화면 자체를 바꾸는 조작이라 우상단 자기 자리에 둔다 */}
           <ViewToggle
             live={tickView}
             onChange={onView}
             pulsing={tickSel.auto && tickSel.mode === "live"}
           />
+        </div>
+
+        <form className="dash-filter" onSubmit={onApply}>
           {/* 프리셋 줄 자리는 보기에 따라 통째로 교체된다 (두 줄을 같이 띄우지 않는다).
               ⚠️ .preset-slot 은 두 세트 중 넓은 쪽 폭을 확보한다 — 없으면 토글할 때마다
                  뒤따르는 USER/NODE/MODEL 이 좌우로 밀린다. */}

@@ -150,7 +150,10 @@ The app needs its own DB for **app-only tables** (not the replicated `BIZ_AIACTI
 
 - **단일 소스는 `TimeRangeProvider`** — `AppChrome` 의 `AgentScopeProvider` 안쪽에 마운트되고
   `useTimeRange()` 로 `{ sel, ready, setPreset, setCustom, resolve }` 를 공급한다.
-  `RANGE_PRESETS`(1H/6H/24H/7D/30D) · `CUSTOM_LABEL`("직접 설정") · `DEFAULT_PRESET`("7d") 도 여기.
+  `RANGE_PRESETS`(1M/5M/10M/30M/1H/6H/24H/7D/30D) · `CUSTOM_LABEL`("직접 설정") · `DEFAULT_PRESET`("7d") 도 여기.
+  ⚠️ 프리셋 길이는 **분(`minutes`)** 으로 적는다 — 분 단위 프리셋을 시간으로 적으면 `5/60*3_600_000`
+  이 299999.999ms 로 떨어져 구간이 어긋난다. 대시보드(`/dashboard`)는 자체 `PRESETS` 배열에 같은
+  9개를 두고 있으며(공유 컨텍스트 대상이 아니다) 역시 분 단위다.
   ⚠️ **페이지에 프리셋 배열이나 기간 state 를 다시 두지 말 것** — 방금 고친 불일치가 그대로 되살아난다.
 - **저장은 `localStorage["tracex.timeRange"]`**(`{preset, customFrom, customTo}`). 모르는 프리셋,
   구간이 빈 `custom` 은 기본값으로 되돌린다. SSR 에선 읽을 수 없으므로 **`ready` 가 true 가 된 뒤에

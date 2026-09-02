@@ -36,7 +36,7 @@ export function TimeoutModelHeatmap({
   const { modelTrend, buckets, granularity } = stats;
   // 히트맵 열 머리는 좁아서 짧은 쪽만 쓴다.
   const axis = useMemo(
-    () => tickAxis(buckets[0]?.ts, buckets[buckets.length - 1]?.ts, granularity),
+    () => tickAxis(buckets.map((b) => b.ts), granularity),
     [buckets, granularity]
   );
   const [hover, setHover] = useState<{ m: string; i: number } | null>(null);

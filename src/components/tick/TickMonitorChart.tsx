@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { TickMinute } from "@/lib/types";
+import { TickAxis, tickAxis } from "@/lib/timeBuckets";
 
 
 export type TickSlot = "a" | "b";
@@ -45,13 +46,18 @@ type Row = {
   over: boolean;
 };
 
-export function toRows(minutes: TickMinute[], slot: TickSlot, limit: number): Row[] {
+export function toRows(
+  minutes: TickMinute[],
+  slot: TickSlot,
+  limit: number,
+  axis: TickAxis
+): Row[] {
   return minutes.map((m) => {
     const roll = slot === "a" ? m.rollA : m.rollB;
     const at = slot === "a" ? m.rollAAt : m.rollBAt;
     return {
       ts: m.ts,
-      tick: hhmm(m.ts),
+      tick: axis.key(m.ts),
       roll,
       window: windowLabel(at),
       over: limit > 0 && roll > limit,
@@ -103,7 +109,9 @@ export function TickMonitorChart({
   unit: string;
   limit: number;
 }) {
-  const data = useMemo(() => toRows(minutes, slot, limit), [minutes, slot, limit]);
+  // 눈금은 집계 차트와 같은 규칙이다 — 자정만 날짜, 나머지는 정시 시각.
+  const axis = useMemo(() => tickAxis(minutes.map((m) => m.ts)), [minutes]);
+  const data = useMemo(() => toRows(minutes, slot, limit, axis), [minutes, slot, limit, axis]);
 
   const maxRoll = data.reduce((m, d) => Math.max(m, d.roll), 0);
   const yMax = Math.max(maxRoll, limit > 0 ? limit : 0) * 1.12;
@@ -135,13 +143,14 @@ export function TickMonitorChart({
               </linearGradient>
             </defs>
             <XAxis
+              ticks={axis.ticks}
+              tickFormatter={axis.short}
               dataKey="tick"
               tick={{ fill: "var(--text-2)", fontSize: 12, fontWeight: 600, fontFamily: "var(--mono)" }}
               tickLine={{ stroke: "var(--border-strong)" }}
               axisLine={{ stroke: "var(--border-strong)" }}
               tickMargin={8}
               height={32}
-              minTickGap={22}
             />
             <YAxis
               tick={{ fill: "var(--text-2)", fontSize: 12, fontWeight: 600, fontFamily: "var(--mono)" }}

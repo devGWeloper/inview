@@ -78,18 +78,6 @@
   .live-dot.pulse { animation: none; }
 }
 
-/* 틱 본문 맨 위 요약 줄 (조회 구간 · 행 수) */
-.tick-summary {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 13px;
-  color: var(--text-3);
-}
-.tick-summary-range { font-family: var(--mono); }
-.tick-summary-sep { color: var(--border-strong); }
-.tick-summary b { color: var(--text); font-weight: 700; }
-
 .tick-auto {
   display: inline-flex;
   align-items: center;

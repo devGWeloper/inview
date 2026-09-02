@@ -334,6 +334,7 @@ export default function TokensPage() {
               <TickMonitor
                 stats={tick}
                 metrics={tokenMetrics(agent?.tpmLimit ?? 0, agent?.rpmLimit ?? 0)}
+                title="토큰 사용 추이"
                 rowsLabel="호출"
                 limitHref="/admin"
                 headSlot={tickCtl}

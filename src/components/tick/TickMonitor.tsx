@@ -9,14 +9,6 @@ import { TickSlot, TickMonitorChart, fmtCompact, windowLabel } from "@/component
 
 const TOP_MOMENTS = 5;
 
-function fmtSpan(from: string | null, to: string | null): string {
-  if (!from || !to) return "—";
-  const day = (v: string) => v.slice(5, 10).replace("-", "/");
-  const hm = (v: string) => v.slice(11, 16);
-  return from.slice(0, 10) === to.slice(0, 10)
-    ? `${day(from)} ${hm(from)} → ${hm(to)}`
-    : `${day(from)} ${hm(from)} → ${day(to)} ${hm(to)}`;
-}
 
 interface Moment {
   startTs: string;
@@ -87,10 +79,12 @@ function inWindow<T>(items: T[], tsOf: (x: T) => string | null, startTs: string 
 const fmtInt = (n: number) => Math.round(n).toLocaleString();
 
 export function TickMonitor({
-  stats, metrics, rowsLabel, limitHref, headSlot,
+  stats, metrics, title, rowsLabel, limitHref, headSlot,
 }: {
   stats: TickStatsResponse;
   metrics: [TickMetricDef, TickMetricDef];
+  // 집계 보기의 카드 제목을 그대로 받는다 — 제목까지 바뀌면 전환이 화면 교체로 보인다.
+  title: string;
   rowsLabel: string;
   limitHref?: string;
   // 단위 선택은 차트 카드 머리 안에 있다 — 집계 보기와 같은 자리를 쓴다.
@@ -121,47 +115,16 @@ export function TickMonitor({
 
   return (
     <>
-      <div className="tick-summary">
-        <span className="tick-summary-range">{fmtSpan(stats.range.from, stats.range.to)}</span>
-        <span className="tick-summary-sep">·</span>
-        <span>
-          {rowsLabel} <b>{fmtInt(stats.totals.rows)}</b>건
-        </span>
-      </div>
-
-      {stats.statusAvailable === false && (
-        <div className="tick-notice warn">
-          실패 정보(STAT_CD / ERR_CTN)가 아직 적재되지 않았습니다 — 0 건이 아니라 <b>측정 불가</b>입니다.
-        </div>
-      )}
-
-      {noLimit && limitHref && (
-        <div className="tick-notice">
-          한도 미설정 · <Link href={limitHref} prefetch={false}>관리자 페이지</Link>에서 설정
-        </div>
-      )}
-
-      <div className="tick-gauges">
-        <Gauge
-          def={metrics[0]}
-          peak={stats.peakA.value}
-          overCount={segA.length}
-          selected={slot === "a"}
-          onSelect={() => pick("a")}
-        />
-        <Gauge
-          def={metrics[1]}
-          peak={stats.peakB.value}
-          overCount={segB.length}
-          selected={slot === "b"}
-          onSelect={() => pick("b")}
-        />
-      </div>
-
+      {/* ⚠️ 차트 카드가 **맨 위**다. 집계 보기와 같은 자리·같은 제목·같은 머리 슬롯을 써서
+          단위를 바꿔도 카드가 제자리에 있는 것처럼 보이게 한다. 게이지·순간 목록을 차트 위로
+          올리지 말 것 — 차트가 아래로 밀려 화면이 통째로 갈린 것처럼 보인다. */}
       <section className="dash-card dash-card-hero">
         <div className="dash-card-head">
           <div className="dash-card-title-group">
-            <span className="dash-card-title">{def.name} 추이</span>
+            <span className="dash-card-title">{title}</span>
+            <span className="dash-card-sub">
+              {def.name} · 롤링 60초 · {rowsLabel} {fmtInt(stats.totals.rows)}건
+            </span>
           </div>
           <div className="dash-card-aux">
             {headSlot}
@@ -181,6 +144,36 @@ export function TickMonitor({
           />
         </div>
       </section>
+
+      {stats.statusAvailable === false && (
+        <div className="tick-notice warn">
+          실패 정보(STAT_CD / ERR_CTN)가 아직 적재되지 않았습니다 — 0 건이 아니라 <b>측정 불가</b>입니다.
+        </div>
+      )}
+
+      {noLimit && limitHref && (
+        <div className="tick-notice">
+          한도 미설정 · <Link href={limitHref} prefetch={false}>관리자 페이지</Link>에서 설정
+        </div>
+      )}
+
+      {/* 게이지는 차트 **아래**. 클릭이 위 차트의 A/B 를 바꾼다. */}
+      <div className="tick-gauges">
+        <Gauge
+          def={metrics[0]}
+          peak={stats.peakA.value}
+          overCount={segA.length}
+          selected={slot === "a"}
+          onSelect={() => pick("a")}
+        />
+        <Gauge
+          def={metrics[1]}
+          peak={stats.peakB.value}
+          overCount={segB.length}
+          selected={slot === "b"}
+          onSelect={() => pick("b")}
+        />
+      </div>
 
       <section className="dash-card">
         <div className="dash-card-head">

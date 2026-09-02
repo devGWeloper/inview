@@ -87,7 +87,7 @@ export function TokenChart({ stats }: { stats: TokenSeries }) {
   const granularity = stats.granularity;
   // 눈금 key 는 유일해야 하고(안 그러면 라벨이 날마다 되돌아온다) 보이는 글자는 짧아야 한다.
   const axis = useMemo(
-    () => tickAxis(stats.buckets[0]?.ts, stats.buckets[stats.buckets.length - 1]?.ts, granularity),
+    () => tickAxis(stats.buckets.map((b) => b.ts), granularity),
     [stats.buckets, granularity]
   );
   const [hidden, setHidden] = useState<Record<SeriesKey, boolean>>({
@@ -150,13 +150,13 @@ export function TokenChart({ stats }: { stats: TokenSeries }) {
             </defs>
             <XAxis
               dataKey="tick"
+              ticks={axis.ticks}
               tickFormatter={axis.short}
               tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}
               tickLine={{ stroke: "var(--border-strong)" }}
               axisLine={{ stroke: "var(--border-strong)" }}
               tickMargin={8}
               height={32}
-              minTickGap={28}
             />
             <YAxis
               tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}

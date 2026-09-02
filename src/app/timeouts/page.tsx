@@ -308,7 +308,7 @@ export default function TimeoutsPage() {
               ⚠️ 틱 조회가 비어도 카드 껍데기는 그려야 한다 — 안 그리면 되돌릴 컨트롤이 사라진다. */}
           {unit === "1m" ? (
             tick ? (
-              <TickMonitor stats={tick} metrics={TIMEOUT_METRICS} rowsLabel="호출" headSlot={tickCtl} />
+              <TickMonitor stats={tick} metrics={TIMEOUT_METRICS} title="발생 추이" rowsLabel="호출" headSlot={tickCtl} />
             ) : (
               <section className="dash-card dash-card-hero">
                 <div className="dash-card-head">

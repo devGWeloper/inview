@@ -91,35 +91,60 @@ export function resolveGranularity(
   return n >= MIN_POINTS && n <= MAX_POINTS ? want : pickGranularity(fromMs, toMs);
 }
 
-// 추이 차트 X축. **눈금 key 는 유일해야 하고(recharts 의 category dataKey),
-// 화면에 보이는 글자는 짧아야 한다** — 이 둘을 같은 문자열로 쓰면 하나를 잃는다.
+// 추이 차트 X축.
 //
-// key 가 겹치면(30일치를 시:분만으로 찍는 경우) `06:00 13:00 20:00 03:00 …` 처럼 라벨이
-// 날마다 되돌아와 차트가 되풀이되는 것처럼 보이고, peak 선·툴팁이 첫 번째 것에 붙는다.
-// 반대로 전부 `08-03 06:00` 으로 찍으면 글자가 짜잘해진다.
-// 그래서 key 는 날짜까지 갖되, 보이는 건 **자정에만 날짜, 나머지는 시:분**이다(증권 차트 방식).
+// ① **눈금 key 는 유일해야 한다** (recharts 의 category dataKey). 겹치면 30일치가
+//    `06:00 13:00 20:00 03:00 …` 처럼 날마다 되돌아오고 peak 선·툴팁이 첫 번째 것에 붙는다.
+// ② **찍을 눈금을 여기서 직접 고른다.** recharts 에 맡기면 버킷 인덱스로 균등하게 잘라
+//    30일 차트에 시각이 나오거나 `08-04 08-04 08-05` 처럼 같은 날짜가 이어진다.
+// ③ 보이는 글자는 구간이 정한다 — 하루가 넘으면 **날짜**, 그 안이면 **시각**.
 export interface TickAxis {
   key: (ts: string) => string;
   short: (key: string) => string;
+  ticks: string[];
 }
 
-const asIs = (v: string) => v;
+const DAY_MS = 86_400_000;
+const MAX_TICKS = 12;
 
-export function tickAxis(
-  firstTs: string | undefined,
-  lastTs: string | undefined,
-  g: Granularity
-): TickAxis {
-  if (g === "1d") return { key: (ts) => ts.slice(5, 10), short: asIs };
+// n 개 이하로 균등하게 솎는다. 첫 칸은 반드시 남긴다.
+function thin<T>(items: T[], n: number): T[] {
+  if (items.length <= n) return items;
+  const step = Math.ceil(items.length / n);
+  return items.filter((_, i) => i % step === 0);
+}
 
-  const a = firstTs ? Date.parse(firstTs) : NaN;
-  const b = lastTs ? Date.parse(lastTs) : NaN;
-  const multiDay = Number.isFinite(a) && Number.isFinite(b) && b - a > 86_400_000;
-  if (!multiDay) return { key: (ts) => ts.slice(11, 16), short: asIs };
+export function tickAxis(allTs: string[], g?: Granularity): TickAxis {
+  const first = allTs[0];
+  const last = allTs[allTs.length - 1];
+  const a = first ? Date.parse(first) : NaN;
+  const b = last ? Date.parse(last) : NaN;
+  const span = Number.isFinite(a) && Number.isFinite(b) ? b - a : 0;
 
+  if (g === "1d") {
+    const key = (ts: string) => ts.slice(5, 10);
+    return { key, short: (k) => k, ticks: thin(allTs.map(key), MAX_TICKS) };
+  }
+
+  const multiDay = span > DAY_MS;
+  const key = multiDay
+    ? (ts: string) => `${ts.slice(5, 10)} ${ts.slice(11, 16)}`
+    : (ts: string) => ts.slice(11, 16);
+
+  // 자정 버킷이 둘 이상이면 날짜 축이다 — 눈금은 자정에만 찍고 글자는 `08-04`.
+  const midnights = allTs.filter((ts) => ts.slice(11, 16) === "00:00");
+  if (multiDay && midnights.length >= 2) {
+    return { key, short: (k) => k.slice(0, 5), ticks: thin(midnights.map(key), MAX_TICKS) };
+  }
+
+  // 아니면 시각 축. 정시 버킷이 충분하면 거기에만 찍고, 자정 하나만 날짜로 보여
+  // 24시간을 넘겨 도는 구간에서도 어느 날인지 읽히게 한다.
+  const hours = allTs.filter((ts) => ts.slice(14, 16) === "00");
+  const picked = hours.length >= 4 ? hours : allTs;
   return {
-    key: (ts) => `${ts.slice(5, 10)} ${ts.slice(11, 16)}`,
-    short: (k) => (k.endsWith(" 00:00") ? k.slice(0, 5) : k.slice(6)),
+    key,
+    short: (k) => (multiDay ? (k.endsWith(" 00:00") ? k.slice(0, 5) : k.slice(6)) : k),
+    ticks: thin(picked.map(key), MAX_TICKS),
   };
 }
 

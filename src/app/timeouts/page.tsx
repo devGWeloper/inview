@@ -13,19 +13,14 @@ import {
   CUSTOM_LABEL,
   RANGE_PRESETS,
   RangePreset,
+  TimeRangeSel,
   resolveRange,
+  spanOfSel,
   useTimeRange,
 } from "@/components/ui/TimeRangeProvider";
-import {
-  TickRange,
-  resolveTickRange,
-  tickRefreshMs,
-  useTick,
-  useTickView,
-} from "@/components/tick/TickProvider";
-import { TickActions, TickPresets } from "@/components/tick/TickToolbar";
-import { analysisMinutesForTickWin, spanMinutes, tickSelFor } from "@/components/tick/rangeSync";
-import { ViewToggle } from "@/components/tick/ViewToggle";
+import { Resolution } from "@/lib/timeBuckets";
+import { ResolutionSelect, useResolution } from "@/components/charts/ResolutionSelect";
+import { AutoRefreshToggle, refreshMs, useAutoRefresh } from "@/components/charts/AutoRefresh";
 import { DimCard } from "@/features/timeouts/DimCard";
 import { ReasonList } from "@/features/timeouts/ReasonList";
 import { FailedCallsTable } from "@/features/timeouts/FailedCallsTable";
@@ -59,80 +54,77 @@ export default function TimeoutsPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const [tickView, setTickView, tickViewReady] = useTickView("timeouts");
-  const { sel: tickSel, ready: tickReady, resolve: resolveTick, apply: applyTick } = useTick();
   const [tick, setTick] = useState<TickStatsResponse | null>(null);
-  const [tickClamped, setTickClamped] = useState(false);
+
+  const spanMs = useMemo(() => spanOfSel(sel), [sel]);
+  const { res, options: resOptions, ready: resReady, setRes, resFor } = useResolution("timeouts", spanMs);
+  const [auto, setAuto] = useAutoRefresh("timeouts");
 
   const agentIdRef = useRef(agentId);
   agentIdRef.current = agentId;
 
-  const load = useCallback(async (r: Range, nodeNm: string, modelNm: string) => {
-    const requestFor = agentId; // 이 요청이 향한 에이전트
-    setLoading(true);
-    setErr(null);
-    try {
+  // 1분 해상도에서는 두 번 조회한다 — 집계(KPI·나머지 카드) + 틱(분당 타임아웃/실패).
+  const load = useCallback(
+    async (r: Range, nodeNm: string, modelNm: string, resolution: Resolution) => {
+      const requestFor = agentId; // 이 요청이 향한 에이전트
+      setLoading(true);
+      setErr(null);
+
       const q = new URLSearchParams({ dateFrom: r.from, dateTo: r.to });
       if (agentId) q.set("agent", agentId);
       if (nodeNm) q.set("nodeNm", nodeNm);
       if (modelNm) q.set("modelNm", modelNm);
-      const data = await apiJson<TimeoutStatsResponse>(`/api/timeouts?${q.toString()}`, { cache: "no-store" });
-      const echoed = data.agentId ?? requestFor;
-      if (agentIdRef.current && echoed !== agentIdRef.current) return;
-      setStats(data);
-    } catch (e) {
-      if (agentIdRef.current !== requestFor) return;
-      setErr(errMessage(e, "타임아웃 집계를 불러오지 못했습니다."));
-      setStats(null);
-    } finally {
-      if (agentIdRef.current === requestFor) setLoading(false);
-    }
-  }, [agentId]);
 
-  const loadTick = useCallback(async (r: TickRange, nodeNm: string, modelNm: string) => {
-    const requestFor = agentId;
-    setLoading(true);
-    setErr(null);
-    try {
-      const q = new URLSearchParams({ dateFrom: r.from, dateTo: r.to, view: "failure" });
-      if (agentId) q.set("agent", agentId);
-      if (nodeNm) q.set("nodeNm", nodeNm);
-      if (modelNm) q.set("modelNm", modelNm);
-      const data = await apiJson<TickStatsResponse>(`/api/tokens/tick?${q.toString()}`, { cache: "no-store" });
-      const echoed = data.agentId ?? requestFor;
-      if (agentIdRef.current && echoed !== agentIdRef.current) return;
-      setTick(data);
-      const want = Date.parse(r.from);
-      const got = data.range.from ? Date.parse(data.range.from) : NaN;
-      setTickClamped(Number.isFinite(want) && Number.isFinite(got) && got - want > 60_000);
-    } catch (e) {
-      if (agentIdRef.current !== requestFor) return;
-      setErr(errMessage(e, "틱 조회를 불러오지 못했습니다."));
-      setTick(null);
-      setTickClamped(false);
-    } finally {
-      if (agentIdRef.current === requestFor) setLoading(false);
-    }
-  }, [agentId]);
+      const tq = new URLSearchParams(q);
+      tq.set("view", "failure");
+      if (resolution !== "1m") q.set("g", resolution);
+
+      let tickErr: string | null = null;
+      try {
+        const [data, tickData] = await Promise.all([
+          apiJson<TimeoutStatsResponse>(`/api/timeouts?${q.toString()}`, { cache: "no-store" }),
+          resolution === "1m"
+            ? apiJson<TickStatsResponse>(`/api/tokens/tick?${tq.toString()}`, { cache: "no-store" })
+                .catch((e) => {
+                  tickErr = errMessage(e, "틱 조회를 불러오지 못했습니다.");
+                  return null;
+                })
+            : Promise.resolve(null),
+        ]);
+        const echoed = data.agentId ?? requestFor;
+        if (agentIdRef.current && echoed !== agentIdRef.current) return;
+        setStats(data);
+        setTick(tickData);
+        setErr(tickErr);
+      } catch (e) {
+        if (agentIdRef.current !== requestFor) return;
+        setErr(errMessage(e, "타임아웃 집계를 불러오지 못했습니다."));
+        setStats(null);
+        setTick(null);
+      } finally {
+        if (agentIdRef.current === requestFor) setLoading(false);
+      }
+    },
+    [agentId]
+  );
 
   const currentRange = useCallback((): Range => resolveRange(sel), [sel]);
 
   useEffect(() => {
-    if (!ready || !rangeReady || !tickReady || !tickViewReady) return;
+    if (!ready || !rangeReady || !resReady) return;
     setNode("");
     setModel("");
     setStats(null);
     setTick(null);
-    if (tickView) loadTick(resolveTick(), "", "");
-    else load(resolveRange(sel), "", "");
+    load(resolveRange(sel), "", "", res);
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, [ready, rangeReady, tickReady, tickViewReady, agentId]);
+  }, [ready, rangeReady, resReady, agentId]);
 
   useEffect(() => {
-    if (!tickView || tickSel.mode !== "live" || !tickSel.auto) return;
-    const id = setInterval(() => loadTick(resolveTickRange(tickSel), node, model), tickRefreshMs(tickSel.win));
+    if (!auto || sel.preset === "custom") return;
+    const id = setInterval(() => load(resolveRange(sel), node, model, res), refreshMs(res));
     return () => clearInterval(id);
-  }, [tickView, tickSel, node, model, loadTick]);
+  }, [auto, sel, node, model, res, load]);
 
   useEffect(() => {
     if (sel.preset === "custom" && sel.customFrom && sel.customTo) {
@@ -141,11 +133,17 @@ export default function TimeoutsPage() {
     }
   }, [sel.preset, sel.customFrom, sel.customTo]);
 
+  // 기간을 바꾸면 해상도가 무효가 될 수 있다 — 새 구간 기준으로 다시 고른다.
   const onPreset = (p: RangePreset) => {
-    const r = resolveRange({ ...sel, preset: p });
+    const next: TimeRangeSel = { ...sel, preset: p };
     setPreset(p);
     setDraftCustom(false);
-    load(r, node, model);
+    const r = resFor(spanOfSel(next));
+    load(resolveRange(next), node, model, r);
+  };
+  const onRes = (r: Resolution) => {
+    setRes(r);
+    load(currentRange(), node, model, r);
   };
   const enterCustom = () => {
     if (!customFrom || !customTo) {
@@ -158,41 +156,14 @@ export default function TimeoutsPage() {
   const applyCustom = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customFrom || !customTo) return;
+    const next: TimeRangeSel = { preset: "custom", customFrom, customTo };
     setCustom(customFrom, customTo);
     setDraftCustom(false);
-    load(resolveRange({ preset: "custom", customFrom, customTo }), node, model);
+    load(resolveRange(next), node, model, resFor(spanOfSel(next)));
   };
-  const reload = (nodeNm: string, modelNm: string) => {
-    if (tickView) loadTick(resolveTick(), nodeNm, modelNm);
-    else load(currentRange(), nodeNm, modelNm);
-  };
+  const reload = (nodeNm: string, modelNm: string) => load(currentRange(), nodeNm, modelNm, res);
   const onNode = (k: string) => { const next = node === k ? "" : k; setNode(next); reload(next, model); };
   const onModel = (k: string) => { const next = model === k ? "" : k; setModel(next); reload(node, next); };
-
-  const onView = (live: boolean) => {
-    setTickView(live);
-    setDraftCustom(false);
-    if (live) {
-      const cur = sel.preset === "custom" && sel.customFrom && sel.customTo
-        ? { from: sel.customFrom, to: sel.customTo }
-        : null;
-      const mins = cur
-        ? spanMinutes(cur.from, cur.to) ?? 60
-        : (RANGE_PRESETS.find((p) => p.key === sel.preset) ?? RANGE_PRESETS[0]).hours * 60;
-      applyTick(tickSelFor(mins, cur));
-      loadTick(resolveTick(), node, model);
-      return;
-    }
-    if (tickSel.mode === "custom" && tickSel.from && tickSel.to) {
-      setCustom(tickSel.from, tickSel.to);
-      load(resolveRange({ preset: "custom", customFrom: tickSel.from, customTo: tickSel.to }), node, model);
-      return;
-    }
-    const need = analysisMinutesForTickWin(tickSel.win);
-    const p = RANGE_PRESETS.find((x) => x.hours * 60 >= need) ?? RANGE_PRESETS[0];
-    setPreset(p.key);
-    load(resolveRange({ ...sel, preset: p.key }), node, model);
-  };
 
   const customOpen = draftCustom || sel.preset === "custom";
   const scope = [node && `노드 ${node}`, model && `모델 ${model}`].filter(Boolean).join(" · ");
@@ -201,37 +172,24 @@ export default function TimeoutsPage() {
   return (
     <div className="dash">
       <div className="dash-header stacked">
-        {/* 1줄 — 제목 + 보기 전환(우상단 고정). ⚠️ 토글을 조회 줄로 되돌리지 말 것: 폭이 모자라면 그것만 위로 튀어 올라 줄이 깨진다. */}
         <div className="dash-head-row">
           <div className="dash-title">
             <div className="dash-title-main">Timeout</div>
             <div className="dash-title-sub">
-              {tickView
-                ? tick ? fmtRange(tick.range.from, tick.range.to) : "—"
-                : stats ? fmtRange(stats.range.from, stats.range.to) : fmtRange(currentRange().from, currentRange().to)}
+              {stats
+                ? fmtRange(stats.range.from, stats.range.to)
+                : fmtRange(currentRange().from, currentRange().to)}
               <span className="dash-title-note">
-                {tickView ? " · 틱 · 분당 타임아웃/LLM 오류" : " · LLM 호출 실패 적재 기준"}
+                {" · LLM 호출 실패 적재 기준"}
                 {!isDefault && agent ? ` · ${agent.name}` : ""}
               </span>
             </div>
           </div>
-          {/* 보기 전환 — 조회 조건이 아니라 화면 자체를 바꾸는 조작이라 우상단 자기 자리에 둔다 */}
-          <ViewToggle
-            live={tickView}
-            onChange={onView}
-            pulsing={tickSel.auto && tickSel.mode === "live"}
-          />
         </div>
 
         <div className="dash-filter">
-          {/* 보기에 따라 통째로 교체되는 자리. .preset-slot 이 넓은 쪽 폭을 미리 확보해
-                  토글할 때 뒤따르는 컨트롤이 밀리지 않게 한다. */}
-          <div className="preset-slot">
-          {tickView ? (
-            <TickPresets loading={loading} onSubmit={() => loadTick(resolveTick(), node, model)} />
-          ) : (
-            <>
-              <div className="preset-group" role="tablist" aria-label="time preset">
+          {/* 기간만 고르는 줄이다. 해상도는 차트 바로 위에 있고, 이 줄은 해상도에 따라 바뀌지 않는다. */}
+          <div className="preset-group" role="tablist" aria-label="time preset">
                 {RANGE_PRESETS.map((p) => (
                   <button
                     key={p.key}
@@ -265,15 +223,10 @@ export default function TimeoutsPage() {
                     onChange={(e) => setCustomTo(e.target.value)}
                     aria-label="to"
                   />
-                  <button type="submit" className="btn primary">적용</button>
-                </form>
-              )}
-            </>
+              <button type="submit" className="btn primary">적용</button>
+            </form>
           )}
-          </div>
-          {/* 동작 버튼은 두 보기가 같은 자리를 쓴다 (집계 뷰는 '적용' 이 직접 설정 폼 안에 있어
-              여기는 틱일 때만 렌더된다) */}
-          {tickView && <TickActions loading={loading} onSubmit={() => loadTick(resolveTick(), node, model)} />}
+          <AutoRefreshToggle on={auto} onChange={setAuto} disabled={customOpen} />
         </div>
       </div>
 
@@ -305,18 +258,14 @@ export default function TimeoutsPage() {
         </div>
       )}
 
-      {tickView && tick && (
-        <TickMonitor stats={tick} metrics={TIMEOUT_METRICS} rowsLabel="호출" clamped={tickClamped} />
-      )}
-
-      {!tickView && stats && !stats.available && (
+      {stats && !stats.available && (
         <div className="dash-banner">
           아직 실패 호출이 적재되지 않았습니다 · GAIA 가 <code>TRX_TOKEN_DET.STAT_CD</code> /{" "}
           <code>ERR_CTN</code> 을 적재하면 이 화면이 채워집니다.
         </div>
       )}
 
-      {!tickView && stats && stats.available && (
+      {stats && stats.available && (
         <>
           <div className="kpi-grid">
             <div className="kpi-card tone-err">
@@ -350,6 +299,20 @@ export default function TimeoutsPage() {
             </div>
           </div>
 
+          {/* 해상도 — 차트 바로 위 자기 줄. ⚠️ 차트 카드 머리 안으로 넣지 말 것:
+              1분 조회가 실패하면 그 카드가 통째로 사라져 되돌릴 컨트롤이 없어진다. */}
+          <div className="res-bar">
+            <ResolutionSelect
+              value={res}
+              options={resOptions}
+              onChange={onRes}
+              pulsing={auto && !customOpen}
+            />
+          </div>
+
+          {res === "1m" ? (
+            tick && <TickMonitor stats={tick} metrics={TIMEOUT_METRICS} rowsLabel="호출" />
+          ) : (
           <section className="dash-card dash-card-hero">
             <div className="dash-card-head">
               <div className="dash-card-title-group">
@@ -365,6 +328,7 @@ export default function TimeoutsPage() {
               )}
             </div>
           </section>
+          )}
 
           {/* 모델 × 시간 히트맵 — "그 시간대에 이 모델이 몇 건 중 몇 건 실패" 를 셀 하나로 압축.
               총 요청 수를 분모로 두는 게 핵심 — 색은 실패율, 라벨 옆 숫자는 총 호출. */}

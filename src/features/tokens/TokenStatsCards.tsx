@@ -1,5 +1,6 @@
 import { TokenBucket, TokenStatsResponse } from "@/lib/types";
 import { fmtDuration } from "@/lib/format";
+import { resolutionLabel } from "@/lib/timeBuckets";
 
 export type TokenSummary = Pick<
   TokenStatsResponse,
@@ -56,7 +57,7 @@ export function TokenStatsCards({ stats }: { stats: TokenSummary }) {
       <Card
         title="Total Tokens"
         value={fmtCompact(totals.totalTokens)}
-        sub={`peak ${fmtCompact(peak)} / ${granLabel(granularity)}`}
+        sub={`peak ${fmtCompact(peak)} / ${resolutionLabel(granularity)}`}
         spark={totalSpark}
         color="var(--accent)"
         tone="default"
@@ -88,7 +89,7 @@ export function TokenStatsCards({ stats }: { stats: TokenSummary }) {
       <Card
         title="Avg Latency"
         value={fmtDuration(avgLatencyMs)}
-        sub={avgLatencyMs !== null ? `peak ${fmtDuration(peakLatency)} / ${granLabel(granularity)}` : "측정값 없음"}
+        sub={avgLatencyMs !== null ? `peak ${fmtDuration(peakLatency)} / ${resolutionLabel(granularity)}` : "측정값 없음"}
         spark={avgLatencyMs !== null ? latencySpark : undefined}
         color="#f59e0b"
         tone="default"
@@ -102,9 +103,6 @@ function pct(n: number, total: number): string {
   return ((n / total) * 100).toFixed(1) + "%";
 }
 
-function granLabel(g: TokenStatsResponse["granularity"]): string {
-  return g === "5m" ? "5m" : g === "1h" ? "hr" : "day";
-}
 
 function Card({
   title, value, sub, spark, color, tone,

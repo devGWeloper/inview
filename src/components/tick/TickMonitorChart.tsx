@@ -180,7 +180,9 @@ export function TickMonitorChart({
               strokeWidth={2.1}
               fill="url(#tick-grad)"
               isAnimationActive={false}
-              dot={(props: { cx?: number; cy?: number; index?: number }) => {
+              // 한도가 없으면 초과점도 없다 — 점마다 빈 <g> 를 만들지 않는다
+              // (24시간 × 1분 = 1440점이라 그 비용이 그대로 렌더 시간이 된다).
+              dot={limit <= 0 ? false : (props: { cx?: number; cy?: number; index?: number }) => {
                 const d = data[props.index ?? -1];
                 if (!d?.over || props.cx == null || props.cy == null) {
                   return <g key={props.index} />;

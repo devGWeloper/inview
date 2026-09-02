@@ -4,64 +4,55 @@
    화면은 게이지 → 추이 → 순간 목록 3단. 한도 초과는 전부 --err 톤 하나로만 표시한다.
    ───────────────────────────────────────────────────────────────────────────── */
 
-/* 보기 전환 (집계 ↔ 틱) — thumb 이 미끄러지는 스위치.
-   ⚠️ 자리는 머리말 우상단(.dash-head-row)이다. 조회 줄(.dash-filter) 안에 두면 폭이
-      모자란 화면에서 이 토글만 윗줄로 튀어 올라 줄이 통째로 깨져 보인다.
-   ⚠️ 칸 폭은 grid 로 **강제로 균등**하게 준다 — 글자 수가 달라(집계/틱) 내용 폭에
-      맡기면 thumb 이 미끄러지지 않고 폭이 변한다. */
-.view-toggle {
-  position: relative;
-  display: inline-grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  background: var(--surface-3);
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  padding: 3px;
-  flex: none;
+/* 해상도 축 (1분 · 5분 · 15분 · 1시간 · 1일) — 기간과 독립이다.
+   ⚠️ 자리는 차트 **바로 위 자기 줄**(.res-bar)이지 조회 줄도, 차트 카드 머리 안도 아니다.
+      조회 줄에 두면 기간을 고른 줄 알고 누르고, 카드 머리에 두면 1분 조회가 실패해
+      그 카드가 사라질 때 되돌릴 컨트롤까지 같이 사라진다.
+   그 기간에서 못 그리는 해상도는 비활성이 아니라 아예 렌더되지 않는다. */
+.res-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -6px;
 }
-/* 미끄러지는 배경. 컨테이너의 padding box 기준 50% 라 좌우 padding(3px)을 뺀 값이 정확히 반 칸이다. */
-.view-toggle-thumb {
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  left: 3px;
-  width: calc(50% - 3px);
-  border-radius: 999px;
-  background: var(--surface);
-  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.1), 0 0 0 1px rgba(17, 24, 39, 0.04);
-  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.view-toggle.is-live .view-toggle-thumb { transform: translateX(100%); }
-@media (prefers-reduced-motion: reduce) {
-  .view-toggle-thumb { transition: none; }
-}
-.view-toggle-btn {
-  position: relative;      /* thumb 위로 */
+.res-select {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 3px 3px 3px 10px;
+}
+.res-select-key {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-right: 4px;
+  user-select: none;
+}
+.res-select-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   border: none;
   background: transparent;
   color: var(--text-3);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 700;
-  padding: 6px 16px;
-  border-radius: 999px;
+  padding: 5px 11px;
+  border-radius: 5px;
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.18s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
-.view-toggle-btn:hover { color: var(--text); }
-.view-toggle-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.res-select-btn:hover { color: var(--text); background: var(--surface-2); }
+.res-select-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.res-select-btn.active {
+  color: var(--accent);
+  background: var(--surface-3);
 }
-.view-toggle-btn.active { color: var(--accent); }
-.view-toggle-btn.live.active { color: var(--err); }
 
-/* 틱 쪽 점 — 자동 갱신이 도는 동안에만 깜빡인다.
+/* 1분 해상도 버튼의 점 — 자동 갱신이 도는 동안에만 깜빡인다.
    "지금 살아 있는 값인가" 를 글자 없이 알리는 유일한 표시라 문구로 설명하지 않는다. */
 .live-dot {
   width: 7px;
@@ -70,7 +61,7 @@
   background: var(--text-muted);
   flex: none;
 }
-.view-toggle-btn.live.active .live-dot { background: var(--err); }
+.res-select-btn.active .live-dot { background: var(--err); }
 .live-dot.pulse { animation: live-pulse 1.6s ease-in-out infinite; }
 @keyframes live-pulse {
   0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--err-soft); }

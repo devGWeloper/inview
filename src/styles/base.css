@@ -60,3 +60,21 @@ html, body {
 button, input, select, textarea { font: inherit; color: inherit; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
+
+/* 집계 범위 밖 안내 한 줄 (ScopeNote) — 대시보드·Tokens 에서 /timeouts 로 넘긴다 */
+.scope-note {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 0 0 14px; padding: 7px 12px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 12px; line-height: 1.5; color: var(--text-3);
+}
+.scope-note-mark {
+  flex: none; display: grid; place-items: center;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: var(--llm-err-soft); color: var(--llm-err);
+  font-size: 10px; font-weight: 800;
+}
+.scope-note-text { min-width: 0; }
+.scope-note-text b { color: var(--text-2); font-weight: 700; }
+.scope-note-link { margin-left: auto; font-weight: 700; white-space: nowrap; }

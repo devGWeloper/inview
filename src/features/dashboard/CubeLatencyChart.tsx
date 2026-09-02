@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { StatsResponse } from "@/lib/types";
 import { fmtDuration } from "@/lib/format";
+import { resolutionLabel } from "@/lib/timeBuckets";
 
 const COLOR = "#f59e0b"; // Tokens 탭 latency 차트와 동일 톤
 
@@ -100,7 +101,7 @@ export function CubeLatencyChart({ stats }: { stats: StatsResponse }) {
           평균 응답 속도 (CUBE 요청→응답)
         </span>
         <span className="ts-legend-spacer" />
-        <span className="ts-meta">{data.length} buckets · {granText(granularity)}</span>
+        <span className="ts-meta">{data.length} buckets · {resolutionLabel(granularity)}</span>
       </div>
 
       <div className="ts-chart">
@@ -178,6 +179,3 @@ export function CubeLatencyChart({ stats }: { stats: StatsResponse }) {
   );
 }
 
-function granText(g: Gran): string {
-  return g === "5m" ? "5-min" : g === "1h" ? "hourly" : "daily";
-}

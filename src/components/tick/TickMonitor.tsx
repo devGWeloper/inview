@@ -87,12 +87,11 @@ function inWindow<T>(items: T[], tsOf: (x: T) => string | null, startTs: string 
 const fmtInt = (n: number) => Math.round(n).toLocaleString();
 
 export function TickMonitor({
-  stats, metrics, rowsLabel, clamped, limitHref,
+  stats, metrics, rowsLabel, limitHref,
 }: {
   stats: TickStatsResponse;
   metrics: [TickMetricDef, TickMetricDef];
   rowsLabel: string;
-  clamped: boolean;
   limitHref?: string;
 }) {
   const [slot, setSlot] = useState<TickSlot>("a");
@@ -127,12 +126,6 @@ export function TickMonitor({
           {rowsLabel} <b>{fmtInt(stats.totals.rows)}</b>건
         </span>
       </div>
-
-      {clamped && (
-        <div className="tick-notice warn">
-          틱 조회는 한 번에 최대 24시간까지 집계합니다 — 지정한 구간 중 <b>뒤쪽 24시간</b>만 표시됩니다.
-        </div>
-      )}
 
       {stats.statusAvailable === false && (
         <div className="tick-notice warn">

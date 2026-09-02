@@ -1,4 +1,5 @@
 // 실적 화면 전용 축소 응답 (내부 정보를 걷어낸 형태).
+import type { Granularity } from "../timeBuckets";
 import type { FteStats } from "./profile";
 import type { DailyActionStat, DimensionStats, StatusCounts } from "./stats";
 import type { TimeoutBucket } from "./timeouts";
@@ -32,7 +33,7 @@ export interface InsightsAgent {
 }
 
 export interface InsightsTokens {
-  granularity: "5m" | "1h" | "1d";
+  granularity: Granularity;
   buckets: TokenBucket[];
   totals: { calls: number; inputTokens: number; outputTokens: number; totalTokens: number };
   avgTotalPerCall: number | null;
@@ -49,7 +50,7 @@ export interface InsightsModelTokens {
 
 export interface InsightsTimeouts {
   available: boolean;
-  granularity: "5m" | "1h" | "1d";
+  granularity: Granularity;
   buckets: TimeoutBucket[];
   totalCalls: number;
   failedCalls: number;
@@ -82,7 +83,7 @@ export interface InsightsResponse {
   successRate: number | null;
   avgResponseMs: number | null;
   uniqueUsers: number;
-  granularity: "5m" | "1h" | "1d";
+  granularity: Granularity;
   buckets: InsightsBucket[];
   daily: InsightsDaily[];
   byAction: DimensionStats[];

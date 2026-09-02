@@ -17,10 +17,7 @@
   gap: 16px;
   flex-wrap: wrap;
 }
-/* 틱 토글이 붙는 화면(대시보드/토큰/타임아웃)은 머리말을 **두 줄**로 쌓는다.
-   ⚠️ 조회 조건(.dash-filter)과 보기 전환(.view-toggle)을 한 줄에 두면, 조회 줄이
-      한 줄에 안 들어가는 폭에서 토글만 위로 튀어 올라 줄이 깨져 보인다.
-      1줄 = 제목 + 보기 전환(우상단 고정), 2줄 = 조회 조건 전폭. */
+/* 머리말 두 줄 — 1줄 = 제목, 2줄 = 조회 조건 전폭. */
 .dash-header.stacked {
   flex-direction: column;
   align-items: stretch;
@@ -54,18 +51,6 @@
   align-items: center;
   gap: 10px;
 }
-/* 집계 ↔ 틱 토글에서 프리셋 줄이 통째로 교체되는 자리.
-   ⚠️ 두 세트의 버튼 수가 달라(집계 6개 / 틱 8개) 그냥 두면 토글할 때마다 뒤따르는
-      USER/NODE/MODEL·버튼이 좌우로 밀린다. 넓은 쪽 폭을 미리 확보해 화면이 안 흔들리게 한다.
-      좁은 화면에서는 100% 로 접히므로 min() 을 쓴다. */
-.preset-slot {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  min-width: min(100%, 448px);
-}
-
 .preset-group {
   display: inline-flex;
   background: var(--surface);

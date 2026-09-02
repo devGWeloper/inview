@@ -88,6 +88,10 @@ null-trace 행은 한 질문 = 한 호출로 취급.
 
 **KPI · 추이 차트 · 리더보드에는 실패 관련 표시를 넣지 않는다.** 타임아웃 추적은 `/timeouts` 담당.
 
+다만 그 사실 자체는 화면에 밝힌다 — 분석 보기 상단의 `ScopeNote`(`src/components/ui/ScopeNote.tsx`,
+대시보드와 공용)가 "실패 호출은 호출 수에만 잡히고 토큰 0 · 속도 평균 제외" 를 한 줄로 적고
+`/timeouts` 로 넘긴다. 집계 SQL 이 실제로 그렇다(`COUNT(*)` 에 필터 없음, latency 만 `SQL_OK_PRED`).
+
 ## 성능
 
 `skipQuestions: true`(`TokenFilter`)를 주면 questions/topUsers/calls 를 건너뛴다.

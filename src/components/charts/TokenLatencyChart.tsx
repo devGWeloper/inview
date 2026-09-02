@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { TokenBucket, TokenStatsResponse } from "@/lib/types";
 import { fmtDuration } from "@/lib/format";
+import { resolutionLabel } from "@/lib/timeBuckets";
 
 const COLOR = "#f59e0b"; // latency 전용 색 (토큰 차트와 구분)
 
@@ -101,7 +102,7 @@ export function TokenLatencyChart({ stats }: { stats: TokenSeries }) {
           평균 LLM 호출 속도
         </span>
         <span className="ts-legend-spacer" />
-        <span className="ts-meta">{data.length} buckets · {granText(granularity)}</span>
+        <span className="ts-meta">{data.length} buckets · {resolutionLabel(granularity)}</span>
       </div>
 
       <div className="ts-chart">
@@ -179,6 +180,3 @@ export function TokenLatencyChart({ stats }: { stats: TokenSeries }) {
   );
 }
 
-function granText(g: Gran): string {
-  return g === "5m" ? "5-min" : g === "1h" ? "hourly" : "daily";
-}

@@ -18,7 +18,7 @@ import {
   floorToBucket,
   isoNoTz,
   parseTs,
-  pickGranularity,
+  resolveGranularity,
 } from "./timeBuckets";
 
 const ITEM_LIMIT = 200; // 목록에 내릴 최근 실패 호출 수
@@ -45,6 +45,7 @@ export interface TimeoutFilter {
   nodeNm?: string;
   modelNm?: string;
   agentId?: string;
+  gran?: Granularity;
 }
 
 const num = (v: unknown): number => {
@@ -112,7 +113,7 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
   const now = Date.now();
   const fromMs = filter.dateFrom ? Date.parse(filter.dateFrom) : now - 24 * 3_600_000;
   const toMs = filter.dateTo ? Date.parse(filter.dateTo) : now;
-  const g: Granularity = pickGranularity(fromMs, toMs);
+  const g: Granularity = resolveGranularity(filter.gran, fromMs, toMs);
   const emptyBuckets: TimeoutBucket[] = enumerateBucketStarts(fromMs, toMs, g).map((k) => ({
     ts: isoNoTz(k),
     failed: 0,

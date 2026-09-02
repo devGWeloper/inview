@@ -1,4 +1,5 @@
 // 대시보드 집계 (computeStats 의 입출력).
+import type { Granularity } from "../timeBuckets";
 import type { LayerKey } from "./layers";
 
 export interface StatsFilter {
@@ -7,6 +8,7 @@ export interface StatsFilter {
   userId?: string;
   actionTyp?: string;
   excludeErrCds?: string[];
+  gran?: Granularity;
 }
 
 export interface DimensionStats {
@@ -73,7 +75,7 @@ export interface StatsResponse {
   totals: StatusCounts & { total: number };
   avgLatencyMs: number | null;
   cubeAvgLatencyMs?: number | null;
-  granularity: "5m" | "1h" | "1d";
+  granularity: Granularity;
   buckets: TimeBucket[];
   layers: LayerStats[];
   selfTimeTraces?: number;

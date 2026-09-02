@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { StatsResponse, TimeBucket } from "@/lib/types";
+import { resolutionLabel } from "@/lib/timeBuckets";
 
 const STATUS_KEYS = ["ok", "fail", "pending"] as const;
 type StatusKey = typeof STATUS_KEYS[number];
@@ -131,7 +132,7 @@ export function TimeSeriesChart({ stats }: { stats: Pick<StatsResponse, "granula
           <span className="ts-meta">avg success {avgSuccess.toFixed(1)}%</span>
         )}
         <span className="ts-meta">
-          {data.length} buckets · {granText(granularity)}
+          {data.length} buckets · {resolutionLabel(granularity)}
         </span>
       </div>
 
@@ -221,6 +222,3 @@ export function TimeSeriesChart({ stats }: { stats: Pick<StatsResponse, "granula
   );
 }
 
-function granText(g: StatsResponse["granularity"]): string {
-  return g === "5m" ? "5-min" : g === "1h" ? "hourly" : "daily";
-}

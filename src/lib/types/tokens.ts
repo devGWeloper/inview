@@ -1,4 +1,5 @@
 // TRX_TOKEN_DET 기반 토큰 집계.
+import type { Granularity } from "../timeBuckets";
 import type { TopItem } from "./stats";
 
 export interface TokenRow {
@@ -41,6 +42,7 @@ export interface TokenFilter {
   traceId?: string;
   agentId?: string;
   skipQuestions?: boolean;
+  gran?: Granularity;
 }
 
 export interface TokenBucket {
@@ -73,7 +75,7 @@ export interface TokenStatsResponse {
   totals: { calls: number; inputTokens: number; outputTokens: number; totalTokens: number };
   avgTotalPerCall: number | null;
   avgLatencyMs: number | null;
-  granularity: "5m" | "1h" | "1d";
+  granularity: Granularity;
   buckets: TokenBucket[];
   byNode: TokenDimStat[];
   byModel: TokenDimStat[];

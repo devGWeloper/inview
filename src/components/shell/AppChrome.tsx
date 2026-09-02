@@ -8,7 +8,6 @@ import { UserMenu } from "@/components/auth/UserMenu";
 import { AgentScopeProvider, AgentScopeWarning } from "@/components/agents/AgentScopeProvider";
 import { AgentSelector } from "@/components/agents/AgentSelector";
 import { TimeRangeProvider } from "@/components/ui/TimeRangeProvider";
-import { TickProvider } from "@/components/tick/TickProvider";
 
 export function AppChrome({ version, children }: { version: string; children: React.ReactNode }) {
   const pathname = usePathname();
@@ -20,7 +19,6 @@ export function AppChrome({ version, children }: { version: string; children: Re
   return (
     <AgentScopeProvider>
      <TimeRangeProvider>
-     <TickProvider>
       <div className="app">
         <header className="topbar">
           <div className="brand">
@@ -70,7 +68,6 @@ export function AppChrome({ version, children }: { version: string; children: Re
           </div>
         </footer>
       </div>
-     </TickProvider>
      </TimeRangeProvider>
     </AgentScopeProvider>
   );

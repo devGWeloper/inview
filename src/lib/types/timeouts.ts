@@ -1,4 +1,5 @@
 // 타임아웃/실패 호출 집계.
+import type { Granularity } from "../timeBuckets";
 
 export interface TimeoutBucket {
   ts: string;
@@ -28,7 +29,7 @@ export interface TimeoutDimStat {
 
 export interface TimeoutStatsResponse {
   range: { from: string | null; to: string | null };
-  granularity: "5m" | "1h" | "1d";
+  granularity: Granularity;
   available: boolean;
   totalCalls: number;
   failedCalls: number;

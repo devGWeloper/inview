@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { TimeoutStatsResponse, TimeoutModelSeries, TimeoutModelCell } from "@/lib/types";
+import { resolutionLabel } from "@/lib/timeBuckets";
 
 type Gran = TimeoutStatsResponse["granularity"];
 
@@ -73,7 +74,7 @@ export function TimeoutModelHeatmap({
         </span>
         <span className="hm-leg-spacer" />
         <span className="hm-leg-hint mono">
-          {bucketCount} buckets · {granText(granularity)} · 모델 {modelTrend.length}개
+          {bucketCount} buckets · {resolutionLabel(granularity)} · 모델 {modelTrend.length}개
         </span>
       </div>
 
@@ -169,6 +170,3 @@ export function TimeoutModelHeatmap({
   );
 }
 
-function granText(g: Gran): string {
-  return g === "5m" ? "5-min" : g === "1h" ? "hourly" : "daily";
-}

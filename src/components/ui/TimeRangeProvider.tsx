@@ -57,6 +57,18 @@ export function resolveRange(sel: TimeRangeSel): ResolvedRange {
   return { from: toLocalSec(now - hours * 3_600_000), to: toLocalSec(now) };
 }
 
+// 해상도 축이 쓰는 구간 길이. resolveRange() 는 매번 '지금' 을 다시 잡으므로 길이만 따로 센다.
+export function spanOfSel(sel: TimeRangeSel): number {
+  if (sel.preset === "custom") {
+    const a = Date.parse(sel.customFrom);
+    const b = Date.parse(sel.customTo);
+    if (Number.isFinite(a) && Number.isFinite(b) && b > a) return b - a;
+    return 24 * 3_600_000;
+  }
+  const p = RANGE_PRESETS.find((x) => x.key === sel.preset) ?? RANGE_PRESETS[0];
+  return p.hours * 3_600_000;
+}
+
 function readStored(): TimeRangeSel {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);

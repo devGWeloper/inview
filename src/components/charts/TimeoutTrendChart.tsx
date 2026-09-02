@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { TimeoutBucket, TimeoutStatsResponse } from "@/lib/types";
+import { resolutionLabel } from "@/lib/timeBuckets";
 
 const SERIES = ["timeout", "other"] as const;
 type SeriesKey = typeof SERIES[number];
@@ -121,7 +122,7 @@ export function TimeoutTrendChart({ stats }: { stats: TimeoutSeries }) {
           </button>
         ))}
         <span className="ts-legend-spacer" />
-        <span className="ts-meta">{data.length} buckets · {granText(granularity)}</span>
+        <span className="ts-meta">{data.length} buckets · {resolutionLabel(granularity)}</span>
       </div>
 
       <div className="ts-chart">
@@ -207,6 +208,3 @@ export function TimeoutTrendChart({ stats }: { stats: TimeoutSeries }) {
   );
 }
 
-function granText(g: Gran): string {
-  return g === "5m" ? "5-min" : g === "1h" ? "hourly" : "daily";
-}

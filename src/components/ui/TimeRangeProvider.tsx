@@ -57,7 +57,7 @@ export function resolveRange(sel: TimeRangeSel): ResolvedRange {
   return { from: toLocalSec(now - hours * 3_600_000), to: toLocalSec(now) };
 }
 
-// 해상도 축이 쓰는 구간 길이. resolveRange() 는 매번 '지금' 을 다시 잡으므로 길이만 따로 센다.
+// 틱 단위 축이 쓰는 구간 길이. resolveRange() 는 매번 '지금' 을 다시 잡으므로 길이만 따로 센다.
 export function spanOfSel(sel: TimeRangeSel): number {
   if (sel.preset === "custom") {
     const a = Date.parse(sel.customFrom);

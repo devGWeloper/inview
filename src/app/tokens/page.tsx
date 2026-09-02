@@ -22,8 +22,8 @@ import {
   spanOfSel,
   useTimeRange,
 } from "@/components/ui/TimeRangeProvider";
-import { Resolution, resolutionLabel } from "@/lib/timeBuckets";
-import { ResolutionSelect, useResolution } from "@/components/charts/ResolutionSelect";
+import { TickUnit, granOfTickUnit, granularityLabel } from "@/lib/timeBuckets";
+import { TickSelect, useTickUnit } from "@/components/charts/TickSelect";
 import { AutoRefreshToggle, refreshMs, useAutoRefresh } from "@/components/charts/AutoRefresh";
 
 
@@ -53,7 +53,7 @@ export default function TokensPage() {
   const [tick, setTick] = useState<TickStatsResponse | null>(null);
 
   const spanMs = useMemo(() => spanOfSel(sel), [sel]);
-  const { res, options: resOptions, ready: resReady, setRes, resFor } = useResolution("tokens", spanMs);
+  const { unit, options: unitOptions, ready: unitReady, setUnit, unitFor } = useTickUnit("tokens", spanMs);
   const [auto, setAuto] = useAutoRefresh("tokens");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -64,7 +64,7 @@ export default function TokensPage() {
   agentIdRef.current = agentId;
 
   const computeFilter = useCallback(
-    (r: Resolution, from: TimeRangeSel = sel): TokenFilter => {
+    (u: TickUnit, from: TimeRangeSel = sel): TokenFilter => {
       const range = resolveRange(from);
       return {
         userId: userId || undefined,
@@ -72,15 +72,15 @@ export default function TokensPage() {
         modelNm: modelNm || undefined,
         dateFrom: range.from,
         dateTo: range.to,
-        // 1분 추이는 틱 라우트가 그린다. 나머지 카드는 가장 잔 집계로 받는다.
-        gran: r === "1m" ? "5m" : r,
+        // 집계·1분은 g 를 안 보낸다 — 집계는 서버가 고르고, 1분은 틱 라우트가 그린다.
+        gran: granOfTickUnit(u),
       };
     },
     [sel, userId, nodeNm, modelNm]
   );
 
-  // 1분 해상도에서는 두 번 조회한다 — 집계(KPI·나머지 카드) + 틱(TPM/RPM).
-  const load = useCallback(async (f: TokenFilter, r: Resolution) => {
+  // 1분에서는 두 번 조회한다 — 집계(KPI·나머지 카드) + 틱(TPM/RPM).
+  const load = useCallback(async (f: TokenFilter, r: TickUnit) => {
     const requestFor = agentId; // 이 요청이 향한 에이전트 (응답 도착 시점의 선택과 비교할 기준)
     setLoading(true);
     setErr(null);
@@ -127,7 +127,7 @@ export default function TokensPage() {
   }, [agentId]);
 
   useEffect(() => {
-    if (!ready || !rangeReady || !resReady) return;
+    if (!ready || !rangeReady || !unitReady) return;
     setUserId("");
     setNodeNm("");
     setModelNm("");
@@ -135,9 +135,9 @@ export default function TokensPage() {
     setModelOptions([]);
     setStats(null);
     setTick(null);
-    load({ ...computeFilter(res), userId: undefined, nodeNm: undefined, modelNm: undefined }, res);
+    load({ ...computeFilter(unit), userId: undefined, nodeNm: undefined, modelNm: undefined }, unit);
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, [ready, rangeReady, resReady, agentId]);
+  }, [ready, rangeReady, unitReady, agentId]);
 
   useEffect(() => {
     if (sel.preset === "custom" && sel.customFrom && sel.customTo) {
@@ -148,9 +148,9 @@ export default function TokensPage() {
 
   useEffect(() => {
     if (!auto || sel.preset === "custom") return;
-    const id = setInterval(() => load(computeFilter(res), res), refreshMs(res));
+    const id = setInterval(() => load(computeFilter(unit), unit), refreshMs(unit));
     return () => clearInterval(id);
-  }, [auto, sel.preset, res, load, computeFilter]);
+  }, [auto, sel.preset, unit, load, computeFilter]);
 
   const fetchCalls = useCallback(async (traceId: string): Promise<TokenRow[]> => {
     const query = new URLSearchParams({ traceId });
@@ -169,24 +169,24 @@ export default function TokensPage() {
       const next: TimeRangeSel = { preset: "custom", customFrom, customTo };
       setCustom(customFrom, customTo);
       setDraftCustom(false);
-      const r = resFor(spanOfSel(next));
+      const r = unitFor(spanOfSel(next));
       load(computeFilter(r, next), r);
       return;
     }
-    load(computeFilter(res), res);
+    load(computeFilter(unit), unit);
   };
 
-  // 기간을 바꾸면 해상도가 무효가 될 수 있다 — 새 구간 기준으로 다시 고른다.
+  // 기간을 바꾸면 고른 틱 단위가 무효가 될 수 있다 — 새 구간 기준으로 다시 고른다.
   const onPresetClick = (k: RangePreset) => {
     const next: TimeRangeSel = { ...sel, preset: k };
     setPreset(k);
     setDraftCustom(false);
-    const r = resFor(spanOfSel(next));
+    const r = unitFor(spanOfSel(next));
     load(computeFilter(r, next), r);
   };
 
-  const onRes = (r: Resolution) => {
-    setRes(r);
+  const onUnit = (r: TickUnit) => {
+    setUnit(r);
     load(computeFilter(r), r);
   };
 
@@ -202,17 +202,17 @@ export default function TokensPage() {
   const onSelectNode = (k: string) => {
     const next = nodeNm === k ? "" : k;
     setNodeNm(next);
-    load({ ...computeFilter(res), nodeNm: next || undefined }, res);
+    load({ ...computeFilter(unit), nodeNm: next || undefined }, unit);
   };
 
   const onSelectModel = (k: string) => {
     const next = modelNm === k ? "" : k;
     setModelNm(next);
-    load({ ...computeFilter(res), modelNm: next || undefined }, res);
+    load({ ...computeFilter(unit), modelNm: next || undefined }, unit);
   };
 
   const reloadWith = (over: { userId?: string; nodeNm?: string; modelNm?: string }) => {
-    load({ ...computeFilter(res), ...over }, res);
+    load({ ...computeFilter(unit), ...over }, unit);
   };
 
   const customOpen = draftCustom || sel.preset === "custom";
@@ -241,7 +241,7 @@ export default function TokensPage() {
         </div>
 
         <form className="dash-filter" onSubmit={onApply}>
-          {/* 기간만 고르는 줄이다. 해상도는 차트 바로 위에 있고, 이 줄은 해상도에 따라 바뀌지 않는다. */}
+          {/* 기간만 고르는 줄이다. 틱 단위는 차트 바로 위에 있고, 이 줄은 그것에 따라 바뀌지 않는다. */}
           <div className="preset-group" role="tablist" aria-label="time preset">
                 {RANGE_PRESETS.map((p) => (
                   <button
@@ -323,18 +323,18 @@ export default function TokensPage() {
 
           <TokenStatsCards stats={stats} />
 
-          {/* 해상도 — 차트 바로 위 자기 줄. ⚠️ 차트 카드 머리 안으로 넣지 말 것:
+          {/* 틱 단위 — 차트 바로 위 자기 줄. ⚠️ 차트 카드 머리 안으로 넣지 말 것:
               1분 조회가 실패하면 그 카드가 통째로 사라져 되돌릴 컨트롤이 없어진다. */}
-          <div className="res-bar">
-            <ResolutionSelect
-              value={res}
-              options={resOptions}
-              onChange={onRes}
+          <div className="tick-bar">
+            <TickSelect
+              value={unit}
+              options={unitOptions}
+              onChange={onUnit}
               pulsing={auto && !customOpen}
             />
           </div>
 
-          {res === "1m" ? (
+          {unit === "1m" ? (
             tick && (
               <TickMonitor
                 stats={tick}
@@ -348,7 +348,7 @@ export default function TokensPage() {
             <div className="dash-card-head">
               <div className="dash-card-title-group">
                 <span className="dash-card-title">토큰 사용 추이</span>
-                <span className="dash-card-sub">input / output 적층 · {resolutionLabel(stats.granularity)} 단위</span>
+                <span className="dash-card-sub">input / output 적층 · {granularityLabel(stats.granularity)} 단위</span>
               </div>
               <div className="dash-card-aux">
                 <span className="aux-pill">
@@ -371,7 +371,7 @@ export default function TokensPage() {
             <div className="dash-card-head">
               <div className="dash-card-title-group">
                 <span className="dash-card-title">LLM 속도 추이</span>
-                <span className="dash-card-sub">호출당 평균 소요시간 · {resolutionLabel(stats.granularity)} 단위 · 어느 시점이 느렸는지</span>
+                <span className="dash-card-sub">호출당 평균 소요시간 · {granularityLabel(stats.granularity)} 단위 · 어느 시점이 느렸는지</span>
               </div>
               <div className="dash-card-aux">
                 <span className="aux-pill">

@@ -13,8 +13,8 @@ import { ScopeNote } from "@/components/ui/ScopeNote";
 import { StatsFilter, StatsResponse, TickMetricDef, TickStatsResponse } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 import { TickMonitor } from "@/components/tick/TickMonitor";
-import { Resolution, isoNoTz, resolutionLabel } from "@/lib/timeBuckets";
-import { ResolutionSelect, useResolution } from "@/components/charts/ResolutionSelect";
+import { TickUnit, granOfTickUnit, granularityLabel, isoNoTz } from "@/lib/timeBuckets";
+import { TickSelect, useTickUnit } from "@/components/charts/TickSelect";
 import { AutoRefreshToggle, refreshMs, useAutoRefresh } from "@/components/charts/AutoRefresh";
 
 type Preset = "1h" | "6h" | "24h" | "7d" | "30d" | "custom";
@@ -48,7 +48,7 @@ function spanOf(p: Preset, from: string, to: string): number {
 }
 
 // 프리셋 구간은 초 정밀이다 — 분 정밀 + ":00" 을 쓰면 현재 분이 통째로 잘려
-// 1분 해상도에서 방금 난 버스트가 안 잡힌다.
+// 1분 틱에서 방금 난 버스트가 안 잡힌다.
 function rangeOf(p: Preset, from: string, to: string): { from: string; to: string } {
   if (p === "custom") return { from: from ? `${from}:00` : "", to: to ? `${to}:59` : "" };
   const hours = (PRESETS.find((x) => x.key === p) ?? PRESETS[0]).hours;
@@ -68,7 +68,7 @@ export default function DashboardPage() {
   const [tick, setTick] = useState<TickStatsResponse | null>(null);
 
   const spanMs = useMemo(() => spanOf(preset, customFrom, customTo), [preset, customFrom, customTo]);
-  const { res, options: resOptions, ready: resReady, setRes, resFor } = useResolution("dashboard", spanMs);
+  const { unit, options: unitOptions, ready: unitReady, setUnit, unitFor } = useTickUnit("dashboard", spanMs);
   const [auto, setAuto] = useAutoRefresh("dashboard");
 
   const [loading, setLoading] = useState(false);
@@ -101,7 +101,7 @@ export default function DashboardPage() {
   }, []);
 
   const filterFor = useCallback(
-    (p: Preset, r: Resolution, over: Partial<StatsFilter> = {}): StatsFilter => {
+    (p: Preset, u: TickUnit, over: Partial<StatsFilter> = {}): StatsFilter => {
       const range = rangeOf(p, customFrom, customTo);
       return {
         userId: userId || undefined,
@@ -109,17 +109,17 @@ export default function DashboardPage() {
         excludeErrCds: excludeErrCds.length > 0 ? excludeErrCds : undefined,
         dateFrom: range.from || undefined,
         dateTo: range.to || undefined,
-        // 1분 추이는 틱 라우트가 그린다. 나머지 카드는 가장 잔 집계로 받는다.
-        gran: r === "1m" ? "5m" : r,
+        // 집계·1분은 g 를 안 보낸다 — 집계는 서버가 고르고, 1분은 틱 라우트가 그린다.
+        gran: granOfTickUnit(u),
         ...over,
       };
     },
     [customFrom, customTo, userId, actionTyp, excludeErrCds]
   );
 
-  // 1분 해상도에서는 두 번 조회한다 — 집계(KPI·나머지 카드) + 틱(추이·게이지·순간목록).
+  // 1분에서는 두 번 조회한다 — 집계(KPI·나머지 카드) + 틱(추이·게이지·순간목록).
   // 화면을 통째로 갈아끼우지 않는 대가이고, 1분은 24시간 이하에서만 고를 수 있어 감당된다.
-  const load = useCallback(async (f: StatsFilter, r: Resolution) => {
+  const load = useCallback(async (f: StatsFilter, u: TickUnit) => {
     setLoading(true);
     setErr(null);
 
@@ -142,7 +142,7 @@ export default function DashboardPage() {
     try {
       const [nextStats, nextTick] = await Promise.all([
         apiJson<StatsResponse>(`/api/stats?${q.toString()}`, { cache: "no-store" }),
-        r === "1m"
+        u === "1m"
           ? apiJson<TickStatsResponse>(`/api/stats/tick?${tq.toString()}`, { cache: "no-store" })
               .catch((e) => {
                 tickErr = errMessage(e, "틱 조회를 불러오지 못했습니다.");
@@ -163,65 +163,65 @@ export default function DashboardPage() {
   }, []);
 
   const run = useCallback(
-    (p: Preset, r: Resolution, over: Partial<StatsFilter> = {}) => load(filterFor(p, r, over), r),
+    (p: Preset, u: TickUnit, over: Partial<StatsFilter> = {}) => load(filterFor(p, u, over), u),
     [load, filterFor]
   );
 
   useEffect(() => {
-    if (!resReady) return;
-    run(preset, res);
+    if (!unitReady) return;
+    run(preset, unit);
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, [resReady]);
+  }, [unitReady]);
 
   useEffect(() => {
     if (!auto || preset === "custom") return;
-    const id = setInterval(() => run(preset, res), refreshMs(res));
+    const id = setInterval(() => run(preset, unit), refreshMs(unit));
     return () => clearInterval(id);
-  }, [auto, preset, res, run]);
+  }, [auto, preset, unit, run]);
 
   const onApply = (e: React.FormEvent) => {
     e.preventDefault();
-    run(preset, res);
+    run(preset, unit);
   };
 
-  // 기간을 바꾸면 해상도가 무효가 될 수 있다 — 새 구간 기준으로 다시 고른다.
+  // 기간을 바꾸면 고른 틱 단위가 무효가 될 수 있다 — 새 구간 기준으로 다시 고른다.
   const onPresetClick = (k: Preset) => {
     setPreset(k);
-    if (k !== "custom") run(k, resFor(spanOf(k, customFrom, customTo)));
+    if (k !== "custom") run(k, unitFor(spanOf(k, customFrom, customTo)));
   };
 
-  const onRes = (r: Resolution) => {
-    setRes(r);
+  const onUnit = (r: TickUnit) => {
+    setUnit(r);
     run(preset, r);
   };
 
   const onSelectAction = (k: string) => {
     const next = actionTyp === k ? "" : k;
     setActionTyp(next);
-    run(preset, res, { actionTyp: next || undefined });
+    run(preset, unit, { actionTyp: next || undefined });
   };
 
   const hasFilter = !!(userId || actionTyp);
   const clearFilters = () => {
     setUserId("");
     setActionTyp("");
-    run(preset, res, { userId: undefined, actionTyp: undefined });
+    run(preset, unit, { userId: undefined, actionTyp: undefined });
   };
 
   const addExclude = (code: string) => {
     if (excludeErrCds.includes(code)) return;
     const next = [...excludeErrCds, code];
     setExcludeErrCds(next);
-    run(preset, res, { excludeErrCds: next });
+    run(preset, unit, { excludeErrCds: next });
   };
   const removeExclude = (code: string) => {
     const next = excludeErrCds.filter((c) => c !== code);
     setExcludeErrCds(next);
-    run(preset, res, { excludeErrCds: next.length > 0 ? next : undefined });
+    run(preset, unit, { excludeErrCds: next.length > 0 ? next : undefined });
   };
   const clearExcludes = () => {
     setExcludeErrCds([]);
-    run(preset, res, { excludeErrCds: undefined });
+    run(preset, unit, { excludeErrCds: undefined });
   };
 
   return (
@@ -237,7 +237,7 @@ export default function DashboardPage() {
         </div>
 
         <form className="dash-filter" onSubmit={onApply}>
-          {/* 기간만 고르는 줄이다. 해상도는 차트 머리에 있고, 이 줄은 해상도에 따라 바뀌지 않는다. */}
+          {/* 기간만 고르는 줄이다. 틱 단위는 차트 바로 위에 있고, 이 줄은 그것에 따라 바뀌지 않는다. */}
           <div className="preset-group" role="tablist" aria-label="time preset">
                 {PRESETS.map((p) => (
                   <button
@@ -287,7 +287,7 @@ export default function DashboardPage() {
             onChange={(e) => {
               const v = e.target.value;
               setActionTyp(v);
-              run(preset, res, { actionTyp: v || undefined });
+              run(preset, unit, { actionTyp: v || undefined });
             }}
             aria-label="ACTION_TYP"
           >
@@ -320,24 +320,24 @@ export default function DashboardPage() {
           {/* 1. Hero KPIs — 한눈에 보는 핵심 지표 */}
           <StatsCards stats={stats} />
 
-          {/* 해상도 — 차트 바로 위 자기 줄. ⚠️ 차트 카드 머리 안으로 넣지 말 것:
+          {/* 틱 단위 — 차트 바로 위 자기 줄. ⚠️ 차트 카드 머리 안으로 넣지 말 것:
               1분 조회가 실패하면 그 카드가 통째로 사라져 되돌릴 컨트롤이 없어진다. */}
-          <div className="res-bar">
-            <ResolutionSelect
-              value={res}
-              options={resOptions}
-              onChange={onRes}
+          <div className="tick-bar">
+            <TickSelect
+              value={unit}
+              options={unitOptions}
+              onChange={onUnit}
               pulsing={auto && preset !== "custom"}
             />
           </div>
 
-          {res === "1m" && actionTyp && (
+          {unit === "1m" && actionTyp && (
             <div className="tick-notice warn">
               1분 추이는 진입 레이어 행에서 세므로 <b>ACTION_TYP 이 걸리지 않습니다</b> — 위 KPI 와 대상이 다릅니다.
             </div>
           )}
 
-          {res === "1m" ? (
+          {unit === "1m" ? (
             tick && <TickMonitor stats={tick} metrics={BIZ_METRICS} rowsLabel="요청" />
           ) : (
           <>
@@ -346,7 +346,7 @@ export default function DashboardPage() {
             <div className="dash-card-head">
               <div className="dash-card-title-group">
                 <span className="dash-card-title">사용 추이</span>
-                <span className="dash-card-sub">상태별 적층 · {resolutionLabel(stats.granularity)} 단위</span>
+                <span className="dash-card-sub">상태별 적층 · {granularityLabel(stats.granularity)} 단위</span>
               </div>
               <div className="dash-card-aux">
                 <span className="aux-pill">
@@ -379,7 +379,7 @@ export default function DashboardPage() {
               <div className="dash-card-title-group">
                 <span className="dash-card-title">평균 응답 속도</span>
                 <span className="dash-card-sub">
-                  Action 전체 응답시간 · CUBE 수신→응답(LLM 포함 전 구간) · {resolutionLabel(stats.granularity)} 단위
+                  Action 전체 응답시간 · CUBE 수신→응답(LLM 포함 전 구간) · {granularityLabel(stats.granularity)} 단위
                 </span>
               </div>
               <div className="dash-card-aux">

@@ -18,8 +18,8 @@ import {
   spanOfSel,
   useTimeRange,
 } from "@/components/ui/TimeRangeProvider";
-import { Resolution } from "@/lib/timeBuckets";
-import { ResolutionSelect, useResolution } from "@/components/charts/ResolutionSelect";
+import { TickUnit, granOfTickUnit } from "@/lib/timeBuckets";
+import { TickSelect, useTickUnit } from "@/components/charts/TickSelect";
 import { AutoRefreshToggle, refreshMs, useAutoRefresh } from "@/components/charts/AutoRefresh";
 import { DimCard } from "@/features/timeouts/DimCard";
 import { ReasonList } from "@/features/timeouts/ReasonList";
@@ -57,15 +57,15 @@ export default function TimeoutsPage() {
   const [tick, setTick] = useState<TickStatsResponse | null>(null);
 
   const spanMs = useMemo(() => spanOfSel(sel), [sel]);
-  const { res, options: resOptions, ready: resReady, setRes, resFor } = useResolution("timeouts", spanMs);
+  const { unit, options: unitOptions, ready: unitReady, setUnit, unitFor } = useTickUnit("timeouts", spanMs);
   const [auto, setAuto] = useAutoRefresh("timeouts");
 
   const agentIdRef = useRef(agentId);
   agentIdRef.current = agentId;
 
-  // 1분 해상도에서는 두 번 조회한다 — 집계(KPI·나머지 카드) + 틱(분당 타임아웃/실패).
+  // 1분에서는 두 번 조회한다 — 집계(KPI·나머지 카드) + 틱(분당 타임아웃/실패).
   const load = useCallback(
-    async (r: Range, nodeNm: string, modelNm: string, resolution: Resolution) => {
+    async (r: Range, nodeNm: string, modelNm: string, unit: TickUnit) => {
       const requestFor = agentId; // 이 요청이 향한 에이전트
       setLoading(true);
       setErr(null);
@@ -77,13 +77,14 @@ export default function TimeoutsPage() {
 
       const tq = new URLSearchParams(q);
       tq.set("view", "failure");
-      if (resolution !== "1m") q.set("g", resolution);
+      const g = granOfTickUnit(unit);
+      if (g) q.set("g", g);
 
       let tickErr: string | null = null;
       try {
         const [data, tickData] = await Promise.all([
           apiJson<TimeoutStatsResponse>(`/api/timeouts?${q.toString()}`, { cache: "no-store" }),
-          resolution === "1m"
+          unit === "1m"
             ? apiJson<TickStatsResponse>(`/api/tokens/tick?${tq.toString()}`, { cache: "no-store" })
                 .catch((e) => {
                   tickErr = errMessage(e, "틱 조회를 불러오지 못했습니다.");
@@ -111,20 +112,20 @@ export default function TimeoutsPage() {
   const currentRange = useCallback((): Range => resolveRange(sel), [sel]);
 
   useEffect(() => {
-    if (!ready || !rangeReady || !resReady) return;
+    if (!ready || !rangeReady || !unitReady) return;
     setNode("");
     setModel("");
     setStats(null);
     setTick(null);
-    load(resolveRange(sel), "", "", res);
+    load(resolveRange(sel), "", "", unit);
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, [ready, rangeReady, resReady, agentId]);
+  }, [ready, rangeReady, unitReady, agentId]);
 
   useEffect(() => {
     if (!auto || sel.preset === "custom") return;
-    const id = setInterval(() => load(resolveRange(sel), node, model, res), refreshMs(res));
+    const id = setInterval(() => load(resolveRange(sel), node, model, unit), refreshMs(unit));
     return () => clearInterval(id);
-  }, [auto, sel, node, model, res, load]);
+  }, [auto, sel, node, model, unit, load]);
 
   useEffect(() => {
     if (sel.preset === "custom" && sel.customFrom && sel.customTo) {
@@ -133,16 +134,16 @@ export default function TimeoutsPage() {
     }
   }, [sel.preset, sel.customFrom, sel.customTo]);
 
-  // 기간을 바꾸면 해상도가 무효가 될 수 있다 — 새 구간 기준으로 다시 고른다.
+  // 기간을 바꾸면 고른 틱 단위가 무효가 될 수 있다 — 새 구간 기준으로 다시 고른다.
   const onPreset = (p: RangePreset) => {
     const next: TimeRangeSel = { ...sel, preset: p };
     setPreset(p);
     setDraftCustom(false);
-    const r = resFor(spanOfSel(next));
+    const r = unitFor(spanOfSel(next));
     load(resolveRange(next), node, model, r);
   };
-  const onRes = (r: Resolution) => {
-    setRes(r);
+  const onUnit = (r: TickUnit) => {
+    setUnit(r);
     load(currentRange(), node, model, r);
   };
   const enterCustom = () => {
@@ -159,9 +160,9 @@ export default function TimeoutsPage() {
     const next: TimeRangeSel = { preset: "custom", customFrom, customTo };
     setCustom(customFrom, customTo);
     setDraftCustom(false);
-    load(resolveRange(next), node, model, resFor(spanOfSel(next)));
+    load(resolveRange(next), node, model, unitFor(spanOfSel(next)));
   };
-  const reload = (nodeNm: string, modelNm: string) => load(currentRange(), nodeNm, modelNm, res);
+  const reload = (nodeNm: string, modelNm: string) => load(currentRange(), nodeNm, modelNm, unit);
   const onNode = (k: string) => { const next = node === k ? "" : k; setNode(next); reload(next, model); };
   const onModel = (k: string) => { const next = model === k ? "" : k; setModel(next); reload(node, next); };
 
@@ -188,7 +189,7 @@ export default function TimeoutsPage() {
         </div>
 
         <div className="dash-filter">
-          {/* 기간만 고르는 줄이다. 해상도는 차트 바로 위에 있고, 이 줄은 해상도에 따라 바뀌지 않는다. */}
+          {/* 기간만 고르는 줄이다. 틱 단위는 차트 바로 위에 있고, 이 줄은 그것에 따라 바뀌지 않는다. */}
           <div className="preset-group" role="tablist" aria-label="time preset">
                 {RANGE_PRESETS.map((p) => (
                   <button
@@ -299,18 +300,18 @@ export default function TimeoutsPage() {
             </div>
           </div>
 
-          {/* 해상도 — 차트 바로 위 자기 줄. ⚠️ 차트 카드 머리 안으로 넣지 말 것:
+          {/* 틱 단위 — 차트 바로 위 자기 줄. ⚠️ 차트 카드 머리 안으로 넣지 말 것:
               1분 조회가 실패하면 그 카드가 통째로 사라져 되돌릴 컨트롤이 없어진다. */}
-          <div className="res-bar">
-            <ResolutionSelect
-              value={res}
-              options={resOptions}
-              onChange={onRes}
+          <div className="tick-bar">
+            <TickSelect
+              value={unit}
+              options={unitOptions}
+              onChange={onUnit}
               pulsing={auto && !customOpen}
             />
           </div>
 
-          {res === "1m" ? (
+          {unit === "1m" ? (
             tick && <TickMonitor stats={tick} metrics={TIMEOUT_METRICS} rowsLabel="호출" />
           ) : (
           <section className="dash-card dash-card-hero">

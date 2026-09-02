@@ -1,5 +1,5 @@
 import { StatsResponse, TimeBucket } from "@/lib/types";
-import { resolutionLabel } from "@/lib/timeBuckets";
+import { granularityLabel } from "@/lib/timeBuckets";
 
 function pct(n: number, total: number): string {
   if (total === 0) return "0%";
@@ -56,7 +56,7 @@ export function StatsCards({ stats }: { stats: StatsResponse }) {
       <HeroCard
         title="Total Traces"
         value={total.toLocaleString()}
-        sub={`peak ${peakValue.toLocaleString()} / ${resolutionLabel(stats.granularity)}`}
+        sub={`peak ${peakValue.toLocaleString()} / ${granularityLabel(stats.granularity)}`}
         spark={totalSpark}
         color="var(--accent)"
         tone="default"

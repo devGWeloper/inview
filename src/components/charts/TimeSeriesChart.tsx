@@ -13,7 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { StatsResponse, TimeBucket } from "@/lib/types";
-import { resolutionLabel } from "@/lib/timeBuckets";
+import { granularityLabel, tickLabeler } from "@/lib/timeBuckets";
 
 const STATUS_KEYS = ["ok", "fail", "pending"] as const;
 type StatusKey = typeof STATUS_KEYS[number];
@@ -30,10 +30,6 @@ const STATUS_LABEL: Record<StatusKey, string> = {
   pending: "PENDING",
 };
 
-function fmtTick(ts: string, g: StatsResponse["granularity"]): string {
-  if (g === "1d") return ts.slice(5, 10);
-  return ts.slice(11, 16);
-}
 
 function fmtFullTs(ts: string, g: StatsResponse["granularity"]): string {
   if (g === "1d") return ts.slice(0, 10);
@@ -79,6 +75,11 @@ function CustomTooltip({
 
 export function TimeSeriesChart({ stats }: { stats: Pick<StatsResponse, "granularity" | "buckets"> }) {
   const granularity = stats.granularity;
+  // X축 눈금은 구간 길이가 정한다 — 하루를 넘는데 시:분만 찍으면 라벨이 날마다 되돌아온다.
+  const fmtTick = useMemo(
+    () => tickLabeler(stats.buckets[0]?.ts, stats.buckets[stats.buckets.length - 1]?.ts, granularity),
+    [stats.buckets, granularity]
+  );
   const [hidden, setHidden] = useState<Record<StatusKey, boolean>>({
     ok: false, fail: false, pending: false,
   });
@@ -86,13 +87,13 @@ export function TimeSeriesChart({ stats }: { stats: Pick<StatsResponse, "granula
   const data: Row[] = useMemo(() => {
     return stats.buckets.map((b: TimeBucket) => ({
       ts: b.ts,
-      tick: fmtTick(b.ts, granularity),
+      tick: fmtTick(b.ts),
       ok: b.ok,
       fail: b.fail,
       pending: b.pending,
       total: b.ok + b.fail + b.pending,
     }));
-  }, [stats.buckets, granularity]);
+  }, [stats.buckets, fmtTick]);
 
   const { peakIdx, peakVal, peakTs, avgSuccess } = useMemo(() => {
     let pIdx = -1, pVal = 0, totalAll = 0, okAll = 0;
@@ -132,7 +133,7 @@ export function TimeSeriesChart({ stats }: { stats: Pick<StatsResponse, "granula
           <span className="ts-meta">avg success {avgSuccess.toFixed(1)}%</span>
         )}
         <span className="ts-meta">
-          {data.length} buckets · {resolutionLabel(granularity)}
+          {data.length} buckets · {granularityLabel(granularity)}
         </span>
       </div>
 

@@ -13,7 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { TimeoutBucket, TimeoutStatsResponse } from "@/lib/types";
-import { resolutionLabel } from "@/lib/timeBuckets";
+import { granularityLabel, tickLabeler } from "@/lib/timeBuckets";
 
 const SERIES = ["timeout", "other"] as const;
 type SeriesKey = typeof SERIES[number];
@@ -32,10 +32,6 @@ type Gran = TimeoutStatsResponse["granularity"];
 
 export type TimeoutSeries = { granularity: Gran; buckets: TimeoutBucket[] };
 
-function fmtTick(ts: string, g: Gran): string {
-  if (g === "1d") return ts.slice(5, 10);
-  return ts.slice(11, 16);
-}
 
 function fmtFullTs(ts: string, g: Gran): string {
   if (g === "1d") return ts.slice(0, 10);
@@ -79,6 +75,11 @@ function CustomTooltip({
 
 export function TimeoutTrendChart({ stats }: { stats: TimeoutSeries }) {
   const granularity = stats.granularity;
+  // X축 눈금은 구간 길이가 정한다 — 하루를 넘는데 시:분만 찍으면 라벨이 날마다 되돌아온다.
+  const fmtTick = useMemo(
+    () => tickLabeler(stats.buckets[0]?.ts, stats.buckets[stats.buckets.length - 1]?.ts, granularity),
+    [stats.buckets, granularity]
+  );
   const [hidden, setHidden] = useState<Record<SeriesKey, boolean>>({
     timeout: false,
     other: false,
@@ -88,12 +89,12 @@ export function TimeoutTrendChart({ stats }: { stats: TimeoutSeries }) {
     () =>
       stats.buckets.map((b: TimeoutBucket) => ({
         ts: b.ts,
-        tick: fmtTick(b.ts, granularity),
+        tick: fmtTick(b.ts),
         timeout: b.timeout,
         other: Math.max(0, b.failed - b.timeout),
         total: b.failed,
       })),
-    [stats.buckets, granularity]
+    [stats.buckets, fmtTick]
   );
 
   const { peakIdx, peakVal, peakTs } = useMemo(() => {
@@ -122,7 +123,7 @@ export function TimeoutTrendChart({ stats }: { stats: TimeoutSeries }) {
           </button>
         ))}
         <span className="ts-legend-spacer" />
-        <span className="ts-meta">{data.length} buckets · {resolutionLabel(granularity)}</span>
+        <span className="ts-meta">{data.length} buckets · {granularityLabel(granularity)}</span>
       </div>
 
       <div className="ts-chart">

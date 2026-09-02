@@ -8,7 +8,9 @@ import {
   FailureStatus,
   FailureStatusCounts,
   RequestFailureContextItem,
+  ErrCodeCount,
   FAILURE_STATUSES,
+  NO_ERR_CD,
   LAYER_ORDER,
 } from "./types";
 import { logger } from "./logger";
@@ -38,6 +40,8 @@ export interface RequestFailureQuery {
   dateTo?: string;
   userId?: string;
   errCd?: string;
+  /** 이 에러코드들은 목록에서 제외한다. ERR_CD 가 NULL 인 요청은 NO_ERR_CD 로 지정 */
+  excludeErrCds?: string[];
   limit?: number;
 }
 
@@ -45,6 +49,7 @@ export interface RequestFailureListResult {
   items: RequestFailure[];
   counts: FailureStatusCounts;
   affectedUsers: number;
+  errCodes: ErrCodeCount[];
   available: boolean;
   reason?: string;
   triageAvailable: boolean;
@@ -74,6 +79,16 @@ function clampNum(v: unknown, dflt: number, min: number, max: number): number {
   return Math.max(min, Math.min(n, max));
 }
 
+function normalizeExcluded(v: string[] | undefined): string[] {
+  if (!Array.isArray(v)) return [];
+  const out = new Set<string>();
+  for (const raw of v) {
+    const t = typeof raw === "string" ? raw.trim() : "";
+    if (t) out.add(t);
+  }
+  return [...out].slice(0, 50);
+}
+
 function oraMsg(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e);
   return raw.split("\n")[0].trim() || "알 수 없는 오류";
@@ -84,6 +99,7 @@ export async function fetchRequestFailures(q: RequestFailureQuery): Promise<Requ
     items: [],
     counts: { open: 0, investigating: 0, resolved: 0, ignored: 0 },
     affectedUsers: 0,
+    errCodes: [],
     available: false,
     triageAvailable: false,
   };
@@ -99,7 +115,7 @@ export async function fetchRequestFailures(q: RequestFailureQuery): Promise<Requ
 
   const limit = clampNum(q.limit, 300, 1, 1000);
   const where: string[] = ["ACTION_TYP IS NULL", "RECV_MSG_CTN IS NOT NULL"];
-  const binds: Record<string, unknown> = { limit };
+  const binds: Record<string, unknown> = {};
   if (q.dateFrom) {
     where.push("RECV_TM >= TO_TIMESTAMP(:dateFrom, 'YYYY-MM-DD\"T\"HH24:MI:SS')");
     binds.dateFrom = q.dateFrom;
@@ -117,6 +133,26 @@ export async function fetchRequestFailures(q: RequestFailureQuery): Promise<Requ
     binds.errCd = q.errCd;
   }
 
+  // 코드 분포는 제외 필터를 걸기 전 WHERE 로 센다 — 가려둔 코드도 화면에서 되살릴 수 있어야 한다
+  const codeSql = `
+    SELECT NVL(ERR_CD, :noneCd) AS CODE, COUNT(*) AS CNT
+      FROM BIZ_AIACTIONTXN_HIS
+     WHERE ${where.join(" AND ")}
+     GROUP BY NVL(ERR_CD, :noneCd)
+     ORDER BY CNT DESC`;
+  const codeBinds = { ...binds, noneCd: NO_ERR_CD };
+
+  const listBinds: Record<string, unknown> = { ...binds, limit };
+  const excluded = normalizeExcluded(q.excludeErrCds);
+  if (excluded.length > 0) {
+    const ph = excluded.map((cd, i) => {
+      listBinds[`x${i}`] = cd;
+      return `:x${i}`;
+    });
+    listBinds.noneCd = NO_ERR_CD;
+    where.push(`NVL(ERR_CD, :noneCd) NOT IN (${ph.join(", ")})`);
+  }
+
   const sql = `
     SELECT TRACE_ID, TIMEKEY, USER_ID, SYS_ID, CHANNEL_ID,
            RECV_MSG_CTN, RESP_MSG_CTN, HTTP_STS_CD, ERR_CD, ERR_DESC_CTN,
@@ -131,7 +167,7 @@ export async function fetchRequestFailures(q: RequestFailureQuery): Promise<Requ
   try {
     conn = await oracle.getConnection(cfg);
 
-    const res = await conn.execute(sql, binds, { outFormat: oracle.OBJECT });
+    const res = await conn.execute(sql, listBinds, { outFormat: oracle.OBJECT });
     const raws: RawFailure[] = ((res.rows ?? []) as Record<string, unknown>[]).map((r) => ({
       traceId: String(s(r, "TRACE_ID") ?? ""),
       timekey: String(s(r, "TIMEKEY") ?? ""),
@@ -194,6 +230,22 @@ export async function fetchRequestFailures(q: RequestFailureQuery): Promise<Requ
       };
     });
 
+    let errCodes: ErrCodeCount[] = [];
+    try {
+      const cr = await conn.execute(codeSql, codeBinds, { outFormat: oracle.OBJECT });
+      errCodes = ((cr.rows ?? []) as Record<string, unknown>[])
+        .map((r) => ({
+          code: String(s(r, "CODE") ?? NO_ERR_CD),
+          count: Number((r.CNT ?? r.cnt) ?? 0),
+        }))
+        .filter((c) => c.count > 0);
+    } catch (e) {
+      logger.warn("fetchRequestFailures: 에러코드 분포 조회 실패 — 조회된 목록으로 대체", { err: String(e) });
+      const fallback = new Map<string, number>();
+      for (const r of raws) fallback.set(r.errCd ?? NO_ERR_CD, (fallback.get(r.errCd ?? NO_ERR_CD) ?? 0) + 1);
+      errCodes = [...fallback].map(([code, count]) => ({ code, count })).sort((a, b) => b.count - a.count);
+    }
+
     const counts: FailureStatusCounts = { open: 0, investigating: 0, resolved: 0, ignored: 0 };
     const users = new Set<string>();
     for (const it of items) {
@@ -201,8 +253,10 @@ export async function fetchRequestFailures(q: RequestFailureQuery): Promise<Requ
       if (it.userId) users.add(it.userId);
     }
 
-    logger.info("fetchRequestFailures ok", { items: items.length, triageAvailable, ms: Date.now() - t0 });
-    return { items, counts, affectedUsers: users.size, available: true, triageAvailable };
+    logger.info("fetchRequestFailures ok", {
+      items: items.length, triageAvailable, excluded: excluded.length, codes: errCodes.length, ms: Date.now() - t0,
+    });
+    return { items, counts, affectedUsers: users.size, errCodes, available: true, triageAvailable };
   } catch (e) {
     logger.error("fetchRequestFailures failed", { ms: Date.now() - t0, err: String(e) });
     return { ...empty, reason: String(e) };

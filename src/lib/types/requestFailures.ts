@@ -27,6 +27,14 @@ export interface RequestFailure {
   triagedAt: string | null;
 }
 
+/** ERR_CD 가 NULL 인 요청(= 라우팅 실패) 을 필터에서 가리키는 센티넬. 서버/클라 공용. */
+export const NO_ERR_CD = "__NONE__";
+
+export interface ErrCodeCount {
+  code: string;
+  count: number;
+}
+
 export interface FailureStatusCounts {
   open: number;
   investigating: number;
@@ -39,6 +47,8 @@ export interface RequestFailureListResponse {
   total: number;
   counts: FailureStatusCounts;
   affectedUsers: number;
+  /** 기간 내 에러코드 분포 — 제외 필터를 적용하기 *전* 기준이라 가려둔 코드도 계속 보인다 */
+  errCodes: ErrCodeCount[];
   available: boolean;
   reason?: string;
   triageAvailable: boolean;

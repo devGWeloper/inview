@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FAILURE_STATUSES,
   FailureStatus,
+  ErrCodeCount,
+  NO_ERR_CD,
   RequestFailure,
   RequestFailureListResponse,
   RequestFailureContextItem,
@@ -26,6 +28,22 @@ const RANGES = [
   { key: "all", label: "전체", hours: 0 },
 ] as const;
 type RangeKey = (typeof RANGES)[number]["key"];
+
+const HIDDEN_KEY = "tracex.rft.hiddenErrCds";
+
+function readHiddenErrCds(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(HIDDEN_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function errCdLabel(code: string): string {
+  return code === NO_ERR_CD ? "라우팅 실패" : code;
+}
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
 function toLocalIso(d: Date): string {
@@ -62,6 +80,7 @@ export function RequestFailureTracker() {
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<RangeKey>("all");
   const [statusFilter, setStatusFilter] = useState<FailureStatus | "all">("all");
+  const [hiddenErrCds, setHiddenErrCds] = useState<string[]>(readHiddenErrCds);
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [errMap, setErrMap] = useState<Record<string, string>>({});
@@ -70,12 +89,14 @@ export function RequestFailureTracker() {
   const { user } = useAuth();
   const canEdit = !!user && roleAtLeast(user.role, "ADMIN");
 
-  const load = useCallback(async (rk: RangeKey) => {
+  const load = useCallback(async (rk: RangeKey, hide: string[]) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ limit: "400" });
       const hours = RANGES.find((r) => r.key === rk)?.hours ?? 0;
       if (hours > 0) params.set("dateFrom", toLocalIso(new Date(Date.now() - hours * 3600_000)));
+      // 숨긴 코드는 서버에서 걸러야 한다 — 클라 필터면 상위 400건이 그 코드로 다 차버린다
+      if (hide.length > 0) params.set("excludeErrCd", hide.join(","));
       const d = await apiJson<RequestFailureListResponse>(
         `/api/request-failures?${params.toString()}`, { cache: "no-store" }
       );
@@ -89,7 +110,15 @@ export function RequestFailureTracker() {
     }
   }, []);
 
-  useEffect(() => { load(range); }, [range, load]);
+  const hiddenKey = useMemo(() => [...hiddenErrCds].sort().join(","), [hiddenErrCds]);
+
+  useEffect(() => {
+    load(range, hiddenKey ? hiddenKey.split(",") : []);
+  }, [range, hiddenKey, load]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem(HIDDEN_KEY, JSON.stringify(hiddenErrCds)); } catch { /* ignore */ }
+  }, [hiddenErrCds]);
 
   useEffect(() => {
     apiJson<{ codes?: Record<string, string> }>("/api/error-codes", { cache: "no-store" })
@@ -99,6 +128,11 @@ export function RequestFailureTracker() {
 
   const items = data?.items ?? [];
   const counts = data?.counts ?? { open: 0, investigating: 0, resolved: 0, ignored: 0 };
+  const errCodes = asArray<ErrCodeCount>(data?.errCodes);
+
+  const toggleErrCd = useCallback((code: string) => {
+    setHiddenErrCds((prev) => (prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]));
+  }, []);
 
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -164,10 +198,18 @@ export function RequestFailureTracker() {
             </button>
           ))}
         </div>
-        <button type="button" className="btn ghost xs" onClick={() => load(range)} disabled={loading}>
+        <button type="button" className="btn ghost xs" onClick={() => load(range, hiddenErrCds)} disabled={loading}>
           {loading ? "불러오는 중…" : "↻ 새로고침"}
         </button>
       </div>
+
+      <ErrCodeFilter
+        codes={errCodes}
+        hidden={hiddenErrCds}
+        errMap={errMap}
+        onToggle={toggleErrCd}
+        onReset={() => setHiddenErrCds([])}
+      />
 
       <div className="rft-split">
         <section className="rft-list-panel">
@@ -282,6 +324,69 @@ function RftKpis({
           <div className="rft-kpi-label">{k.label}</div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function ErrCodeFilter({
+  codes, hidden, errMap, onToggle, onReset,
+}: {
+  codes: ErrCodeCount[];
+  hidden: string[];
+  errMap: Record<string, string>;
+  onToggle: (code: string) => void;
+  onReset: () => void;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const COLLAPSED = 8;
+
+  const all = useMemo(() => {
+    const known = new Set(codes.map((c) => c.code));
+    const ghosts = hidden.filter((h) => !known.has(h)).map((code) => ({ code, count: 0 }));
+    return [...codes, ...ghosts];
+  }, [codes, hidden]);
+
+  if (all.length === 0) return null;
+
+  const hiddenSet = new Set(hidden);
+  const shown = showAll ? all : all.filter((c, i) => i < COLLAPSED || hiddenSet.has(c.code));
+  const overflow = all.length - shown.length;
+
+  return (
+    <div className="rft-errbar">
+      <span className="rft-errbar-label" title="기간 내 발생 건수 기준. 끈 코드는 목록에서 제외된다(조회 단계에서 걸러짐)">
+        에러코드
+      </span>
+      <div className="rft-errbar-chips">
+        {shown.map((c) => {
+          const off = hiddenSet.has(c.code);
+          const mean = c.code === NO_ERR_CD ? "ACTION_TYP 미부여 — 라우팅 실패" : errMap[c.code] || "";
+          return (
+            <button
+              key={c.code}
+              type="button"
+              className={"rft-errchip" + (off ? " off" : "") + (c.code === NO_ERR_CD ? " route" : "")}
+              onClick={() => onToggle(c.code)}
+              aria-pressed={!off}
+              title={`${errCdLabel(c.code)}${mean ? ` — ${mean}` : ""}
+클릭하면 ${off ? "다시 표시" : "목록에서 제외"}`}
+            >
+              <span className="rft-errchip-name">{errCdLabel(c.code)}</span>
+              <span className="rft-errchip-count">{c.count.toLocaleString()}</span>
+            </button>
+          );
+        })}
+        {overflow > 0 && (
+          <button type="button" className="rft-errchip more" onClick={() => setShowAll((v) => !v)}>
+            {showAll ? "접기" : `+${overflow} 더보기`}
+          </button>
+        )}
+      </div>
+      {hidden.length > 0 && (
+        <button type="button" className="rft-errbar-reset" onClick={onReset}>
+          {hidden.length}개 제외 중 · 모두 표시
+        </button>
+      )}
     </div>
   );
 }

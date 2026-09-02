@@ -13,7 +13,7 @@ import {
 } from "recharts";
 import { TokenBucket, TokenStatsResponse } from "@/lib/types";
 import { fmtDuration } from "@/lib/format";
-import { resolutionLabel } from "@/lib/timeBuckets";
+import { granularityLabel, tickLabeler } from "@/lib/timeBuckets";
 
 const COLOR = "#f59e0b"; // latency 전용 색 (토큰 차트와 구분)
 
@@ -21,10 +21,6 @@ type Gran = TokenStatsResponse["granularity"];
 
 export type TokenSeries = { granularity: Gran; buckets: TokenBucket[] };
 
-function fmtTick(ts: string, g: Gran): string {
-  if (g === "1d") return ts.slice(5, 10);
-  return ts.slice(11, 16);
-}
 
 function fmtFullTs(ts: string, g: Gran): string {
   if (g === "1d") return ts.slice(0, 10);
@@ -62,16 +58,21 @@ function CustomTooltip({
 
 export function TokenLatencyChart({ stats }: { stats: TokenSeries }) {
   const granularity = stats.granularity;
+  // X축 눈금은 구간 길이가 정한다 — 하루를 넘는데 시:분만 찍으면 라벨이 날마다 되돌아온다.
+  const fmtTick = useMemo(
+    () => tickLabeler(stats.buckets[0]?.ts, stats.buckets[stats.buckets.length - 1]?.ts, granularity),
+    [stats.buckets, granularity]
+  );
 
   const data: Row[] = useMemo(
     () =>
       stats.buckets.map((b: TokenBucket) => ({
         ts: b.ts,
-        tick: fmtTick(b.ts, granularity),
+        tick: fmtTick(b.ts),
         avgLatencyMs: b.avgLatencyMs,
         calls: b.calls,
       })),
-    [stats.buckets, granularity]
+    [stats.buckets, fmtTick]
   );
 
   const { peakIdx, peakVal, peakTs, hasData } = useMemo(() => {
@@ -102,7 +103,7 @@ export function TokenLatencyChart({ stats }: { stats: TokenSeries }) {
           평균 LLM 호출 속도
         </span>
         <span className="ts-legend-spacer" />
-        <span className="ts-meta">{data.length} buckets · {resolutionLabel(granularity)}</span>
+        <span className="ts-meta">{data.length} buckets · {granularityLabel(granularity)}</span>
       </div>
 
       <div className="ts-chart">

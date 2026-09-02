@@ -2,16 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { TimeoutStatsResponse, TimeoutModelSeries, TimeoutModelCell } from "@/lib/types";
-import { resolutionLabel } from "@/lib/timeBuckets";
+import { granularityLabel, tickLabeler } from "@/lib/timeBuckets";
 
 type Gran = TimeoutStatsResponse["granularity"];
 
 function fmtFullTs(ts: string, g: Gran): string {
   if (g === "1d") return ts.slice(0, 10);
   return ts.slice(0, 16).replace("T", " ");
-}
-function fmtTick(ts: string, g: Gran): string {
-  return g === "1d" ? ts.slice(5, 10) : ts.slice(11, 16);
 }
 
 function levelOf(cell: TimeoutModelCell): number {
@@ -37,6 +34,11 @@ export function TimeoutModelHeatmap({
   onSelectModel?: (model: string) => void;
 }) {
   const { modelTrend, buckets, granularity } = stats;
+  // X축 눈금은 구간 길이가 정한다 — 하루를 넘는데 시:분만 찍으면 라벨이 날마다 되돌아온다.
+  const fmtTick = useMemo(
+    () => tickLabeler(buckets[0]?.ts, buckets[buckets.length - 1]?.ts, granularity),
+    [buckets, granularity]
+  );
   const [hover, setHover] = useState<{ m: string; i: number } | null>(null);
 
   const bucketCount = buckets.length;
@@ -74,7 +76,7 @@ export function TimeoutModelHeatmap({
         </span>
         <span className="hm-leg-spacer" />
         <span className="hm-leg-hint mono">
-          {bucketCount} buckets · {resolutionLabel(granularity)} · 모델 {modelTrend.length}개
+          {bucketCount} buckets · {granularityLabel(granularity)} · 모델 {modelTrend.length}개
         </span>
       </div>
 
@@ -86,7 +88,7 @@ export function TimeoutModelHeatmap({
           {buckets.map((b, i) =>
             tickIdx.includes(i) ? (
               <span key={b.ts} className="hm-tick mono">
-                {fmtTick(b.ts, granularity)}
+                {fmtTick(b.ts)}
               </span>
             ) : (
               <span key={b.ts} className="hm-tick-empty" />

@@ -3,12 +3,12 @@
 // (라이브 갱신은 매번 '지금' 으로 구간을 다시 잡아 지정한 구간을 덮어쓴다).
 
 import { useCallback, useEffect, useState } from "react";
-import { Resolution } from "@/lib/timeBuckets";
+import { TickUnit } from "@/lib/timeBuckets";
 
 const storageKey = (k: string) => `tracex.auto.${k}`;
 
-export function refreshMs(res: Resolution): number {
-  return res === "1m" ? 10_000 : 30_000;
+export function refreshMs(unit: TickUnit): number {
+  return unit === "1m" ? 10_000 : 30_000;
 }
 
 export function useAutoRefresh(key: string): [boolean, (v: boolean) => void] {

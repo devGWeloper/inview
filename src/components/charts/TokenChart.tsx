@@ -13,7 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { TokenBucket, TokenStatsResponse } from "@/lib/types";
-import { resolutionLabel } from "@/lib/timeBuckets";
+import { granularityLabel, tickLabeler } from "@/lib/timeBuckets";
 
 const SERIES = ["inputTokens", "outputTokens"] as const;
 type SeriesKey = typeof SERIES[number];
@@ -32,10 +32,6 @@ type Gran = TokenStatsResponse["granularity"];
 
 export type TokenSeries = { granularity: Gran; buckets: TokenBucket[] };
 
-function fmtTick(ts: string, g: Gran): string {
-  if (g === "1d") return ts.slice(5, 10);
-  return ts.slice(11, 16);
-}
 
 function fmtFullTs(ts: string, g: Gran): string {
   if (g === "1d") return ts.slice(0, 10);
@@ -89,6 +85,11 @@ function CustomTooltip({
 
 export function TokenChart({ stats }: { stats: TokenSeries }) {
   const granularity = stats.granularity;
+  // X축 눈금은 구간 길이가 정한다 — 하루를 넘는데 시:분만 찍으면 라벨이 날마다 되돌아온다.
+  const fmtTick = useMemo(
+    () => tickLabeler(stats.buckets[0]?.ts, stats.buckets[stats.buckets.length - 1]?.ts, granularity),
+    [stats.buckets, granularity]
+  );
   const [hidden, setHidden] = useState<Record<SeriesKey, boolean>>({
     inputTokens: false,
     outputTokens: false,
@@ -98,13 +99,13 @@ export function TokenChart({ stats }: { stats: TokenSeries }) {
     () =>
       stats.buckets.map((b: TokenBucket) => ({
         ts: b.ts,
-        tick: fmtTick(b.ts, granularity),
+        tick: fmtTick(b.ts),
         inputTokens: b.inputTokens,
         outputTokens: b.outputTokens,
         total: b.totalTokens,
         calls: b.calls,
       })),
-    [stats.buckets, granularity]
+    [stats.buckets, fmtTick]
   );
 
   const { peakIdx, peakVal, peakTs } = useMemo(() => {
@@ -133,7 +134,7 @@ export function TokenChart({ stats }: { stats: TokenSeries }) {
           </button>
         ))}
         <span className="ts-legend-spacer" />
-        <span className="ts-meta">{data.length} buckets · {resolutionLabel(granularity)}</span>
+        <span className="ts-meta">{data.length} buckets · {granularityLabel(granularity)}</span>
       </div>
 
       <div className="ts-chart">

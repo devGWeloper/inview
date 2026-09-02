@@ -15,11 +15,18 @@ export async function GET(req: NextRequest) {
   const ctx = reqContext(req);
   const sp = req.nextUrl.searchParams;
 
+  const excludeErrCds = sp
+    .getAll("excludeErrCd")
+    .flatMap((v) => v.split(","))
+    .map((v) => v.trim())
+    .filter(Boolean);
+
   const result = await fetchRequestFailures({
     dateFrom: sp.get("dateFrom") || undefined,
     dateTo: sp.get("dateTo") || undefined,
     userId: sp.get("userId") || undefined,
     errCd: sp.get("errCd") || undefined,
+    excludeErrCds,
     limit: sp.get("limit") ? Number(sp.get("limit")) : undefined,
   });
 
@@ -28,6 +35,7 @@ export async function GET(req: NextRequest) {
     total: result.items.length,
     counts: result.counts,
     affectedUsers: result.affectedUsers,
+    errCodes: result.errCodes,
     available: result.available,
     reason: result.reason,
     triageAvailable: result.triageAvailable,
@@ -38,6 +46,7 @@ export async function GET(req: NextRequest) {
     ...ctx,
     available: result.available,
     items: result.items.length,
+    excluded: excludeErrCds.length,
     triageAvailable: result.triageAvailable,
     ms: Date.now() - t0,
   });

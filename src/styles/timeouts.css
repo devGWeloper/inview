@@ -1,0 +1,428 @@
+/* Timeout 탭 — 분포 · 히트맵 · 오류 사유 · 실패 호출 표 */
+
+/* ── LLM 호출 타임아웃 표기 (질문별 토큰) ──
+   GAIA 가 call_llm 예외를 STAT_CD='ERROR' 로 적재하면, 끊긴 노드만 빨갛게 집어준다. */
+.qnode.is-err {
+  background: color-mix(in srgb, var(--err) 12%, transparent);
+  color: var(--err);
+}
+.qcall-body.is-err { border-color: color-mix(in srgb, var(--err) 35%, transparent); }
+.qcall-status {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--err);
+  background: var(--err-soft);
+}
+.qcall-reason {
+  font-size: 13px;
+  font-family: var(--mono);
+  color: var(--text-3);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* ── Timeout 탭 ──
+   기존 BIZ 데이터(ERR_CD)만으로 타임아웃을 추적하는 화면. 대시보드/토큰 탭의
+   dash-*, kpi-*, top-* 스타일을 그대로 쓰고 목록/그리드만 여기서 정의한다. */
+.to-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+@media (max-width: 1180px) {
+  .to-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .to-grid { grid-template-columns: 1fr; }
+}
+
+/* 서버 조회 범위(노드/모델 필터) 칩 바 — 지금 보고 있는 게 무엇의 추이인지 밝힌다 */
+.to-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.to-scope-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.to-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid #f4c1bc;
+  background: var(--err-soft);
+  color: var(--err);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.to-chip b { font-family: var(--mono); font-weight: 700; }
+.to-chip:hover { filter: brightness(0.97); }
+/* 모델 칩은 앱 전역의 모델 색(qmodel)과 맞춘다 */
+.to-chip.is-model {
+  border-color: color-mix(in srgb, #7c3aed 32%, transparent);
+  background: color-mix(in srgb, #7c3aed 11%, transparent);
+  color: #7c3aed;
+}
+
+/* 목록은 테이블 — 카드보다 훑기 쉽고 컬럼 비교가 된다 */
+.to-table td { vertical-align: middle; }
+.to-table .to-col-q { white-space: normal; min-width: 180px; max-width: 340px; }
+.to-q {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.to-q.to-err { color: var(--err); font-family: var(--mono); font-size: 12px; }
+.to-st {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--llm-err);
+  background: var(--llm-err-soft);
+  white-space: nowrap;
+}
+.to-st.is-timeout { color: var(--err); background: var(--err-soft); }
+.to-trace { font-size: 11.5px; color: var(--text-muted); }
+
+/* 노드/모델 분포 행 — 이름 · 막대(폭 캡) · 실패 수 · 실패율.
+   막대는 마냥 늘어나면 보기 안 좋아 max 180px 로 캡. */
+.to-dims { display: flex; flex-direction: column; }
+.to-dim {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) minmax(60px, 180px) auto auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.to-dim:disabled { cursor: default; }
+.to-dim:not(:disabled):hover { background: var(--surface-2); }
+.to-dim.active { background: var(--err-soft); }
+.to-dim-key {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.to-dim-bar {
+  display: flex;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.to-dim-bar > span { display: block; height: 100%; }
+.to-dim-bar > .seg-t { background: var(--err); }
+.to-dim-bar > .seg-o { background: var(--llm-err); }
+.to-dim-val { font-size: 13px; font-weight: 700; color: var(--text); }
+.to-dim-rate { font-size: 12px; color: var(--text-muted); min-width: 46px; text-align: right; }
+
+/* ── 모델 × 시간 히트맵 (TimeoutModelHeatmap) ──
+   "이 시간대에 이 모델이 몇 건 요청 중 몇 건 실패했나" 를 셀 하나로 압축.
+   셀 색 = 실패율(6단계). 요청 자체가 없던 셀은 별도(lvl--1)로 구분해 "안 쓰였다" 를 표기. */
+.hm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 상단 범례 — 색 스케일 · 요청 없음 · 데이터 요약 */
+.hm-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.hm-leg-lbl {
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.hm-leg-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+}
+.hm-leg-hint.mono { font-family: var(--mono); }
+.hm-leg-spacer { flex: 1; }
+.hm-scale {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.hm-swatch {
+  display: inline-block;
+  width: 16px;
+  height: 12px;
+  border-radius: 2px;
+}
+/* 실패율 스케일 — 안정(초록) → 낮음(노랑) → 높음(주황) → 극심(빨강).
+   요청 없음(lvl--1)은 회색 격자 무늬로 "비활동" 을 표기. */
+.hm-swatch.lvl--1,
+.hm-cell.lvl--1 {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--surface-3) 0 3px,
+    var(--surface-2) 3px 6px
+  );
+}
+.hm-swatch.lvl-0, .hm-cell.lvl-0 { background: var(--ok-soft); }
+.hm-swatch.lvl-1, .hm-cell.lvl-1 { background: #fef3c7; }
+.hm-swatch.lvl-2, .hm-cell.lvl-2 { background: #fde68a; }
+.hm-swatch.lvl-3, .hm-cell.lvl-3 { background: #fdba74; }
+.hm-swatch.lvl-4, .hm-cell.lvl-4 { background: #f97316; }
+.hm-swatch.lvl-5, .hm-cell.lvl-5 { background: var(--err); }
+
+/* 그리드 본체 — 왼쪽 모델/총호출 라벨 + 중앙 셀 열 + 오른쪽 실패율 요약 */
+.hm-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  overflow-x: auto;
+}
+.hm-head {
+  display: grid;
+  align-items: end;
+  gap: 3px;
+  padding: 2px 4px 6px;
+  border-bottom: 1px solid var(--border);
+  min-width: 720px;
+}
+.hm-h-lbl {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.hm-h-lbl.num { text-align: right; }
+.hm-tick {
+  font-size: 11px;
+  color: var(--text-3);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hm-tick-empty { display: block; }
+
+.hm-row {
+  display: grid;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  min-width: 720px;
+  transition: background 120ms ease;
+}
+.hm-row:hover { background: var(--surface); }
+.hm-row.is-selected {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.hm-model {
+  border: none;
+  background: none;
+  padding: 4px 8px;
+  border-radius: 6px;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hm-model:disabled { cursor: default; }
+.hm-model:not(:disabled):hover { background: var(--accent-soft); color: var(--accent); }
+.hm-total {
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: right;
+  padding-right: 6px;
+  font-family: var(--mono);
+}
+
+.hm-cell {
+  height: 22px;
+  border-radius: 3px;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 100ms ease, box-shadow 100ms ease, outline-color 100ms ease;
+  outline: 1px solid transparent;
+}
+.hm-cell:hover,
+.hm-cell.is-hover {
+  transform: scale(1.6);
+  z-index: 2;
+  position: relative;
+  outline-color: var(--text);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+}
+.hm-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.hm-cell.lvl--1 { cursor: default; }
+.hm-cell.lvl--1:hover { transform: none; box-shadow: none; outline-color: transparent; }
+
+.hm-rate {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 0 4px;
+  line-height: 1.15;
+}
+.hm-rate-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.hm-rate-val.is-worst { color: var(--err); }
+.hm-rate-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+
+/* hover 상세 카드 — 그리드 아래 고정 슬롯(높이 유지, 내용만 교체) */
+.hm-detail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 12.5px;
+  color: var(--text-2);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.hm-detail.is-active {
+  border-style: solid;
+  border-color: var(--border-strong);
+  background: var(--surface);
+}
+.hm-detail-head {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.hm-detail-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.hm-detail-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.hm-detail-stat b { font-weight: 700; color: var(--text); }
+.hm-detail-stat.is-fail b { color: var(--fail); }
+.hm-detail-stat.is-timeout b { color: var(--err); }
+.hm-detail-rate {
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.hm-detail-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* ── 오류 사유 리스트 (ReasonList) ──
+   좁은 카드 컬럼에 들어가는 미니 리스트 — 순위 · 문구 · 발생 수/비중. */
+.rs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rs-item {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  transition: background 120ms ease;
+}
+.rs-item + .rs-item { border-top: 1px dashed var(--border); }
+.rs-item:hover { background: var(--surface-2); }
+.rs-rank {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-align: center;
+}
+.rs-item:nth-child(1) .rs-rank { color: var(--err); }
+.rs-item:nth-child(2) .rs-rank,
+.rs-item:nth-child(3) .rs-rank { color: var(--fail); }
+.rs-text {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.4;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+.rs-stats {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+}
+.rs-stats b { font-size: 13px; font-weight: 700; color: var(--text); }
+.rs-stats-sub { font-size: 11.5px; color: var(--text-muted); }
+

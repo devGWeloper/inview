@@ -1,0 +1,151 @@
+/* 이벤트-FAB 매핑 매트릭스 (fm-*) */
+/* ---- /event-fabs FAB 적용 매핑 (fm-*) ----
+   권한 매트릭스 콘솔 스타일: 컴팩트 툴바 + 스티키 헤더 매트릭스(내부 스크롤).
+   셀 = 토글 도트(켜면 액센트 채움 + 체크 팝), 열 헤더 클릭 = 열 일괄 토글,
+   행 액션은 hover 에만 노출. 이벤트 100개 스케일을 전제로 한 밀도. */
+.fm-page { flex: 1; min-height: 0; overflow: auto; padding: 18px 22px 28px; }
+.fm-shell { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+
+.fm-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.fm-title { display: flex; align-items: center; gap: 10px; margin-right: 4px; }
+.fm-title-ico {
+  flex-shrink: 0; width: 36px; height: 36px; border-radius: 11px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--accent), #4f46e5);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.32);
+}
+.fm-title-text { display: flex; flex-direction: column; gap: 1px; }
+.fm-title-main {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 16px; font-weight: 800; letter-spacing: -0.2px;
+}
+.fm-title-chip {
+  padding: 1.5px 7px; border-radius: 999px;
+  font-family: var(--mono); font-size: 10px; font-weight: 800; letter-spacing: 0.6px;
+  color: var(--accent); background: var(--accent-soft);
+}
+.fm-title-sub { font-size: 11.5px; color: var(--text-muted); }
+.fm-search {
+  flex: 1; min-width: 160px; max-width: 300px;
+  display: flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 10px;
+  border: 1px solid var(--border-strong); border-radius: 9px;
+  background: var(--surface); color: var(--text-muted);
+  transition: border-color .15s, box-shadow .15s;
+}
+.fm-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.fm-search input {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
+  font-size: 13px; color: var(--text);
+}
+.fm-search-clear {
+  border: 0; background: transparent; color: var(--text-muted);
+  font-size: 11px; cursor: pointer; padding: 2px 4px; border-radius: 5px;
+}
+.fm-search-clear:hover { color: var(--text); background: var(--surface-3); }
+.fm-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+/* 열람 전용(BR 이하) — 저장 버튼 자리에 상태만 남긴다 */
+.fm-readonly {
+  font-size: 11px; font-weight: 600; letter-spacing: .02em;
+  color: var(--text-muted); border: 1px solid var(--border);
+  background: var(--surface-2); border-radius: 999px; padding: 4px 10px;
+}
+.fm-dirty-dot {
+  display: inline-block; width: 6px; height: 6px; margin-left: 7px;
+  border-radius: 50%; background: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.28);
+}
+
+.fm-panel {
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); overflow: auto;
+  max-height: min(64vh, 680px);
+}
+.fm-matrix { width: 100%; border-collapse: separate; border-spacing: 0; }
+.fm-matrix thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--surface-3);
+  font-family: var(--mono); font-size: 12px; font-weight: 800; letter-spacing: 0.7px;
+  color: var(--text-2); text-transform: uppercase; white-space: nowrap;
+  padding: 11px 8px 10px; border-bottom: 1px solid var(--border-strong);
+  text-align: center; cursor: pointer; user-select: none;
+  transition: color .12s, background .12s;
+}
+.fm-matrix thead th:hover { color: var(--accent); }
+.fm-matrix thead th.hl { color: var(--accent); background: var(--accent-soft); }
+.fm-matrix thead th.fm-th-event { text-align: left; padding-left: 22px; cursor: default; }
+.fm-matrix thead th.fm-th-event:hover { color: var(--text-2); }
+.fm-matrix thead th.fm-th-ops { cursor: default; }
+.fm-matrix tbody td { border-bottom: 1px solid var(--border); height: 40px; padding: 0; }
+.fm-matrix tbody tr:last-child td { border-bottom: 0; }
+.fm-matrix tbody tr:hover td { background: var(--surface-3); }
+.fm-cell { text-align: center; }
+.fm-cell.hl { background: var(--accent-soft); }
+
+.fm-dot {
+  width: 20px; height: 20px; border-radius: 6px;
+  border: 1.5px solid var(--border-strong); background: transparent;
+  display: inline-grid; place-items: center; cursor: pointer;
+  transition: border-color .12s, background .12s, box-shadow .12s, transform .12s;
+}
+.fm-dot::after {
+  content: "✓"; font-size: 11px; font-weight: 800; line-height: 1; color: #fff;
+  transform: scale(0);
+  transition: transform .15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.fm-dot:hover { border-color: var(--accent); transform: scale(1.12); }
+.fm-dot:active { transform: scale(0.9); }
+/* 열람 전용에서는 도트가 값 표시일 뿐 조작 대상이 아니다 */
+.fm-dot:disabled { cursor: default; }
+.fm-dot:disabled:hover { border-color: var(--border); transform: none; }
+.fm-dot.on:disabled:hover { border-color: var(--accent); }
+.fm-dot.on {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--accent), #4f46e5);
+  box-shadow: 0 1px 5px rgba(37, 99, 235, 0.35);
+}
+.fm-dot.on::after { transform: scale(1); }
+
+/* ⚠ .fm-matrix tbody td { padding:0 } 보다 우선하도록 td 까지 붙여 specificity 확보 */
+.fm-matrix tbody td.fm-td-event { min-width: 220px; padding: 0 8px 0 16px; }
+.fm-event-wrap { display: flex; align-items: center; gap: 6px; }
+.fm-event-input {
+  flex: 1; min-width: 0;
+  border: 0; outline: 0; background: transparent;
+  font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: 0.3px;
+  color: var(--text); padding: 6px 6px; border-radius: 6px;
+  transition: background .12s, box-shadow .12s;
+}
+.fm-event-input::placeholder { color: var(--text-muted); font-weight: 600; }
+.fm-event-input:focus {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 2px var(--accent-soft);
+}
+.fm-zero {
+  flex-shrink: 0; padding: 2px 7px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; color: var(--err); background: var(--err-soft);
+  white-space: nowrap;
+}
+.fm-matrix tbody tr.zero .fm-event-input { color: var(--err); }
+
+.fm-matrix tbody td.fm-td-ops { width: 1%; padding: 0 10px 0 4px; text-align: right; white-space: nowrap; }
+.fm-op {
+  width: 24px; height: 24px; margin-left: 2px;
+  border: 0; border-radius: 6px; background: transparent;
+  color: var(--text-muted); font-size: 12px; line-height: 1; cursor: pointer;
+  opacity: 0; transition: opacity .12s, background .12s, color .12s;
+}
+.fm-matrix tbody tr:hover .fm-op { opacity: 1; }
+.fm-op:hover { background: var(--border); color: var(--text); }
+.fm-op.del:hover { background: var(--err-soft); color: var(--err); }
+
+.fm-empty { padding: 44px 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
+.fm-empty-add {
+  border: 0; background: transparent; padding: 0;
+  color: var(--accent); font-size: 13px; font-weight: 700; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+
+@media (max-width: 720px) {
+  .fm-search { order: 3; max-width: none; flex-basis: 100%; }
+}

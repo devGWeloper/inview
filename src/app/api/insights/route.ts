@@ -23,26 +23,11 @@ import {
 } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-// 프로필 파일(fs) 을 읽으므로 Node 런타임 강제
 export const runtime = "nodejs";
 
-/**
- * 일반 사용자(FIELD) 실적 API — /insights 화면의 유일한 데이터 소스.
- *
- * ⚠️ 이 라우트의 존재 이유는 **필드 화이트리스트**다. /api/stats 를 일반 사용자에게 열면
- *    topUsers(사번) · topErrors(내부 에러 코드) · layers(내부 구조) 가 그대로 나간다.
- *    집계는 computeStats() 로 공유하되, 응답은 아래 toInsights() 가 필요한 필드만 **새로 담아**
- *    만든다. StatsResponse 에 필드가 늘어도 여기로는 새지 않는다.
- *
-* 권한: **일반 사용자(FIELD) 본인 + BR 이상**이다 (canViewInsights).
- * 상위 권한자가 함께 보는 이유는 "일반 사용자에게 무엇이 보이는가" 를 같은 화면으로 확인하기
- * 위함이고, DEV 는 Dashboard/Report 로 같은 수치를 더 자세히 보므로 여기서 막는다.
- * requireBiz 로 기본 에이전트 소속까지 확인한 뒤, 그 위에서 한 번 더 좁힌다.
- */
 export async function GET(req: NextRequest) {
   const guard = await requireBiz(LOWEST_ROLE);
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
-  // ⚠️ 권위 있는 차단은 여기다 — 미들웨어/탭 숨김은 UX 일 뿐이고, URL 을 직접 쳐도 여기서 끊긴다.
   if (!canViewInsights(guard.session.role)) {
     return NextResponse.json({ error: "접근 권한이 없습니다." }, { status: 403 });
   }
@@ -51,8 +36,6 @@ export async function GET(req: NextRequest) {
   const ctx = reqContext(req);
   const sp = req.nextUrl.searchParams;
 
-  // ⚠️ 일반 사용자 화면에는 userId/actionTyp/excludeErrCds 필터를 열지 않는다 —
-  //    "특정 사용자만 골라보기" 는 이 화면이 하지 않기로 한 일이다. 기간만 받는다.
   const query = {
     dateFrom: sp.get("dateFrom") || undefined,
     dateTo: sp.get("dateTo") || undefined,
@@ -63,17 +46,11 @@ export async function GET(req: NextRequest) {
   try {
     const agentId = defaultAgentId();
     const profile = readProfile(agentId);
-    // 토큰/타임아웃은 TRX_TOKEN_DET(기본 에이전트 DB) — BIZ 집계와는 다른 소스라 따로 읽는다.
-    // 넷 다 서로를 기다릴 이유가 없고, 뒤 셋은 실패해도 그 섹션만 비운다(화면은 그대로 그려진다).
     const [{ stats }, fte, tok, tmo, errMap] = await Promise.all([
       computeStats(query),
-      // FTE 는 실적의 헤드라인 지표다. CUBE 미연결이면 null → 화면이 '—' 로 그린다.
       computeFteStats(profile).catch(() => null),
-      // ⚠️ skipQuestions — questions/topUsers 는 사번·질의 원문을 싣는다. 일반 사용자 화면은 안 쓴다.
       fetchTokenStats({ ...query, agentId, skipQuestions: true }).catch(() => null),
       fetchTimeoutStats({ ...query, agentId }).catch(() => null),
-      // 에러 코드 → 의미. ⚠️ 일반 사용자는 /api/error-codes 를 못 부르므로(FIELD 허용 목록 밖)
-      //    설명을 여기서 붙여 내린다 — 이 화면의 데이터 소스는 이 라우트 하나여야 한다.
       loadErrorCodeMap().catch(() => ({})),
     ]);
 
@@ -88,10 +65,6 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/**
- * StatsResponse → InsightsResponse 투영.
- * ⚠️ spread(`...stats`) 를 쓰지 말 것 — 필드를 **하나씩 옮겨 담는** 것이 이 함수의 목적이다.
- */
 function toInsights(
   stats: StatsResponse,
   profile: ReturnType<typeof readProfile>,
@@ -142,11 +115,8 @@ function toInsights(
 }
 
 /**
- * topErrors(TopItem[]) → InsightsError[] — 코드에 사람이 읽는 사유를 붙인다.
- *
- * 설명 출처는 두 곳: ① TRX_ERRMSG_COD 마스터 ② TEMP 가상 코드 라벨(ACTION_FAIL_LABELS).
- * 둘 다 없으면 코드를 그대로 라벨로 쓰고 described=false 로 표시한다 — 화면이 "설명 미등록"
- * 임을 알 수 있어야 코드를 중복해서 두 번 그리지 않는다.
+ * 에러 코드에 사람이 읽는 사유를 붙인다 (TRX_ERRMSG_COD + TEMP 가상 코드 라벨).
+ * 설명이 없으면 label = code, described=false — 화면이 코드를 두 번 그리지 않게.
  */
 function toInsightsErrors(items: TopItem[], errMap: Record<string, string>): InsightsError[] {
   return items.map((it) => {
@@ -160,11 +130,6 @@ function toInsightsErrors(items: TopItem[], errMap: Record<string, string>): Ins
   });
 }
 
-/**
- * TokenStatsResponse → InsightsTokens.
- * ⚠️ 빠지는 것: byNode(내부 노드명) · topUsers(사번) · questions/calls(질의 원문).
- *    모델명까지만 공개한다 — 일반 사용자는 "어느 모델이 느린가" 까지만 알면 된다.
- */
 function toInsightsTokens(t: TokenStatsResponse): InsightsTokens {
   return {
     granularity: t.granularity,
@@ -184,7 +149,6 @@ function toInsightsTokens(t: TokenStatsResponse): InsightsTokens {
     },
     avgTotalPerCall: t.avgTotalPerCall,
     avgLatencyMs: t.avgLatencyMs,
-    // sub(노드 구성)는 옮기지 않는다 — 내부 구조다.
     byModel: t.byModel.map((m) => ({
       key: m.key,
       calls: m.calls,
@@ -194,10 +158,6 @@ function toInsightsTokens(t: TokenStatsResponse): InsightsTokens {
   };
 }
 
-/**
- * TimeoutStatsResponse → InsightsTimeouts.
- * ⚠️ 빠지는 것: byNode · byUser(사번) · items(실패 호출 원문) · topReasons(스택 트레이스).
- */
 function toInsightsTimeouts(t: TimeoutStatsResponse): InsightsTimeouts {
   return {
     available: t.available,

@@ -3,10 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useAgentScope } from "./AgentScopeProvider";
 
-/**
- * 상단바 에이전트 셀렉터.
- * 에이전트가 하나뿐이면 렌더하지 않는다 — 기존 단일 에이전트 배포에서 UI 변화가 없어야 한다.
- */
 export function AgentSelector() {
   const { agents, agentId, agent, setAgentId } = useAgentScope();
   const [open, setOpen] = useState(false);

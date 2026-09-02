@@ -4,7 +4,7 @@
 
 AI 액션 호출이 `CUBE → GAIA → MCP → ONEOIS` 레이어를 거쳐 흐를 때, 각 레이어가 자기 Oracle DB의 `BIZ_AIACTIONTXN_HIS` 테이블에 남기는 이력을 `TRACE_ID` 기준으로 합쳐 한 화면에서 보여주는 단일 페이지 뷰어.
 
-> 레이어 구성은 `src/lib/types.ts` 의 `LAYERS` 배열 한 곳에서만 정의된다. 레이어 추가/삭제/순서·라벨·색상 변경은 이 배열만 수정하면 화면, API, 스텝퍼, 색상이 모두 자동으로 따라간다 (+ `config.yml` / `config.dev.yml` 에 동일 key 로 접속 정보 추가).
+> 레이어 구성은 `src/lib/types/layers.ts` 의 `LAYERS` 배열 한 곳에서만 정의된다. 레이어 추가/삭제/순서·라벨·색상 변경은 이 배열만 수정하면 화면, API, 스텝퍼, 색상이 모두 자동으로 따라간다 (+ `config.yml` / `config.dev.yml` 에 동일 key 로 접속 정보 추가).
 
 ---
 
@@ -75,7 +75,7 @@ AI 액션 호출이 `CUBE → GAIA → MCP → ONEOIS` 레이어를 거쳐 흐�
 | **PARTIAL** (노랑) | OK 도 ERROR 도 아닌 모든 경우 | **불완전 상태** — 아래 케이스 중 하나 |
 | **ERROR** (빨강) | 어떤 행이든 `ERR_CD` 가 채워져 있음 | 레이어 어디선가 오류 발생 |
 
-(여기서 "정의된 모든 레이어" = `LAYERS.length`, 즉 `src/lib/types.ts` 의 `LAYERS` 배열 길이)
+(여기서 "정의된 모든 레이어" = `LAYERS.length`, 즉 `src/lib/types/layers.ts` 의 `LAYERS` 배열 길이)
 
 ### PARTIAL 이 뜨는 대표적 상황
 
@@ -104,7 +104,7 @@ layers:
   ONEOIS:  { user: "...", password: "...", connectString: "..." }
 ```
 
-키는 `src/lib/types.ts` 의 `LAYERS[*].key` 와 동일해야 한다. 새 레이어를 추가하려면 `LAYERS` 배열에 한 줄 추가하고 yml 에도 같은 key 로 접속 정보를 추가하면 된다.
+키는 `src/lib/types/layers.ts` 의 `LAYERS[*].key` 와 동일해야 한다. 새 레이어를 추가하려면 `LAYERS` 배열에 한 줄 추가하고 yml 에도 같은 key 로 접속 정보를 추가하면 된다.
 
 - 일부 레이어만 설정해도 동작한다. 설정된 레이어만 조회하고, 나머지는 빈 결과로 처리.
 - 두 yml 파일은 리포에 함께 커밋된다. prd 배포 시 `deploy.sh` 가 `config.dev.yml` 을 제거하여 `config.yml` 만 남도록 처리한다.
@@ -115,7 +115,7 @@ layers:
 npm install
 npm run dev      # http://localhost:5174
 npm run build && npm run start
-npm run lint
+npm run lint      # ⚠️ ESLint 미설정 — 실행하면 설정 프롬프트가 뜬다
 ```
 
 Oracle 네이티브 드라이버(`oracledb`)는 lazy import 로 로드되며, 실패하면 해당 레이어 조회는 빈 결과를 반환한다 — Instant Client 없는 머신에서도 앱은 뜬다.
@@ -130,14 +130,16 @@ Oracle 네이티브 드라이버(`oracledb`)는 lazy import 로 로드되며, �
 
 ```
 src/
-  app/
-    page.tsx                 # 단일 페이지 (목록 + 상세)
-    api/traces/route.ts      # GET /api/traces
-    api/traces/[traceId]/    # GET /api/traces/:id
-  components/TraceTimeline.tsx
-  lib/
-    config.ts                # config.yml / config.dev.yml 로더
-    db.ts                    # LAYERS 기준 병렬 조회
-    types.ts                 # LAYERS (단일 소스), LayerKey, TraceRow …
-sql/                         # DDL + 3-phase DML 템플릿
+  app/                라우트만. page.tsx 는 얇게 유지한다
+    api/              라우트 핸들러 — 파싱 + 인가 + 응답 모양
+  features/<화면>/    그 화면 전용 컴포넌트
+  components/         2개 이상 화면이 쓰는 것만 (shell · auth · agents · tick · charts · ui)
+  lib/                서버 집계 · 순수 로직
+    types/            도메인별 타입 (layers.ts 가 LAYERS 단일 소스)
+  styles/             화면별 CSS. app/globals.css 가 @import 순서를 정한다
+docs/                 화면별 · 주제별 상세 문서 (CLAUDE.md 가 인덱스)
+sql/                  DDL + 3-phase DML 템플릿
 ```
+
+화면 단위 작업의 출발점은 `CLAUDE.md` 의 **화면 지도** 다 — 해당 `docs/screens/*.md` 하나에
+그 화면이 쓰는 파일 목록과 규칙이 모여 있다.

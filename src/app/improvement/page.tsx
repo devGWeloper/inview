@@ -2,12 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { RequestFailureTracker } from "@/components/improvement/RequestFailureTracker";
+import { RequestFailureTracker } from "@/features/improvement/RequestFailureTracker";
 
-// TraceX > Improvement Center — AI 에이전트 개선 허브(확장 가능한 플랫폼).
-// 개선 도구를 "모듈"로 담는 셸. 지금은 Request Failure Tracker 하나이며,
-// 새 모듈은 아래 MODULES 배열에 { key, name, tagline, icon, Component } 한 줄을
-// 추가하면 좌측 레일에 붙는다. (PLANNED 는 로드맵 표시용 — 아직 클릭 불가)
 
 interface ImprovementModule {
   key: string;
@@ -27,13 +23,11 @@ const MODULES: ImprovementModule[] = [
   },
 ];
 
-// 플랫폼 지향을 드러내는 로드맵(예정) 항목 — 실제 기능 아님, 확장 자리 표시.
 const PLANNED: { name: string; tagline: string; icon: string }[] = [
   { name: "Prompt Insights", tagline: "실패 패턴에서 프롬프트 개선점 도출", icon: "✨" },
   { name: "Knowledge Gaps", tagline: "반복 실패 주제의 지식 보강", icon: "📚" },
 ];
 
-// 접근 제어는 미들웨어(DEV 이상 = 인증된 개발자)가 담당한다. 조치 저장만 ADMIN.
 export default function ImprovementPage() {
   return <ImprovementCenter />;
 }

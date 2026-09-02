@@ -8,12 +8,10 @@ import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 
 const EMPTY_TASK: WorkTask = { icon: "•", title: "", desc: "" };
 
-/** 편집 대상 에이전트의 프로필 URL. 빈 id 는 기본 에이전트를 뜻한다. */
 function profileUrl(agentId: string): string {
   return agentId ? `/api/profile?agent=${encodeURIComponent(agentId)}` : "/api/profile";
 }
 
-/** 한도 입력 파싱 — 빈칸은 0(미설정), 음수/비숫자/소수는 null(=거절). */
 function limitOf(text: string): number | null {
   const t = text.trim();
   if (t === "") return 0;
@@ -22,9 +20,6 @@ function limitOf(text: string): number | null {
   return n;
 }
 
-// 접근 제어는 미들웨어(운영자 전용)가 담당한다.
-// ⚠️ Suspense 로 감싸는 이유: AdminEditor 가 useSearchParams(?agent=)를 쓰는데,
-//    경계가 없으면 빌드 시 프리렌더가 실패한다(Next.js CSR bailout).
 export default function AdminPage() {
   return (
     <Suspense fallback={<div className="admin-page"><div className="dash-banner loading">불러오는 중…</div></div>}>
@@ -34,29 +29,22 @@ export default function AdminPage() {
 }
 
 function AdminEditor() {
-  // 편집 대상 에이전트. 전역 운영자는 골라서 편집하고, 에이전트 운영자에게는
-  // /api/agents 가 자기 에이전트 하나만 내려주므로 선택지가 없다.
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [agentId, setAgentId] = useState<string>("");
   const [agentsReady, setAgentsReady] = useState(false);
-  // /agent?agent=x → "관리자 편집" 으로 들어오면 그 에이전트를 편집 대상으로 연다.
   const wantAgent = useSearchParams()?.get("agent")?.trim() ?? "";
 
   const [profile, setProfile] = useState<AgentProfile | null>(null);
   const [skillsText, setSkillsText] = useState("");
-  // FTE 계산식 상수 편집용 (입력 중엔 문자열로 두고 저장 시 숫자 검증)
   const [fteActs, setFteActs] = useState<{ action: string; minutes: string }[]>([]);
   const [fteDefText, setFteDefText] = useState("");
   const [fteAnnText, setFteAnnText] = useState("");
-  // 1TICK 한도(0 = 미설정)도 입력 중엔 문자열로 둔다.
   const [tpmText, setTpmText] = useState("");
   const [rpmText, setRpmText] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
-  // 응답 프로필을 편집 폼 상태로 펼친다. 응답이 비정상(세션 만료 등)이면
-  // 던져서 아래 catch 가 사유를 보여주게 한다 — 폼을 반쯤 채우지 않는다.
   const applyProfile = useCallback((p: AgentProfile | undefined) => {
     if (!p) throw new Error("프로필 응답이 비어 있습니다.");
     setProfile(p);
@@ -69,7 +57,6 @@ function AdminEditor() {
     setRpmText(String(p.rpmLimit ?? 0));
   }, []);
 
-  // 편집 가능한 에이전트 목록 (마운트 1회).
   useEffect(() => {
     let alive = true;
     apiJson<AgentsResponse>("/api/agents", { cache: "no-store" })
@@ -77,8 +64,6 @@ function AdminEditor() {
         if (!alive) return;
         const list = asArray<AgentInfo>(d.agents);
         setAgents(list);
-        // URL 로 지정한 에이전트 → 기본 에이전트 → 목록 첫 항목 순.
-        // (지정한 id 가 내 범위 밖이면 목록에 없으므로 자연히 무시된다)
         setAgentId(
           list.find((a) => a.id === wantAgent)?.id
           ?? list.find((a) => a.id === d.defaultId)?.id
@@ -156,7 +141,6 @@ function AdminEditor() {
     setMsg(null);
     const skills = skillsText.split(",").map((s) => s.trim()).filter(Boolean);
 
-    // FTE 계산식 검증: 액션별 분 (완전히 빈 행은 무시, 반쪽 입력·0 이하·중복은 에러)
     const fteActionMinutes: { action: string; minutes: number }[] = [];
     const seen = new Set<string>();
     for (const row of fteActs) {
@@ -186,7 +170,6 @@ function AdminEditor() {
       setMsg({ kind: "err", text: "FTE 계산식 상수(기본 분·연간 분)는 0보다 큰 숫자여야 합니다." });
       return;
     }
-    // 한도: 빈칸/0 = 미설정. 음수·비숫자는 거절한다(조용히 0 으로 만들면 기준선이 사라진다).
     const tpmLimit = limitOf(tpmText);
     const rpmLimit = limitOf(rpmText);
     if (tpmLimit === null || rpmLimit === null) {
@@ -211,8 +194,6 @@ function AdminEditor() {
     }
   }
 
-  // 선택된 에이전트가 기본(BIZ)인가 — FTE 등 BIZ 전용 섹션의 노출 조건.
-  // 목록을 못 읽었으면(agents 비어 있음) 기본 에이전트를 편집 중인 것으로 본다.
   const isDefaultAgent = agents.length === 0 || (agents.find((a) => a.id === agentId)?.isDefault ?? true);
 
   if (loading) return <div className="admin-page"><div className="dash-banner loading">불러오는 중…</div></div>;

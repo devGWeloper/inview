@@ -1,3 +1,5 @@
+// TRX_TOKEN_DET 집계 (Tokens 탭). 커넥션은 agentId 로 고른다. docs/screens/tokens.md
+
 import { getAgentDbConfig } from "./config";
 import { logger } from "./logger";
 import {
@@ -19,12 +21,6 @@ import {
 } from "./timeBuckets";
 import { SQL_ERR_PRED, SQL_OK_PRED } from "./tokenStatus";
 
-// GAIA LLM 호출별 토큰 사용량(TRX_TOKEN_DET) 집계.
-// filter.agentId 가 가리키는 에이전트의 GAIA DB 에서만 조회한다(BIZ 테이블처럼 fan-out 안 함).
-// 행이 많을 수 있어 JS 전수 집계 대신 SQL GROUP BY 로 집계한다.
-
-// oracledb 는 next.config 의 serverComponentsExternalPackages 로 빠져 있어 lazy import.
-// 드라이버/설정 없으면 에러를 삼키고 빈 통계(0)를 반환 → 앱은 정상 동작.
 let oracledbCached: typeof import("oracledb") | null = null;
 async function getOracle(): Promise<typeof import("oracledb") | null> {
   if (oracledbCached) return oracledbCached;
@@ -46,7 +42,6 @@ const num = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 const str = (v: unknown): string | null => (v == null ? null : String(v));
-/** LISTAGG 결과(csv)를 첫 등장 순서 유지하며 중복 제거한 배열로 */
 const dedupeCsv = (csv: string | null): string[] => {
   if (!csv) return [];
   const seen = new Set<string>();
@@ -61,19 +56,12 @@ const dedupeCsv = (csv: string | null): string[] => {
   return out;
 };
 
-/** CALL_TM 을 granularity 버킷 시작 시각(ISO 문자열)으로 만드는 Oracle 표현식 */
 function bucketExpr(g: Granularity): string {
   if (g === "1d") return `TRUNC(CALL_TM)`;
   if (g === "1h") return `TRUNC(CALL_TM, 'HH24')`;
-  // 5분: 시각 floor 후 5분 단위 분을 일(day) 분수로 더함
   return `TRUNC(CALL_TM, 'HH24') + FLOOR(TO_NUMBER(TO_CHAR(CALL_TM, 'MI')) / 5) * 5 / 1440`;
 }
 
-/**
- * TokenFilter → WHERE 절 + 바인드. 시간 컬럼은 CALL_TM 기준.
- * 1TICK 모니터(tickStats.ts)도 같은 필터 규칙을 써야 해서 export 한다 —
- * 두 화면의 "조회 범위" 해석이 갈리면 같은 조건인데 다른 수치가 나온다.
- */
 export function buildWhere(filter: TokenFilter): { where: string; binds: Record<string, unknown> } {
   const where: string[] = [];
   const binds: Record<string, unknown> = {};
@@ -104,7 +92,6 @@ export function buildWhere(filter: TokenFilter): { where: string; binds: Record<
   return { where: where.length ? " WHERE " + where.join(" AND ") : "", binds };
 }
 
-/** 빈 버킷 리터럴 — 데이터 없음/미구성일 때도 차트가 균일하게 그려지도록 */
 function emptyBucket(ts: string): TokenBucket {
   return { ts, inputTokens: 0, outputTokens: 0, totalTokens: 0, calls: 0, avgLatencyMs: null };
 }
@@ -130,7 +117,6 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
   const fromMs = filter.dateFrom ? Date.parse(filter.dateFrom) : now - 24 * 3_600_000;
   const toMs = filter.dateTo ? Date.parse(filter.dateTo) : now;
   const g = pickGranularity(fromMs, toMs);
-  // 빈 버킷(시계열 차트가 균일하게 보이도록) — 데이터 없거나 미구성이어도 그대로 노출
   const emptyBuckets: TokenBucket[] = enumerateBucketStarts(fromMs, toMs, g).map((k) =>
     emptyBucket(isoNoTz(k))
   );
@@ -147,9 +133,6 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     const opts = { outFormat: oracle.OBJECT } as const;
     const rowsOf = (r: { rows?: unknown }) => (r.rows ?? []) as Array<Record<string, unknown>>;
 
-    // 0) STAT_CD/ERR_CTN 컬럼 존재 확인 (GAIA 의 ALTER 전에도 화면이 죽지 않도록).
-    //    없으면(ORA-00904) 실패 관련 집계를 전부 빼고 예전과 동일하게 동작한다.
-    //    WHERE 1=0 이라 행을 읽지 않고 파싱만 태우는 비용뿐이다.
     let hasStatus = true;
     try {
       await conn.execute("SELECT STAT_CD, ERR_CTN FROM TRX_TOKEN_DET WHERE 1 = 0", {}, opts);
@@ -160,8 +143,6 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
 
     const { where, binds } = buildWhere(filter);
 
-    // 쿼리별 격리 실행 — 한 집계가 SQL 에러(문법/버전 차 등)로 죽어도 응답 전체를 비우지 않고,
-    // 어느 섹션이 무슨 에러로 실패했는지 로그에 남긴다. 실패 섹션만 빈 결과.
     const run = async (
       name: string,
       sql: string,
@@ -175,18 +156,12 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       }
     };
 
-    // ⚠️ 지연 평균은 성공 호출만: 타임아웃(90s 한도)이 섞이면 평균이 한도값 쪽으로 끌려가
-    //    "모델이 느려졌다" 로 오독된다. 실패 호출의 소요시간은 호출 카드에서 개별로 본다.
     const latExpr = hasStatus ? `CASE WHEN ${SQL_OK_PRED} THEN LATENCY_MS END` : "LATENCY_MS";
     const statCols = hasStatus ? ", STAT_CD, ERR_CTN" : "";
-    /** 실패한 호출의 NODE_NM 만 모으는 표현식 (질문 행에서 "어느 노드가 끊겼나" 표시용) */
     const errNodeExpr = hasStatus
       ? `LISTAGG(CASE WHEN ${SQL_ERR_PRED} THEN NODE_NM END, ',' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY CALL_TM)`
       : "NULL";
 
-    // 1) 시계열 버킷 (+ totals 는 버킷 합으로 도출)
-    //   LATENCY_MS 는 NULL 가능 → SUM/COUNT(latExpr) 로 NULL 제외 평균을 도출하고,
-    //   전체 평균(latSum/latCnt)도 같은 행들에서 누적한다.
     const bucketSql =
       `SELECT TO_CHAR(${bucketExpr(g)}, 'YYYY-MM-DD"T"HH24:MI:SS') AS BKT,` +
       ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T, COUNT(*) AS N,` +
@@ -226,8 +201,6 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 }
     );
 
-    // 2) byNode / 3) byModel — 동일 패턴 (차원 컬럼만 다름)
-    //   AVG(LATENCY_MS) 는 NULL 을 자동 제외하므로, 측정값이 하나도 없으면 NULL 을 돌려준다.
     const dimSql = (col: string) =>
       `SELECT NVL(${col}, '(none)') AS K, COUNT(*) AS N,` +
       ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T,` +
@@ -249,8 +222,6 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     const byNode = dimFrom(await run("byNode", dimSql("NODE_NM")));
     const byModel = dimFrom(await run("byModel", dimSql("MODEL_NM")));
 
-    // 2.5) 노드×모델 교차 — 각 노드가 어떤 모델을 얼마나 썼는지(그 역방향도).
-    //   한 노드가 모델 하나만 쓴다고 오해하지 않도록 리더보드 행에 구성으로 노출한다.
     const crossSql =
       `SELECT NVL(NODE_NM, '(none)') AS NK, NVL(MODEL_NM, '(none)') AS MK,` +
       ` COUNT(*) AS N, SUM(TOTAL_TOKENS) AS T` +
@@ -267,9 +238,6 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       modelIdx.get(mk)?.sub.push({ key: nk, calls, totalTokens });
     }
 
-    // 4) topUsers — TOTAL_TOKENS 기준 (count = totalTokens)
-    //    ⚠️ skipQuestions 면 4~6 을 통째로 건너뛴다 — 무거울 뿐 아니라 사번·질의 원문을
-    //    실어 나르는 세 쿼리라, 그걸 화면에 쓰지 않는 호출부(/api/insights)는 아예 읽지 않는다.
     const skipQ = filter.skipQuestions === true;
     const userSql =
       `SELECT USER_ID AS K, SUM(TOTAL_TOKENS) AS T FROM TRX_TOKEN_DET${where}` +
@@ -282,14 +250,6 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
           count: num(r.T ?? r.t),
         }));
 
-    // 5) questions — 질문(TRACE_ID) 단위 묶음 (LAST_TM desc — 최신 질문부터 N건).
-    //    표의 기본 정렬이 최신순이므로 로드 기준도 최신순이어야 "최근 질문이 안 보이는" 착시가 없다.
-    //    (토큰 큰 순 로드였을 때 최근 질문이 통째로 잘려 노드별 데이터가 누락돼 보이는 문제가 있었음)
-    //    TRACE_ID 있는 호출은 그룹핑, 없는(액션 무관) 호출은 1건=1질문으로 개별 노출.
-    //    노드/모델은 MAX 대표값이 아니라 거쳐간 전부를 LISTAGG 로 내린다(중복 제거는 JS).
-    //    한 질문의 호출 수는 작아 4000자 한도는 사실상 안 넘지만 ON OVERFLOW TRUNCATE 로 방어.
-    //    QCTN(원본 질의) = 가장 이른 호출의 QUERY_CTN — non-null 우선(NVL2 정렬) 후 CALL_TM 순.
-    //    호출들이 같은 QUERY_CTN 을 공유하는 게 보통이라 질문 단위 대표 정보로 내린다.
     const grpWhere = (nullCond: string) => `${where}${where ? " AND" : " WHERE"} ${nullCond}`;
     const agg = (col: string) =>
       `LISTAGG(${col}, ',' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY CALL_TM)`;
@@ -326,13 +286,6 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       lastTm: str(r.LAST_TM ?? r.last_tm),
     }));
 
-    // 6) calls — 특정 질문(traceId) 으로 좁혔을 때만 호출별 행 채움 (행 펼침용)
-    //    ⚠️ 여기엔 조회 창(dateFrom/dateTo)·노드·모델 필터를 걸지 않고 TRACE_ID 로만 뽑는다.
-    //    질문을 펼치는 목적은 그 질문이 실제로 거친 호출 전부(라우터→실행 노드 흐름)를 보는 것이고,
-    //    나머지 필터는 "질문을 찾는" 조건일 뿐이다. 창을 그대로 적용하면 창 경계에 걸친 호출이
-    //    잘려 같은 질문이 1건/2건으로 오락가락한다(펼침 시점마다 창이 다시 계산돼 더 심해졌다).
-    //    STAT_CD/ERR_CTN 은 컬럼이 있을 때만 SELECT 한다(statCols) — 없으면 statCd=null 로
-    //    내려가고 callStatus() 가 'ok' 로 해석하므로 실패로 오인되지 않는다.
     const rowFrom = (r: Record<string, unknown>): TokenRow => {
       const lat = r.LATENCY_MS ?? r.latency_ms;
       return {
@@ -390,7 +343,6 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       try {
         await conn.close();
       } catch {
-        /* ignore */
       }
     }
   }

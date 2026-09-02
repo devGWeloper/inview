@@ -1,17 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CubeLatencyChart } from "@/components/CubeLatencyChart"; // Action end-to-end 응답 지연 (Tokens 탭 LLM 지연과 별개)
-import { fmtDuration } from "@/components/TokenLatencyChart";
-import { DimensionBreakdown } from "@/components/DimensionBreakdown";
-import { LayerBudget } from "@/components/LayerBudget";
-import { StatsCards } from "@/components/StatsCards";
-import { StatusDonut } from "@/components/StatusDonut";
-import { TimeSeriesChart } from "@/components/TimeSeriesChart";
-import { TopList } from "@/components/TopList";
+import { CubeLatencyChart } from "@/features/dashboard/CubeLatencyChart"; // Action end-to-end 응답 지연 (Tokens 탭 LLM 지연과 별개)
+import { fmtDuration } from "@/lib/format";
+import { DimensionBreakdown } from "@/features/dashboard/DimensionBreakdown";
+import { LayerBudget } from "@/features/dashboard/LayerBudget";
+import { StatsCards } from "@/features/dashboard/StatsCards";
+import { StatusDonut } from "@/features/dashboard/StatusDonut";
+import { TimeSeriesChart } from "@/components/charts/TimeSeriesChart";
+import { TopList } from "@/components/ui/TopList";
 import { StatsFilter, StatsResponse, TickMetricDef, TickStatsResponse } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
-import { TickMonitor } from "@/components/TickMonitor";
+import { TickMonitor } from "@/components/tick/TickMonitor";
 import {
   TickRange,
   resolveTickRange,
@@ -39,11 +39,6 @@ function toLocalInput(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/**
- * 틱 뷰의 게이지/차트 정의 (BIZ 진입 레이어 기준).
- * ⚠️ 한도(limit)는 0 이다 — 요청 수에는 사내 rate limit 같은 상한이 없다. 0 이면 기준선·초과
- *    판정 없이 추이만 그리고, 아래 목록은 "가장 몰린 순간" 이 된다.
- */
 const BIZ_METRICS: [TickMetricDef, TickMetricDef] = [
   { name: "요청", unitText: "건/분", unit: "건", limit: 0 },
   { name: "실패", unitText: "건/분", unit: "건", limit: 0 },
@@ -64,7 +59,6 @@ export default function DashboardPage() {
 
   const [stats, setStats] = useState<StatsResponse | null>(null);
 
-  /** 틱 뷰인가 (화면별로 기억) + 공유 조회 창 */
   const [tickView, setTickView, tickViewReady] = useTickView("dashboard");
   const { sel: tickSel, ready: tickReady, resolve: resolveTick, apply: applyTick } = useTick();
   const [tick, setTick] = useState<TickStatsResponse | null>(null);
@@ -82,7 +76,6 @@ export default function DashboardPage() {
         const data = await apiJson<{ values: string[] }>("/api/action-types", { cache: "no-store" });
         if (alive) setActionTypeOptions(asArray<string>(data.values));
       } catch {
-        /* ignore — falls back to empty options, user can still type via 직접입력 if added */
       }
     })();
     return () => { alive = false; };
@@ -95,7 +88,6 @@ export default function DashboardPage() {
         const data = await apiJson<{ codes: Record<string, string> }>("/api/error-codes", { cache: "no-store" });
         if (alive) setErrorCodeMap(data.codes ?? {});
       } catch {
-        /* ignore — 매핑 없으면 툴팁은 코드만 노출 */
       }
     })();
     return () => { alive = false; };
@@ -145,11 +137,6 @@ export default function DashboardPage() {
     }
   }, []);
 
-  /**
-   * 틱(롤링 60초) 조회 — 진입 레이어 기준 분당 요청/실패.
-   * ⚠️ ACTION_TYP 필터는 보내지 않는다 — 진입 레이어 행에는 그 값이 없다(권위 레이어는 GAIA).
-   *    보내면 조건에 맞는 행이 0 이 되어 "요청이 없다" 로 오독된다.
-   */
   const loadTick = useCallback(async (r: TickRange, u: string) => {
     setLoading(true);
     setErr(null);
@@ -158,7 +145,6 @@ export default function DashboardPage() {
       if (u) q.set("userId", u);
       const data = await apiJson<TickStatsResponse>(`/api/stats/tick?${q.toString()}`, { cache: "no-store" });
       setTick(data);
-      // 요청한 시작 시각보다 응답의 시작이 뒤면 서버가 24시간으로 자른 것이다(1분 여유).
       const want = Date.parse(r.from);
       const got = data.range.from ? Date.parse(data.range.from) : NaN;
       setTickClamped(Number.isFinite(want) && Number.isFinite(got) && got - want > 60_000);
@@ -171,8 +157,6 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 최초 조회. 틱 뷰로 저장돼 있었으면 그쪽을 부른다 —
-  // 복원(tickReady/tickViewReady) 전에 부르면 기본값으로 한 번, 복원값으로 한 번 이중 조회가 된다.
   useEffect(() => {
     if (!tickReady || !tickViewReady) return;
     if (tickView) loadTick(resolveTick(), userId);
@@ -180,19 +164,12 @@ export default function DashboardPage() {
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [tickReady, tickViewReady]);
 
-  // 자동 갱신 — 틱 뷰의 live 모드에서만. 주기는 창 길이에 맞춘다.
   useEffect(() => {
     if (!tickView || tickSel.mode !== "live" || !tickSel.auto) return;
     const id = setInterval(() => loadTick(resolveTickRange(tickSel), userId), tickRefreshMs(tickSel.win));
     return () => clearInterval(id);
   }, [tickView, tickSel, userId, loadTick]);
 
-  /**
-   * 보기 전환. 켜는 즉시 조회한다 — 토글을 눌렀는데 빈 화면이 남아 있으면 켜진 건지 알 수 없다.
-   *
-   * ⚠️ **조회 구간을 서로 물려준다** (rangeSync.ts) — 토글할 때마다 무관한 구간으로 튀면
-   *    매번 기간을 다시 골라야 한다. 두 뷰의 후보가 겹치지 않아 정확히 같지는 않다.
-   */
   const onView = (live: boolean) => {
     setTickView(live);
     if (live) {
@@ -211,7 +188,6 @@ export default function DashboardPage() {
       load({ ...computeFilter(), dateFrom: `${tickSel.from}:00`, dateTo: `${tickSel.to}:59` });
       return;
     }
-    // 틱 창(≤180분)을 덮는 가장 짧은 집계 프리셋으로 옮긴다.
     const need = analysisMinutesForTickWin(tickSel.win);
     const p = PRESETS.find((x) => x.hours * 60 >= need) ?? PRESETS[0];
     setPreset(p.key);
@@ -257,7 +233,6 @@ export default function DashboardPage() {
     load({ ...computeFilter(), userId: undefined, actionTyp: undefined });
   };
 
-  // 에러 코드 제외: Top Errors 항목을 클릭해서 더하고, 칩의 × 로 해제한다.
   const addExclude = (code: string) => {
     if (excludeErrCds.includes(code)) return;
     const next = [...excludeErrCds, code];
@@ -297,9 +272,8 @@ export default function DashboardPage() {
         </div>
 
         <form className="dash-filter" onSubmit={onApply}>
-          {/* 프리셋 줄 자리는 보기에 따라 통째로 교체된다.
-              ⚠️ .preset-slot 이 두 세트 중 넓은 쪽 폭을 확보한다 — 없으면 토글할 때마다
-                 뒤따르는 컨트롤이 좌우로 밀린다. */}
+          {/* 보기에 따라 통째로 교체되는 자리. .preset-slot 이 넓은 쪽 폭을 미리 확보해
+                  토글할 때 뒤따르는 컨트롤이 밀리지 않게 한다. */}
           <div className="preset-slot">
           {tickView ? (
             <TickPresets loading={loading} onSubmit={() => loadTick(resolveTick(), userId)} />

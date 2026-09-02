@@ -1,3 +1,5 @@
+// TRX_TOKEN_DET 의 실패 호출 집계 (Timeout 탭). docs/screens/timeouts.md
+
 import { getAgentDbConfig } from "./config";
 import { logger } from "./logger";
 import { SQL_ERR_PRED, SQL_TIMEOUT_PRED } from "./tokenStatus";
@@ -18,17 +20,6 @@ import {
   parseTs,
   pickGranularity,
 } from "./timeBuckets";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 타임아웃 추적 집계 — 출처는 **TRX_TOKEN_DET 한 곳**이다.
-//
-// GAIA 가 call_llm 을 try/except 로 감싸 실패한 호출도 1행 적재한다:
-//   STAT_CD='ERROR', ERR_CTN=사유, 토큰 0, LATENCY_MS=예외까지 기다린 시간.
-// 따라서 "어느 노드/모델에서, 어떤 질의가, 얼마나 기다리다 끊겼는지" 를 추정 없이 그대로 읽는다.
-// (BIZ 의 ERR_CD 를 보거나 '마지막 성공 호출' 로 노드를 추정하지 않는다 — 그건 틀린 답을 준다.)
-//
-// STAT_CD/ERR_CTN 컬럼이 아직 없으면 available=false 로 내려 화면이 "적재 전" 안내만 띄운다.
-// ─────────────────────────────────────────────────────────────────────────────
 
 const ITEM_LIMIT = 200; // 목록에 내릴 최근 실패 호출 수
 const DIM_LIMIT = 10;   // 노드/모델/사용자 분포 상위 N
@@ -51,15 +42,8 @@ async function getOracle(): Promise<typeof import("oracledb") | null> {
 export interface TimeoutFilter {
   dateFrom?: string;
   dateTo?: string;
-  /** 특정 노드로 좁히기 */
   nodeNm?: string;
-  /** 특정 모델로 좁히기 (노드와 조합 가능) */
   modelNm?: string;
-  /**
-   * 어느 에이전트의 TRX_TOKEN_DET 를 볼지 (config.yml agents[].id).
-   * ⚠️ WHERE 절 조건이 아니라 **커넥션 선택**이다 — 에이전트는 행이 아니라 DB 단위로 갈린다.
-   * 생략 = 기본 에이전트.
-   */
   agentId?: string;
 }
 
@@ -69,7 +53,6 @@ const num = (v: unknown): number => {
 };
 const str = (v: unknown): string | null => (v == null ? null : String(v));
 
-/** CALL_TM 을 granularity 버킷 시작 시각으로 만드는 Oracle 표현식 (tokens.ts 와 동일 규칙) */
 function bucketExpr(g: Granularity): string {
   if (g === "1d") return `TRUNC(CALL_TM)`;
   if (g === "1h") return `TRUNC(CALL_TM, 'HH24')`;
@@ -147,7 +130,6 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
     conn = await oracle.getConnection(cfg);
     const opts = { outFormat: oracle.OBJECT } as const;
 
-    // STAT_CD/ERR_CTN 이 없으면(적재 전) 여기서 끝 — 0 이 아니라 "적재 전" 으로 알린다.
     try {
       await conn.execute("SELECT STAT_CD, ERR_CTN FROM TRX_TOKEN_DET WHERE 1 = 0", {}, opts);
     } catch (e) {
@@ -168,9 +150,6 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
     const FAILED = `SUM(CASE WHEN ${SQL_ERR_PRED} THEN 1 ELSE 0 END)`;
     const TIMEOUT = `SUM(CASE WHEN ${SQL_ERR_PRED} AND ${SQL_TIMEOUT_PRED} THEN 1 ELSE 0 END)`;
 
-    // 1) 총계 — 전체 호출 / 실패 / 타임아웃 / 영향 사용자·질문 / 마지막 실패 시각.
-    //    "대기시간 평균" 은 어차피 전부 실패 건이라 해석할 게 없어 빼고(개별 대기는 목록에서 본다),
-    //    대신 영향 질문 수(고유 TRACE_ID)를 센다 — 사용자 체감 피해량에 가장 가깝다.
     const totalSql =
       `SELECT COUNT(*) AS N, ${FAILED} AS F, ${TIMEOUT} AS T,` +
       ` COUNT(DISTINCT CASE WHEN ${SQL_ERR_PRED} THEN USER_ID END) AS U,` +
@@ -179,7 +158,6 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
       ` FROM TRX_TOKEN_DET${where}`;
     const totalRow = (await run("totals", totalSql))[0] ?? {};
 
-    // 2) 시계열
     const bucketSql =
       `SELECT TO_CHAR(${bucketExpr(g)}, 'YYYY-MM-DD"T"HH24:MI:SS') AS BKT,` +
       ` ${FAILED} AS F, ${TIMEOUT} AS T` +
@@ -199,8 +177,6 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
       (k) => bucketMap.get(k) ?? { ts: isoNoTz(k), failed: 0, timeout: 0 }
     );
 
-    // 3) 노드별 / 모델별 / 사용자별 — 실패가 난 그 호출의 값이라 추정이 아니다.
-    //    calls 를 함께 세어 "그 노드 전체 호출 중 몇 %가 끊겼나" 를 볼 수 있게 한다.
     const dimSql = (col: string) =>
       `SELECT NVL(${col}, '(없음)') AS K, COUNT(*) AS N, ${FAILED} AS F, ${TIMEOUT} AS T` +
       ` FROM TRX_TOKEN_DET${where} GROUP BY NVL(${col}, '(없음)')` +
@@ -216,9 +192,6 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
     const byModel = dimFrom(await run("byModel", dimSql("MODEL_NM")));
     const byUser = dimFrom(await run("byUser", dimSql("USER_ID")));
 
-    // 3.5) 모델 × 시간 히트맵 — "이 시간대에 이 모델이 몇 건 요청 중 몇 건 실패했나".
-    //   총 호출 수(=실패 분모) 까지 세서 셀 색상을 실패율로 매길 수 있게 한다.
-    //   상위 MODEL_TREND_LIMIT 개 모델(호출 많은 순) 만 편성 — 밀도 관리.
     const modelTrendSql =
       `SELECT NVL(MODEL_NM, '(없음)') AS M,` +
       ` TO_CHAR(${bucketExpr(g)}, 'YYYY-MM-DD"T"HH24:MI:SS') AS BKT,` +
@@ -261,8 +234,6 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
         ),
       }));
 
-    // 3.6) 오류 사유 top N — ERR_CTN 앞 N자 로 클러스터링 (스택 트레이스는 앞머리가 같으니 그룹핑됨).
-    //   실패 건이 무엇 때문에 나는지 한 눈에 보여준다.
     const reasonSql =
       `SELECT SUBSTR(TRIM(ERR_CTN), 1, ${REASON_KEYLEN}) AS R,` +
       ` COUNT(*) AS N,` +
@@ -279,7 +250,6 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
       lastAt: str(r.LAST_TM ?? r.last_tm),
     }));
 
-    // 4) 실패 호출 목록 (최근순)
     const itemSql =
       `SELECT TOKEN_ID, TRACE_ID, NODE_NM, MODEL_NM, USER_ID, QUERY_CTN, LATENCY_MS, STAT_CD, ERR_CTN,` +
       ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS') AS CALL_TM` +
@@ -335,7 +305,6 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
       try {
         await conn.close();
       } catch {
-        /* ignore */
       }
     }
   }

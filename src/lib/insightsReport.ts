@@ -1,19 +1,8 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// 실적 화면(/insights)의 "리포트 복사" 텍스트 조립.
-//
-// 매주 수기로 옮겨 적던 실적을 한 번의 복사로 대체한다. 예전엔 `/report` 전용 화면이
-// 같은 일을 했지만 실적 화면과 내용이 겹쳐 화면을 없앴고, 복사 기능만 여기로 옮겼다.
-//
-// ⚠️ **입력은 `InsightsResponse` 하나뿐이다.** 다른 API 를 끌어오지 말 것 —
-//    그러면 "화면에 보이는 것 = 복사되는 것" 이라는 관계가 깨지고, 일반 사용자(FIELD)
-//    세션에는 애초에 없는 데이터(사번·내부 노드명·AREA)를 리포트에만 싣게 된다.
-//    `/report` 에 있던 [Top 사용자]·[AREA별]·[노드별 토큰] 세 섹션이 사라진 이유가 이것이다.
-//
-// ⚠️ 라벨은 **화면과 같은 것을 쓴다** — 기능 코드는 `actionLabel`, 실패 사유는 서버가
-//    붙여 준 `topErrors[].label`(코드 아님). 화면과 복사본의 표기가 갈리면 안 된다.
-// ─────────────────────────────────────────────────────────────────────────────
 
-import { DailyRow } from "@/components/DailyTable";
+// 실적 리포트 텍스트. 입력은 InsightsResponse 하나뿐이다 — 다른 API 를 끌어오면
+// "화면에 보이는 것 = 복사되는 것" 관계가 깨진다. docs/screens/insights.md
+
+import { DailyRow } from "@/lib/dailyRows";
 import { InsightsResponse } from "./types";
 
 const DAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
@@ -23,7 +12,6 @@ function ratio(n: number, total: number): string {
   return total > 0 ? `${((n / total) * 100).toFixed(1)}%` : "—";
 }
 
-/** ms → 사람이 읽는 소요시간. TokenLatencyChart 의 fmtDuration 과 같은 규칙. */
 function duration(ms: number | null): string {
   if (ms == null) return "—";
   if (ms < 1000) return `${Math.round(ms)}ms`;
@@ -31,7 +19,6 @@ function duration(ms: number | null): string {
   return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
 }
 
-/** "08/24 (월)" — 일별 현황 표와 같은 표기 */
 function dayLabel(date: string): string {
   const [y, m, d] = date.split("-").map(Number);
   const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
@@ -46,15 +33,11 @@ function stamp(): string {
 
 export interface InsightsReportInput {
   data: InsightsResponse;
-  /** 화면 우측 `ins-range` 와 같은 구간 문구 */
   rangeLabel: string;
-  /** 화면의 일별 현황 표와 **같은 행**을 넘긴다 (mergeDailyRows 결과) */
   dailyRows: DailyRow[];
-  /** 기능(ACTION_TYP) 코드 → 화면 표기 */
   actionLabel: (key: string) => string;
 }
 
-/** 실적 화면의 내용을 보고용 플레인 텍스트로. */
 export function buildInsightsReport({
   data, rangeLabel, dailyRows, actionLabel,
 }: InsightsReportInput): string {
@@ -67,7 +50,6 @@ export function buildInsightsReport({
   L.push(RULE);
   L.push("");
 
-  // ── ① 업무 실적 ──────────────────────────────────────────────
   L.push("[업무 실적]");
   L.push(`  · 처리 건수      ${t.total.toLocaleString()}건`);
   L.push(`  · 성공          ${t.ok.toLocaleString()}건 (${ratio(t.ok, t.total)})`);
@@ -79,7 +61,6 @@ export function buildInsightsReport({
     L.push(`  · 누적 절감 효과 ${data.fte.annualFte.toFixed(2)} FTE (${data.fte.totalCount.toLocaleString()}건 처리, 연 환산)`);
   }
 
-  // 하루짜리 조회에선 위 합계와 동어반복이라 싣지 않는다 (화면의 일별 표와 같은 규칙).
   if (dailyRows.length >= 2) {
     L.push("");
     L.push("[일별 현황]");
@@ -119,7 +100,6 @@ export function buildInsightsReport({
   if (data.topErrors.length > 0) {
     L.push("");
     L.push("[주요 실패 원인]");
-    // label 은 서버가 붙인 사유 설명이다. 설명이 없으면 label 이 곧 코드라 중복 병기하지 않는다.
     for (const e of data.topErrors) {
       L.push(`  · ${e.label}: ${e.count.toLocaleString()}건${e.described ? ` (${e.code})` : ""}`);
     }
@@ -132,7 +112,6 @@ export function buildInsightsReport({
     for (const f of facTop) L.push(`  · ${f.key}: ${f.total.toLocaleString()}건`);
   }
 
-  // ── ② AI 운영 현황 ───────────────────────────────────────────
   L.push("");
   L.push("[AI 운영 현황]");
   const tok = data.tokens;
@@ -161,8 +140,6 @@ export function buildInsightsReport({
   const tmo = data.timeouts;
   if (tmo) {
     L.push("");
-    // ⚠️ available=false 는 "0 건" 이 아니라 "아직 적재 전" 이다. 0 으로 적으면
-    //    "문제 없음" 으로 오독되므로 문구를 구분한다.
     if (!tmo.available) {
       L.push("[타임아웃] 집계 준비 중 (적재 전)");
     } else {

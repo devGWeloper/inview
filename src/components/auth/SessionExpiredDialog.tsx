@@ -1,12 +1,5 @@
 "use client";
 
-/**
- * 세션 만료 안내 모달.
- *
- * 화면을 열어둔 채 세션(7일)이 만료되면 API 가 401 을 준다. 예전엔 그 401 응답이
- * 그대로 데이터로 취급돼 화면이 JS 오류로 죽었다 — 지금은 apiClient 가 401 을
- * 잡아 이 안내를 띄우고, 원래 보던 경로(next)로 돌아오는 로그인 링크를 준다.
- */
 export function SessionExpiredDialog({ onClose }: { onClose: () => void }) {
   const goLogin = () => {
     const next = window.location.pathname + window.location.search;

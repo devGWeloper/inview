@@ -5,30 +5,14 @@ import { Milestone, Roadmap } from "@/lib/types";
 import { dayKeyOf, initialMonth, resolveMilestones, shiftMonth } from "@/lib/roadmapTime";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { CalMode, RoadmapCalendar } from "@/components/roadmap/RoadmapCalendar";
-import { MilestoneDialog } from "@/components/roadmap/MilestoneDialog";
+import { CalMode, RoadmapCalendar } from "@/features/roadmap/RoadmapCalendar";
+import { MilestoneDialog } from "@/features/roadmap/MilestoneDialog";
 
-/**
- * Action 오픈 로드맵 — "언제 무엇이 열렸고 앞으로 무엇을 열 것인가".
- *
- * **화면은 달력 하나다.** 한때 아래에 전체 목록 표를 뒀지만 "눈에 안 들어온다" 는 피드백으로
- * 통째로 뺐다. 항목의 설명·상태·정확한 날짜는 **클릭하면 뜨는 팝업**이 맡는다 — 그래서 그
- * 팝업은 수정 권한이 없는 사람에게도 열린다(읽기 전용).
- *
- * DB 연동이 없다. 운영자가 직접 적고(data/roadmap.json) 나머지 전원이 읽는다.
- * 읽기는 일반 사용자까지 열려 있으므로(roles.ts FIELD_ALLOW_PREFIXES) 사번·원문 같은
- * 내부 정보를 이 화면에 얹지 말 것.
- *
- * 쓰기는 **전역 ADMIN 전용**이다. 아래 canEdit 는 UI 잠금이고 권위는 PUT /api/roadmap 의
- * requireGlobalAdmin() 이다. 편집은 팝업 하나(MilestoneDialog)로만 하고, 저장은 그때마다
- * 전체 목록을 PUT 한다 — '저장 안 한 변경' 상태를 화면이 들고 있지 않게 하기 위해서다.
- */
 
 type Dialog = { mode: "create" } | { mode: "edit"; id: string } | null;
 
 export default function RoadmapPage() {
   const { user } = useAuth();
-  // 전역 ADMIN 만 수정한다 — 에이전트 하나에 매인 운영자는 앱 공용 계획표를 고치지 않는다.
   const canEdit = !!user && user.role === "ADMIN" && user.global === true;
 
   const [rows, setRows] = useState<Milestone[]>([]);
@@ -41,12 +25,9 @@ export default function RoadmapPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
-  // 서버에서 렌더할 때와 값이 달라지지 않도록 '오늘' 은 마운트 후에 정한다.
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => setNow(Date.now()), []);
 
-  // 보기 단위는 **년이 기본**이다 — 로드맵을 여는 이유는 대개 전체 조망이고,
-  // 한 달만 보이면 다음 오픈이 두 달 뒤일 때 빈 달력을 직접 넘겨 찾아야 한다.
   const [mode, setMode] = useState<CalMode>("year");
   const [view, setView] = useState<{ year: number; monthIdx: number } | null>(null);
 
@@ -71,14 +52,11 @@ export default function RoadmapPage() {
 
   const items = useMemo(() => (now === null ? [] : resolveMilestones(rows, now)), [rows, now]);
 
-  // 처음 보여줄 달은 '이번 달' 이 아니라 **가장 가까운 오픈이 있는 달**이다.
-  // (이번 달이 비어 있으면 빈 달력만 보이고 사용자가 직접 찾아 넘겨야 한다)
   useEffect(() => {
     if (now === null || loading || view !== null) return;
     setView(initialMonth(items, now));
   }, [items, now, loading, view]);
 
-  // 이동 단위는 보기 단위를 따른다 — 년 보기에서 ‹ › 가 한 달씩 움직이면 화면이 안 바뀐다.
   const move = useCallback(
     (delta: number) => {
       setView((v) => {
@@ -95,10 +73,6 @@ export default function RoadmapPage() {
     setView({ year: d.getFullYear(), monthIdx: d.getMonth() });
   }, [now]);
 
-  /**
-   * 달력에서 항목 클릭 — 팝업을 연다.
-   * 운영자면 수정 폼, 아니면 읽기 전용 상세. **표를 없앴으므로 설명을 볼 다른 길이 없다.**
-   */
   function pickFromCalendar(id: string) {
     setSelectedId(id);
     setSaveError("");
@@ -110,7 +84,6 @@ export default function RoadmapPage() {
     setDialog({ mode: "create" });
   }
 
-  /** 전량 PUT. 서버가 정규화한 결과를 그대로 화면 상태로 삼는다. */
   async function commit(next: Milestone[]) {
     setSaving(true);
     setSaveError("");
@@ -143,7 +116,6 @@ export default function RoadmapPage() {
   }
 
   const editing = dialog?.mode === "edit" ? rows.find((r) => r.id === dialog.id) ?? null : null;
-  // 팝업을 열었는데 대상 행이 사라졌으면(다른 세션이 지웠다면) 추가 모드로 두지 않는다.
   const dialogOpen = dialog?.mode === "create" || (dialog?.mode === "edit" && editing !== null);
 
   const ready = !loading && now !== null && view !== null;
@@ -227,10 +199,6 @@ export default function RoadmapPage() {
   );
 }
 
-/**
- * 새 항목의 기본 날짜 — 보고 있는 달이 이번 달이면 오늘, 아니면 그 달 1일.
- * (달력을 10월로 넘겨 두고 추가를 누르면 10월에 만들려는 것이다)
- */
 function defaultDayFor(view: { year: number; monthIdx: number }, now: number | null): string {
   if (now === null) return "";
   const today = new Date(now);

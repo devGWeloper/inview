@@ -1,0 +1,62 @@
+/* CSS 변수 · 리셋 · 기본 타이포 */
+* { box-sizing: border-box; }
+
+:root {
+  /* neutral enterprise palette */
+  --bg:         #f4f5f7;
+  --surface:    #ffffff;
+  --surface-2:  #fafbfc;
+  --surface-3:  #f0f2f5;
+  --border:     #e1e4e8;
+  --border-strong: #d0d4da;
+
+  --text:       #1f2328;
+  --text-2:     #4b5563;
+  --text-3:     #6b7280;
+  --text-muted: #8a94a6;
+
+  --accent:     #2563eb;
+  --accent-soft:#e8efff;
+
+  /* 묶음(현장 작업 1건) 행 톤 — 목록에서 "한 덩어리"로 읽히게 하는 3단계.
+     레일 > 요약 행 > 자식 행 순으로 옅어지고, 일반 행(흰 바탕)과는 바탕색으로 갈린다. */
+  --work-head:  #e9edf4;
+  --work-band:  #f3f5f9;
+  --work-rail:  #a8b6cc;
+
+  --ok:         #067647;
+  --ok-soft:    #e6f4ec;
+  --warn:       #b54708;
+  --warn-soft:  #fdf2e5;
+  --err:        #b42318;
+  --err-soft:   #fdecec;
+  --fail:       #c2410c;
+  --fail-soft:  #ffedd5;
+  /* Timeout 화면의 2계열 구분용. --err(#b42318) 과 --fail(#c2410c) 은 색상·명도가 너무 가까워
+     적층 차트·막대에서 두 계열이 한 덩어리로 보였다. 명도까지 벌린 앰버를 따로 둔다.
+     ⚠️ TimeoutTrendChart.SERIES_COLOR 의 값과 같아야 한다(차트는 JS 상수로 색을 쓴다). */
+  --llm-err:      #d97706;
+  --llm-err-soft: #fef3c7;
+
+  /* 레이어별 색상은 src/lib/types.ts 의 LAYERS 배열을 단일 소스로 사용한다
+     (.tl-layer-tag 에 inline style 로 주입). 여기서는 색상 변수 정의 없음. */
+
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "D2Coding", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR",
+          "Apple SD Gothic Neo", "Malgun Gothic", Roboto, sans-serif;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }

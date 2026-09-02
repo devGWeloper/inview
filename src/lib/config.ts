@@ -1,3 +1,7 @@
+// YAML 설정 로더 (시작 시 1회, 캐시). GAIA 의 DB 가 앱 자체 DB 를 겸하며 그 매핑은
+// APP_DB_LAYER 한 곳이다. AgentDef 는 접속정보를 품으므로 서버 전용 —
+// 클라이언트로는 publicAgents() 의 AgentInfo 만 내린다. docs/architecture/agents.md
+
 import fs from "fs";
 import path from "path";
 import yaml from "js-yaml";
@@ -18,10 +22,6 @@ interface RawLayer {
   connectString?: string;
 }
 
-/**
- * 에이전트 1개의 서버측 정의. db 는 그 에이전트의 GAIA DB(= TRX_TOKEN_DET 위치).
- * ⚠️ 접속정보를 품으므로 클라이언트로 내보내지 말 것 — publicAgents() 를 쓴다.
- */
 export interface AgentDef {
   id: string;
   name: string;
@@ -83,7 +83,6 @@ function normalizeLayers(raw: RawConfig | null): Partial<Record<LayerKey, LayerD
   return out;
 }
 
-/** 접속정보 3필드가 모두 있어야 구성된 것으로 본다 (normalizeLayers 와 같은 규칙) */
 function normalizeDb(v: RawLayer | undefined): LayerDbConfig | null {
   if (!v) return null;
   const { user, password, connectString } = v;
@@ -91,17 +90,11 @@ function normalizeDb(v: RawLayer | undefined): LayerDbConfig | null {
   return { user, password, connectString };
 }
 
-/** 한도(TPM/RPM): 0 = 미설정을 허용해야 하므로 음수/비숫자만 0 으로 떨군다 */
 function normalizeLimit(v: unknown): number {
   const n = typeof v === "string" && v.trim() !== "" ? Number(v) : v;
   return typeof n === "number" && Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
-/**
- * agents 섹션 정규화.
- * ⚠️ 섹션이 아예 없거나 쓸 만한 항목이 하나도 없으면 기본 에이전트 1개를 합성한다 —
- *    사내에 이미 배포된 config.yml(agents 없음)을 고치지 않아도 지금과 똑같이 동작해야 한다.
- */
 function normalizeAgents(
   raw: RawConfig | null,
   layers: Partial<Record<LayerKey, LayerDbConfig>>
@@ -134,7 +127,6 @@ function normalizeAgents(
   }
 
   if (out.length === 0) {
-    // 하위호환: agents 섹션이 없는 기존 배포 → 앱 자체 DB(GAIA)를 쓰는 단일 에이전트
     out.push({
       id: "default",
       name: DEFAULT_PROFILE.name,
@@ -147,72 +139,45 @@ function normalizeAgents(
     return out;
   }
 
-  // 기본 에이전트는 정확히 하나. default:true 가 없으면 첫 항목을 기본으로 승격한다.
   let defaultIdx = out.findIndex((a) => a.isDefault);
   if (defaultIdx < 0) defaultIdx = 0;
   out.forEach((a, i) => { a.isDefault = i === defaultIdx; });
 
-  // 기본 에이전트가 db 를 생략하면 layers.GAIA(앱 자체 DB)를 쓴다 — 기존 설정 재사용.
   if (!out[defaultIdx].db) out[defaultIdx].db = layers[APP_DB_LAYER] ?? null;
 
   return out;
 }
 
-/**
- * 이 앱의 "자체 DB" 로 쓰는 레이어.
- * 전용 DB 자원을 할당받지 못해, GAIA 레이어의 DB 를 앱 자체 DB 로 겸용한다.
- * 트레이스 조회와 무관한 앱 전용 테이블(ex. TRX_ERRMSG_COD 에러코드 마스터)은
- * 이 커넥션에 생성/조회한다. GAIA 의 DB 위치가 바뀌면 이 매핑만 따라가면 된다.
- */
 export const APP_DB_LAYER: LayerKey = "GAIA";
 
-/** 앱 자체 DB(= APP_DB_LAYER) 의 커넥션 설정. 미구성 시 null. */
 export function getAppDbConfig(): LayerDbConfig | null {
   return loadConfig().layers[APP_DB_LAYER] ?? null;
 }
 
-/**
- * 이벤트-FAB 매핑(TRX_EVENT_MAP)이 저장되는 레이어.
- * 앱 자체 DB(GAIA)가 아니라 MCP 다 — MCP 로직이 요청 FAB 허용 여부를 이 테이블로
- * 직접 판정하기 때문. 테이블 위치가 바뀌면 이 매핑만 따라가면 된다.
- */
 export const EVENT_FAB_DB_LAYER: LayerKey = "MCP";
 
-/** 이벤트-FAB 매핑 DB(= EVENT_FAB_DB_LAYER) 의 커넥션 설정. 미구성 시 null. */
 export function getEventFabDbConfig(): LayerDbConfig | null {
   return loadConfig().layers[EVENT_FAB_DB_LAYER] ?? null;
 }
 
-// ── 멀티 에이전트 ────────────────────────────────────────────────────────
-// Tokens / Timeout 화면만 에이전트별로 갈린다 (출처가 TRX_TOKEN_DET 하나).
-// BIZ_AIACTIONTXN_HIS 기반 화면은 전부 기본 에이전트 전용이며 위 layers 를 쓴다.
-
-/** config 에 정의된 에이전트 목록 (항상 1개 이상). */
 export function listAgents(): AgentDef[] {
   return loadConfig().agents;
 }
 
-/** 기본 에이전트의 id. */
 export function defaultAgentId(): string {
   return loadConfig().defaultAgentId;
 }
 
-/** id 로 에이전트를 찾는다. id 생략 = 기본 에이전트. 없는 id 면 null. */
 export function getAgent(id?: string | null): AgentDef | null {
   const cfg = loadConfig();
   const key = id && id.trim() ? id.trim() : cfg.defaultAgentId;
   return cfg.agents.find((a) => a.id === key) ?? null;
 }
 
-/**
- * 그 에이전트의 TRX_TOKEN_DET 가 있는 DB. 없는 id/미구성이면 null →
- * 호출부(tokens/timeouts/tickStats)가 기존대로 빈 통계를 돌려준다.
- */
 export function getAgentDbConfig(id?: string | null): LayerDbConfig | null {
   return getAgent(id)?.db ?? null;
 }
 
-/** 클라이언트로 내려도 안전한 형태 (접속정보 제거). */
 export function publicAgents(): AgentInfo[] {
   return listAgents().map((a) => ({
     id: a.id,

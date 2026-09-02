@@ -4,11 +4,8 @@ import { useState } from "react";
 import { useAuth } from "./AuthProvider";
 
 /**
- * 본인 비밀번호 변경 모달. 사용자 메뉴에서 자발적으로 여는 용도(항상 닫기 가능).
- *
- * ⚠️ TEMP(강제 변경 비활성): 최초 로그인 시 강제 변경(`forced` 모드) 은 임시로 뺐다.
- *    아직 권한별 실질 로직이 적고 내부 인원끼리만 쓰는 단계라 번거로움이 더 커서다.
- *    되살릴 때 = CLAUDE.md "TEMP — 비밀번호 강제 변경 비활성" 절 참고.
+ * 본인 비밀번호 변경 모달 (항상 닫기 가능).
+ * TEMP(강제 변경 비활성): forced 모드는 뺐다. docs/architecture/temp-workarounds.md
  */
 export function ChangePasswordModal({
   onClose,

@@ -9,31 +9,18 @@ import {
   useTick,
 } from "@/components/tick/TickProvider";
 
-// 틱 뷰의 조회 컨트롤.
-//
-// ⚠️ **두 조각으로 나뉘어 있다** — 창 길이(TickPresets)는 집계 뷰의 기간 프리셋과 **같은 자리**에,
-//    동작 버튼(TickActions)은 집계 뷰의 `조회` 버튼과 **같은 자리**에 들어간다. 한 덩어리로
-//    묶어 두면 토글할 때마다 뒤따르는 필터·버튼이 좌우로 밀려 화면이 휙 움직인다.
-//    (사용자 피드백: "토글 바꿀 때마다 눈이 피곤하다")
-// ⚠️ 자동 갱신은 live 에서만 — 고정된 과거 구간을 주기적으로 다시 부를 이유가 없을 뿐 아니라,
-//    라이브 갱신은 매번 '지금' 으로 창을 다시 잡아 사용자가 지정한 구간을 덮어쓴다.
-
-/** 창 길이 프리셋 + 직접 설정 — 집계 뷰의 `.preset-group` 자리에 들어간다 */
 export function TickPresets({
   loading, onSubmit,
 }: {
   loading: boolean;
-  /** 조회 실행 — 호출부가 현재 공유 상태를 풀어서 부른다 */
   onSubmit: () => void;
 }) {
   const { sel, setWin, setCustom } = useTick();
-  // 직접 설정 입력은 로컬 초안이고 '조회' 를 눌렀을 때만 공유 상태에 커밋된다.
   const [open, setOpen] = useState(sel.mode === "custom");
   const [from, setFrom] = useState(sel.from);
   const [to, setTo] = useState(sel.to);
   const [error, setError] = useState<string | null>(null);
 
-  // 공유 상태가 바뀌면(다른 화면에서 고쳤거나, 집계 뷰에서 구간을 물려받았거나) 초안을 맞춘다.
   useEffect(() => {
     if (sel.mode === "custom") {
       setOpen(true);
@@ -57,7 +44,6 @@ export function TickPresets({
     setOpen(false);
     setError(null);
     setWin(w);
-    // TickProvider.persist 가 ref 를 동기 갱신하므로 곧바로 조회해도 새 창이 반영된다.
     onSubmit();
   };
 
@@ -127,7 +113,6 @@ export function TickPresets({
   );
 }
 
-/** 자동 갱신 + 새로고침 — 집계 뷰의 `조회` 버튼 자리에 들어간다 */
 export function TickActions({
   loading, onSubmit,
 }: {

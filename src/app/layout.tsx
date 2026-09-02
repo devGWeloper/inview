@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import pkg from "../../package.json";
 import { AuthProvider } from "@/components/auth/AuthProvider";
-import { AppChrome } from "@/components/AppChrome";
+import { AppChrome } from "@/components/shell/AppChrome";
 
 export const metadata: Metadata = {
   title: "TraceX · AI Action Trace Viewer",

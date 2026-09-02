@@ -7,7 +7,6 @@ import { logger, reqContext } from "@/lib/logger";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** 본인 비밀번호 변경. 현재 비밀번호 확인 후 새 비밀번호로 교체. */
 export async function POST(req: NextRequest) {
   const ctx = reqContext(req);
   const session = await getSession();

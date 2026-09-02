@@ -17,15 +17,9 @@ function LoginInner() {
   const router = useRouter();
   const params = useSearchParams();
   const { user, loading, setUser } = useAuth();
-  // 오픈 리다이렉트 방지: 자체 경로("/xxx")만 허용, "//" 또는 외부 URL 은 홈으로.
   const rawNext = params.get("next") || "";
   const safeNext = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "";
 
-  /**
-   * 로그인 후 착지 경로.
-   * ⚠️ 권한 밖 경로로 보내면 미들웨어가 곧바로 되돌려 화면이 한 번 튄다 — 특히 일반 사용자(FIELD)는
-   *    기본 홈("/")이 아예 막혀 있다. 갈 수 없는 next 는 그 권한의 홈으로 바꿔서 보낸다.
-   */
   function landing(u: { role: Role; global?: boolean }): string {
     if (safeNext && canAccessPath(u.role, safeNext.split("?")[0])) return safeNext;
     return homePathFor(u.role);
@@ -37,7 +31,6 @@ function LoginInner() {
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // 이미 로그인 상태면 목적지로 보낸다.
   useEffect(() => {
     if (!loading && user) router.replace(landing(user));
     // eslint-disable-next-line react-hooks/exhaustive-deps

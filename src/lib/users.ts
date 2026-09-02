@@ -1,12 +1,6 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// 사용자 계정(TRX_USER_MAS) 데이터 접근 계층 — 인증/인가의 저장소.
-//
-// 앱 자체 DB(= GAIA, getAppDbConfig)에 있는 TRX_USER_MAS 를 읽고 쓴다.
-// oracledb 는 next.config 의 serverComponentsExternalPackages 로 빠져 있어 lazy import.
-// 드라이버/설정/테이블이 없으면 available=false + reason 으로 내려 화면이 안내한다.
-//
-// ⚠️ 서버 전용 (Node 런타임). 미들웨어(Edge)/클라이언트에서 import 금지.
-// ─────────────────────────────────────────────────────────────────────────────
+
+// 계정 CRUD · 로그인 검증. AGENT_ID / GLOBAL_YN 컬럼은 각각 존재를 탐지해 ALTER 전에도 돌지만,
+// 범위를 쓰려는 요청은 조용히 무시하지 않고 throw 한다. docs/architecture/auth.md
 
 import { getAppDbConfig, APP_DB_LAYER, getAgent } from "./config";
 import { Role, isRole } from "./roles";
@@ -25,7 +19,6 @@ async function getOracle(): Promise<typeof import("oracledb") | null> {
   }
 }
 
-// 최초 관리자 시드 (테이블이 비어 있을 때 1회 생성)
 const SEED_ADMIN = {
   userId: "admin",
   name: "운영자",
@@ -34,16 +27,6 @@ const SEED_ADMIN = {
   password: "admin1234",
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 로컬 디버깅용 더미 관리자 (⚠️ DB 없을 때만 · 운영 빌드에서는 절대 동작 안 함)
-//
-// 로컬에서 Oracle 이 없으면 로그인 자체가 불가해 UI 를 볼 수 없다. 그래서
-// "개발 모드(NODE_ENV!==production) + 계정 DB 미연결" 일 때만 admin/admin 으로
-// 통과시켜 화면을 디버깅할 수 있게 한다. 조건이 둘 다여서:
-//   - `npm run start`(운영) 이나 `npm run build` 산출물에서는 NODE_ENV=production → 비활성
-//   - DB 가 붙은 사내 환경에서는 dbUsable()=true → 비활성 (실제 계정만 유효)
-// 강제로 끄려면 DEV_AUTH_BYPASS=off.
-// ─────────────────────────────────────────────────────────────────────────────
 const DEV_ADMIN = {
   userId: "admin",
   password: "admin",
@@ -56,7 +39,6 @@ function devBypassAllowed(): boolean {
   return process.env.NODE_ENV !== "production" && process.env.DEV_AUTH_BYPASS !== "off";
 }
 
-/** 계정 DB 를 실제로 쓸 수 있는가 (설정 + 드라이버 모두 존재). */
 async function dbUsable(): Promise<boolean> {
   return getAppDbConfig() != null && (await getOracle()) != null;
 }
@@ -76,7 +58,6 @@ function devAdminAccount(): UserAccount {
   };
 }
 
-/** 쓰기 작업 진입 시 로컬 더미 모드면 명확한 메시지로 막는다(무해). */
 async function guardDevWrite(): Promise<void> {
   if (!(await dbUsable()) && devBypassAllowed()) {
     throw new Error("로컬 디버깅 모드(DB 미연결)에서는 계정 저장/변경이 지원되지 않습니다.");
@@ -89,19 +70,7 @@ export interface UserAccount {
   work: string | null;
   role: Role;
   useYn: "Y" | "N";
-  /**
-   * 소속 에이전트 id (null = 미배정). ⚠️ AGENT_ID 컬럼이 없으면 항상 null.
-   * ⚠️ 이 값만으로 범위를 판정하지 말 것 — global 과 묶어서 roles.ts 의 함수로만 판정한다.
-   */
   agentId: string | null;
-  /**
-   * 전역(모든 에이전트) 계정인가 = GLOBAL_YN='Y'.
-   *
-   * ⚠️ GLOBAL_YN 컬럼이 없으면(ALTER 전) **옛 규칙**으로 유도한다: 결속이 없으면 전역.
-   *    그래야 마이그레이션 전에도 지금까지와 똑같이 동작한다. 컬럼이 생긴 뒤부터
-   *    "결속 없음 = 잠금" 이 되므로, ALTER 와 UPDATE 는 한 번에 실행해야 한다
-   *    (sql/migrations/2026-08-27_add_user_global_yn.sql 이 둘 다 담고 있다).
-   */
   global: boolean;
   lastLoginDt: string | null;
   regDt: string | null;
@@ -112,33 +81,21 @@ export interface UserListResult {
   available: boolean;
   reason?: string;
   users: UserAccount[];
-  /** AGENT_ID 컬럼이 있는가 (없으면 결속 편집 UI 를 감춘다). */
   agentColumn?: boolean;
-  /** GLOBAL_YN 컬럼이 있는가 (없으면 전역 토글 UI 를 감춘다). */
   globalColumn?: boolean;
 }
 
 const s = (r: Record<string, unknown>, k: string): string | null =>
   (r[k] ?? r[k.toLowerCase()] ?? null) as string | null;
 
-/** 에이전트 결속 값 정규화 — 빈 문자열/공백은 "결속 없음"(NULL) 과 같게 본다. */
 function normAgentId(v: string | null | undefined): string | null {
   return typeof v === "string" && v.trim() ? v.trim() : null;
 }
 
-/**
- * AGENT_ID 컬럼이 없는데 결속을 **쓰려 한** 경우의 오류.
- *
- * ⚠️ 읽기와 달리 쓰기는 조용히 넘어가면 안 된다 — 관리자가 결속을 지정하고 저장했는데
- *    아무 일도 일어나지 않고 화면은 "전체" 로 남으면, 묶었다고 믿은 채로 끝난다.
- *    (읽기 내성은 그대로다: 컬럼이 없으면 전원 NULL 로 읽히고, 결속을 건드리지 않는
- *     계정 수정은 ALTER 전에도 정상 저장된다.)
- */
 const AGENT_COL_MISSING =
   "에이전트 결속을 저장할 수 없습니다 — TRX_USER_MAS.AGENT_ID 컬럼이 아직 없습니다. " +
   "앱 자체 DB(GAIA)에서 sql/migrations/2026-08-24_add_user_agent_id.sql 을 실행한 뒤 다시 시도하세요.";
 
-/** GLOBAL_YN 컬럼이 없는데 전역 여부를 **쓰려 한** 경우의 오류 (AGENT_COL_MISSING 과 같은 이유). */
 const GLOBAL_COL_MISSING =
   "전역 권한을 저장할 수 없습니다 — TRX_USER_MAS.GLOBAL_YN 컬럼이 아직 없습니다. " +
   "앱 자체 DB(GAIA)에서 sql/migrations/2026-08-27_add_user_global_yn.sql 을 실행한 뒤 다시 시도하세요.";
@@ -147,15 +104,6 @@ export type AgentIdCheck =
   | { ok: true; value: string | null }
   | { ok: false; error: string };
 
-/**
- * 계정 저장 요청으로 들어온 에이전트 결속 값을 검증한다 (계정 API 의 쓰기 경로에서 사용).
- *
- * 없는 id 를 그대로 저장하면 그 계정은 로그인 후 /api/agents 목록이 비고 조회는 403 만
- * 돌려받는데, 화면에는 아무 단서도 남지 않는다. 그래서 **저장 시점에** 막는다.
- *
- * ⚠️ `getAgent("")` 는 **기본 에이전트**를 돌려준다 — 빈 값을 truthy 검사 없이 넘기면
- *    "제한 없음" 이 조용히 "기본 에이전트 결속" 으로 바뀐다. 빈 값은 먼저 null 로 떨군다.
- */
 export function validateAgentId(v: unknown): AgentIdCheck {
   if (v === null || v === undefined) return { ok: true, value: null };
   if (typeof v !== "string") return { ok: false, error: "에이전트 값이 올바르지 않습니다." };
@@ -174,9 +122,7 @@ function rowToAccount(r: Record<string, unknown>, hasGlobal: boolean): UserAccou
     work: s(r, "WORK_CTN"),
     role: isRole(roleRaw) ? roleRaw : "DEV",
     useYn: s(r, "USE_YN") === "N" ? "N" : "Y",
-    // 컬럼이 없는 SELECT 는 selectCols() 가 상수 NULL 로 채워 주므로 여기 분기는 없다.
     agentId,
-    // ⚠️ GLOBAL_YN 이 없으면 옛 규칙(결속 없음 = 전역)으로 유도한다.
     global: hasGlobal ? s(r, "GLOBAL_YN") === "Y" : !agentId,
     lastLoginDt: s(r, "LAST_LOGIN_DT"),
     regDt: s(r, "REG_DT"),
@@ -191,30 +137,15 @@ const SELECT_COLS = `USER_ID, USER_NM, WORK_CTN, ROLE_CD, USE_YN,
 
 type Conn = Awaited<ReturnType<NonNullable<Awaited<ReturnType<typeof getOracle>>>["getConnection"]>>;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AGENT_ID 컬럼 존재 탐지 — ALTER 전에도 앱이 그대로 동작해야 한다.
-//
-// 사내 배포는 src 복붙 + 수동 ALTER 라 배포와 DDL 의 순서가 자유로워야 한다.
-// tokens.ts 의 hasStatus 와 같은 패턴: WHERE 1=0 이라 행은 읽지 않고 파싱만 태운다.
-//
-// ⚠️ 캐시는 **true 만** 기억한다. false 까지 캐시하면 ALTER 를 한 뒤에도 프로세스를
-//    재시작하기 전까지 컬럼을 계속 무시하게 된다(전원 NULL = 결속 해제). 이렇게 두면
-//    컬럼이 생긴 다음 호출부터 바로 잡히고, 한 번 잡힌 뒤로는 탐지 쿼리가 사라진다.
-// ─────────────────────────────────────────────────────────────────────────────
 let agentColFound = false;
 let globalColFound = false;
 
-/** 컬럼 1개 존재 탐지 (캐시는 true 만). */
 async function hasCol(conn: Conn, col: string, found: boolean, label: string): Promise<boolean> {
   if (found) return true;
   try {
-    // ⚠️ 컬럼명은 상수 목록에서만 온다(호출부 2곳) — 사용자 입력이 아니다.
     await conn.execute(`SELECT ${col} FROM TRX_USER_MAS WHERE 1 = 0`);
     return true;
   } catch (e) {
-    // ORA-00904(컬럼 미존재)는 ALTER 전의 정상 경로라 조용히 넘긴다.
-    // ⚠️ 그 외(세션 끊김/ORA-01017 등)는 남긴다 — 결과가 "컬럼 없음" 과 구분되지 않는데
-    //    실제로는 그 호출 동안 계정 결속이 통째로 풀린 것이라 흔적이 필요하다.
     if (!String(e).includes("ORA-00904")) {
       logger.warn(`${label}: ${col} 탐지 실패 — 이번 조회는 컬럼 없음으로 처리`, { err: String(e) });
     }
@@ -232,12 +163,10 @@ async function hasGlobalCol(conn: Conn): Promise<boolean> {
   return globalColFound;
 }
 
-/** 한 커넥션에서 두 컬럼의 존재를 함께 확인한다 (SELECT/INSERT/UPDATE 가 같이 쓴다). */
 async function cols(conn: Conn): Promise<{ agent: boolean; global: boolean }> {
   return { agent: await hasAgentCol(conn), global: await hasGlobalCol(conn) };
 }
 
-/** SELECT 목록. 컬럼이 없으면 상수 NULL 로 대체해 호출부가 분기하지 않게 한다. */
 function selectCols(c: { agent: boolean; global: boolean }): string {
   return `${SELECT_COLS},
        ${c.agent ? "AGENT_ID" : "CAST(NULL AS VARCHAR2(50)) AS AGENT_ID"},
@@ -262,10 +191,6 @@ async function withConn<T>(
   }
 }
 
-/**
- * 테이블이 비어 있으면 기본 운영자 계정을 시드한다 (best-effort).
- * 테이블 미생성(ORA-00942) 등은 조용히 무시 — 상위에서 available=false 로 처리.
- */
 async function ensureSeedAdmin(conn: Conn, oracle: NonNullable<Awaited<ReturnType<typeof getOracle>>>): Promise<void> {
   try {
     const cnt = await conn.execute(
@@ -276,8 +201,6 @@ async function ensureSeedAdmin(conn: Conn, oracle: NonNullable<Awaited<ReturnTyp
     const n = Number((cnt.rows?.[0] as Record<string, unknown> | undefined)?.["N"] ?? 0);
     if (n > 0) return;
     const { hash, salt } = hashPassword(SEED_ADMIN.password);
-    // ⚠️ 시드 관리자는 반드시 전역이다 — 컬럼이 있는데 'N' 으로 들어가면 최초 운영자가
-    //    로그인하자마자 아무 에이전트도 못 보는 잠금 상태가 된다.
     const seedGlobal = await hasGlobalCol(conn);
     await conn.execute(
       `INSERT INTO TRX_USER_MAS
@@ -292,9 +215,7 @@ async function ensureSeedAdmin(conn: Conn, oracle: NonNullable<Awaited<ReturnTyp
   }
 }
 
-/** 계정 목록 조회 (관리자 화면). DB 불가 시 available=false + reason. */
 export async function listUsers(): Promise<UserListResult> {
-  // 로컬 디버깅 모드: DB 없이도 더미 관리자 1건을 보여줘 화면을 확인할 수 있게 한다.
   if (!(await dbUsable()) && devBypassAllowed()) {
     return { available: true, users: [devAdminAccount()] };
   }
@@ -343,17 +264,10 @@ export interface CreateUserInput {
   role: Role;
   password: string;
   useYn?: "Y" | "N";
-  /**
-   * 접근 가능 에이전트 id (null = 전 에이전트).
-   * ⚠️ **키를 넣는 것 자체가 "결속을 쓰겠다" 는 의사표시**다 — 컬럼이 없으면 throw 한다.
-   *    결속을 다루지 않는 호출은 키를 아예 넘기지 말 것(그래야 ALTER 전에도 생성이 된다).
-   */
   agentId?: string | null;
-  /** 전역(모든 에이전트) 계정 여부. agentId 와 같은 규칙 — 키를 넣으면 컬럼이 없을 때 throw. */
   global?: boolean;
 }
 
-/** 계정 생성. 사번 중복 시 throw. */
 export async function createUser(input: CreateUserInput): Promise<UserAccount> {
   const userId = (input.userId ?? "").trim();
   const name = (input.name ?? "").trim();
@@ -363,9 +277,7 @@ export async function createUser(input: CreateUserInput): Promise<UserAccount> {
   await guardDevWrite();
   const { hash, salt } = hashPassword(input.password);
   return withConn(async (conn, oracle) => {
-    // ⚠️ 컬럼이 없으면 해당 컬럼과 바인드를 통째로 뺀다 (미사용 바인드도 넘기지 않는다).
     const c = await cols(conn);
-    // 결속/전역을 명시했는데 컬럼이 없으면 **조용히 무시하지 않고** 실패시킨다.
     if (input.agentId !== undefined && !c.agent) throw new Error(AGENT_COL_MISSING);
     if (input.global !== undefined && !c.global) throw new Error(GLOBAL_COL_MISSING);
     try {
@@ -387,7 +299,6 @@ export async function createUser(input: CreateUserInput): Promise<UserAccount> {
         { autoCommit: true }
       );
     } catch (e) {
-      // ORA-00001: unique constraint (사번 중복)
       if (String(e).includes("ORA-00001")) throw new Error(`이미 존재하는 사번입니다: ${userId}`);
       throw e;
     }
@@ -405,17 +316,10 @@ export interface UpdateUserInput {
   work?: string | null;
   role?: Role;
   useYn?: "Y" | "N";
-  /**
-   * 접근 가능 에이전트 id (null = 전 에이전트).
-   * ⚠️ **키를 넣는 것 자체가 "결속을 바꾸겠다" 는 의사표시**다 — 컬럼이 없으면 throw 한다.
-   *    결속을 바꾸지 않는 수정은 키를 아예 넘기지 말 것(그래야 ALTER 전에도 수정이 된다).
-   */
   agentId?: string | null;
-  /** 전역(모든 에이전트) 계정 여부. agentId 와 같은 규칙. */
   global?: boolean;
 }
 
-/** 계정 정보 수정 (비밀번호 제외). */
 export async function updateUser(userId: string, input: UpdateUserInput): Promise<UserAccount> {
   const id = (userId ?? "").trim();
   if (!id) throw new Error("사번(USER_ID)이 비어 있습니다.");
@@ -441,7 +345,6 @@ export async function updateUser(userId: string, input: UpdateUserInput): Promis
     sets.push("USE_YN = :useYn");
     binds.useYn = input.useYn === "N" ? "N" : "Y";
   }
-  // AGENT_ID / GLOBAL_YN 은 컬럼 존재 확인이 필요해 커넥션을 연 뒤에 붙인다 (아래 withConn).
   const wantAgent = input.agentId !== undefined;
   const wantGlobal = input.global !== undefined;
   if (sets.length === 0 && !wantAgent && !wantGlobal) {
@@ -451,8 +354,6 @@ export async function updateUser(userId: string, input: UpdateUserInput): Promis
   }
   return withConn(async (conn, oracle) => {
     const c = await cols(conn);
-    // ⚠️ 컬럼이 없는데 결속/전역을 바꾸라고 하면 실패시킨다 — 저장했다고 믿게 두지 않는다.
-    //    (그 둘을 건드리지 않는 수정은 여기 오지 않으므로 ALTER 전에도 그대로 저장된다.)
     if (wantAgent && !c.agent) throw new Error(AGENT_COL_MISSING);
     if (wantGlobal && !c.global) throw new Error(GLOBAL_COL_MISSING);
     if (wantAgent) {
@@ -473,8 +374,6 @@ export async function updateUser(userId: string, input: UpdateUserInput): Promis
       if (!row) throw new Error("존재하지 않는 계정입니다.");
       return rowToAccount(row, c.global);
     };
-    // 여기 오면 sets 는 반드시 하나 이상이다 (빈 입력은 위에서 조기 반환했고,
-    // AGENT_ID/GLOBAL_YN 만 온 경우는 바로 위에서 set 을 넣거나 throw 했다).
     sets.push("UPD_DT = SYSTIMESTAMP");
     const res = await conn.execute(
       `UPDATE TRX_USER_MAS SET ${sets.join(", ")} WHERE USER_ID = :id`,
@@ -488,8 +387,7 @@ export async function updateUser(userId: string, input: UpdateUserInput): Promis
 
 /**
  * 관리자에 의한 비밀번호 초기화.
- * ⚠️ TEMP(강제 변경 비활성): MUST_CHG_YN 을 'N' 으로 둔다 — 대상자는 초기화된 값 그대로
- *    로그인하고, 원할 때 직접 변경한다. 되살리려면 'Y' 로 (CLAUDE.md TEMP 절 참고).
+ * TEMP(강제 변경 비활성): MUST_CHG_YN 을 'N' 으로 둔다. 되살리려면 'Y'.
  */
 export async function resetPassword(userId: string, newPassword: string): Promise<void> {
   const id = (userId ?? "").trim();
@@ -508,7 +406,6 @@ export async function resetPassword(userId: string, newPassword: string): Promis
   });
 }
 
-/** 본인 비밀번호 변경 (현재 비밀번호 확인 후). */
 export async function changeOwnPassword(userId: string, currentPw: string, newPw: string): Promise<void> {
   const id = (userId ?? "").trim();
   if (!id) throw new Error("사번(USER_ID)이 비어 있습니다.");
@@ -534,7 +431,6 @@ export async function changeOwnPassword(userId: string, currentPw: string, newPw
   });
 }
 
-/** 계정 삭제. */
 export async function deleteUser(userId: string): Promise<void> {
   const id = (userId ?? "").trim();
   if (!id) throw new Error("사번(USER_ID)이 비어 있습니다.");
@@ -549,15 +445,10 @@ export type LoginResult =
   | { ok: true; user: UserAccount }
   | { ok: false; reason: string };
 
-/**
- * 로그인 검증. 사번+비밀번호를 확인하고 성공 시 계정 정보를 돌려준다.
- * 최초 로그인 시드(테이블 비어 있을 때) 도 여기서 보장한다.
- */
 export async function verifyLogin(userId: string, password: string): Promise<LoginResult> {
   const id = (userId ?? "").trim();
   if (!id || !password) return { ok: false, reason: "사번과 비밀번호를 입력하세요." };
 
-  // 로컬 디버깅: DB 미연결 + 개발 모드면 더미 관리자(admin/admin)로 통과.
   if (!(await dbUsable()) && devBypassAllowed()) {
     if (id === DEV_ADMIN.userId && password === DEV_ADMIN.password) {
       logger.warn("DEV auth bypass login (no DB) — admin/admin", { userId: id });
@@ -580,7 +471,6 @@ export async function verifyLogin(userId: string, password: string): Promise<Log
       if (s(row, "USE_YN") === "N") return { ok: false, reason: "비활성화된 계정입니다. 관리자에게 문의하세요." };
       const ok = verifyPassword(password, String(s(row, "PWD_HASH") ?? ""), String(s(row, "PWD_SALT") ?? ""));
       if (!ok) return { ok: false, reason: "사번 또는 비밀번호가 올바르지 않습니다." };
-      // 최근 로그인 갱신 (실패해도 로그인은 성공)
       try {
         await conn.execute(
           `UPDATE TRX_USER_MAS SET LAST_LOGIN_DT = SYSTIMESTAMP WHERE USER_ID = :id`,

@@ -21,11 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.reason }, { status: 401 });
     }
 
-    // 계정의 에이전트 범위를 세션에 싣는다.
-    // ⚠️ scope 를 반드시 함께 싣는다 — agentId 만으로는 "전역" 과 "미배정" 을 구분할 수 없고,
-    //    이 키가 없는 토큰은 옛 규칙(결속 없음=전역)으로 읽히기 때문이다(resolveScope).
     const scope = scopeKindOf({ global: result.user.global, agentId: result.user.agentId });
-    // bizAllowed 는 미들웨어(Edge, config 를 못 읽음)용 캐시다. 권위 있는 판정은 API 라우트가 한다.
     const bizAllowed = result.user.global || result.user.agentId === defaultAgentId();
     const token = await signSession({
       sub: result.user.userId,

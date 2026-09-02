@@ -4,8 +4,6 @@ import { logger, reqContext } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
-// 에러 코드 → 의미 매핑 반환. 앱 자체 DB(GAIA)의 TRX_ERRMSG_COD 에서 로드.
-// 실패/미구성 시에도 200 + 빈 맵으로 응답해 대시보드가 깨지지 않게 한다.
 export async function GET(req: NextRequest) {
   const t0 = Date.now();
   const ctx = reqContext(req);

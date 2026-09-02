@@ -6,12 +6,6 @@ import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { roleAtLeast } from "@/lib/roles";
 
-// 이벤트(액션) × FAB 허용 매트릭스 편집기. 저장하면 MCP DB 의 TRX_EVENT_MAP 에
-// 전량 교체로 반영되고, MCP 로직이 요청 FAB 허용 여부 판정에 사용한다.
-// 이벤트가 100개로 늘어도 견디도록: 스티키 헤더 + 내부 스크롤 + 검색 필터 +
-// 열/행 단위 일괄 토글. (스키마·MCP 연동 예시: sql/create_trx_event_map.sql)
-// 접근 제어: 화면 열람은 미들웨어(BR 이상), **저장은 ADMIN 전용**(PUT 이 requireBiz("ADMIN")).
-// BR 은 매트릭스를 읽기만 한다 — 아래 canEdit 가 편집 UI 를 잠근다(권위는 서버).
 
 interface EventFabApi {
   available: boolean;
@@ -25,22 +19,18 @@ export default function EventFabPage() {
 
 function EventFabEditor() {
   const [rows, setRows] = useState<EventFabMapping[]>([]);
-  // 저장 시점 스냅샷 — 비교해서 dirty(저장 버튼 활성/변경 표시)를 판정
   const [baseline, setBaseline] = useState("[]");
   const [available, setAvailable] = useState(false);
   const [reason, setReason] = useState<string | undefined>(undefined);
   const [actionTypes, setActionTypes] = useState<string[]>([]);
   const [q, setQ] = useState("");
-  // 열 크로스하이라이트 — 셀에 올리면 해당 FAB 열 전체가 은은하게 강조
   const [hoverCol, setHoverCol] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
-  // 데이터 수정은 ADMIN 만. BR 이하는 같은 화면을 열람 전용으로 본다.
   const { user } = useAuth();
   const canEdit = !!user && roleAtLeast(user.role, "ADMIN");
-  // 편집 가능 = 권한 O + DB 연결 O. 두 사유를 나눠 두어 안내 문구가 서로를 가리지 않게 한다.
   const editable = canEdit && available;
 
   useEffect(() => {
@@ -72,7 +62,6 @@ function EventFabEditor() {
 
   const dirty = useMemo(() => JSON.stringify(rows) !== baseline, [rows, baseline]);
 
-  // 컬럼 = 고정 FAB 목록 + DB 에 수동으로 들어간 미지 FAB (저장 시 유실 방지)
   const fabColumns = useMemo(() => {
     const extras = new Set<string>();
     for (const r of rows) for (const f of r.fabs) {
@@ -81,7 +70,6 @@ function EventFabEditor() {
     return [...FAB_IDS, ...Array.from(extras).sort()];
   }, [rows]);
 
-  // 검색 필터 — 원본 인덱스(i)를 함께 들고 다녀야 필터 중에도 올바른 행을 수정한다
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return rows
@@ -103,7 +91,6 @@ function EventFabEditor() {
       })
     );
   }
-  /** 행 전체 토글 — 모두 켜져 있으면 비우고, 아니면 전체 선택 */
   function toggleRow(idx: number) {
     if (!editable) return;
     setRows((list) =>
@@ -114,7 +101,6 @@ function EventFabEditor() {
       })
     );
   }
-  /** 열 전체 토글 — 현재 보이는(필터된) 행들만 대상으로 켜고 끈다 */
   function toggleCol(fab: string) {
     if (!editable) return;
     const idxs = new Set(visible.map((v) => v.i));

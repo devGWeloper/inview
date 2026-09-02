@@ -1,0 +1,162 @@
+/* 앱 셸 — statusbar · 레이아웃 · 패널 · 공용 버튼/폼 */
+/* ---------------- shell ---------------- */
+.app { height: 100dvh; min-height: 100dvh; display: flex; flex-direction: column; }
+
+.statusbar {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 18px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-3);
+  letter-spacing: 0.2px;
+}
+.statusbar .left,
+.statusbar .right {
+  display: flex; align-items: center; gap: 8px;
+}
+.statusbar .sep {
+  width: 1px; height: 12px; background: var(--border-strong);
+  display: inline-block;
+}
+.statusbar .ver {
+  font-family: var(--mono);
+  color: var(--text-muted);
+}
+
+.topbar {
+  height: 64px;
+  padding: 0 22px;
+  background: linear-gradient(180deg, #ffffff, #fbfcfe);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 0 rgba(17, 24, 39, .02), 0 10px 22px -18px rgba(17, 24, 39, .25);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.brand {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 18px; font-weight: 700; letter-spacing: -0.1px;
+}
+.brand .logo {
+  width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  display: grid; place-items: center;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .3),
+    0 2px 8px rgba(37, 99, 235, .35);
+}
+.brand-word { color: var(--text); }
+.brand-x {
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.brand .sub {
+  font-weight: 500; color: var(--text-muted); font-size: 13px;
+  margin-left: 3px; letter-spacing: 0;
+}
+
+.env-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; padding: 5px 11px; border-radius: 99px;
+  border: 1px solid var(--border-strong); background: var(--surface-2);
+  color: var(--text-2);
+}
+.env-badge .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+}
+.env-badge.live  .dot { background: var(--ok); }
+.env-badge.live  { color: var(--ok);   background: var(--ok-soft);   border-color: #bfe3ce; }
+.env-badge.dev   { color: #2563eb; background: #eff6ff; border-color: #bfdbfe; font-weight: 600; letter-spacing: .04em; }
+.env-badge.prd   { color: #b45309; background: #fffbeb; border-color: #fde68a; font-weight: 600; letter-spacing: .04em; }
+
+.layout {
+  display: grid;
+  grid-template-columns: var(--left-w, minmax(460px, 1fr)) auto minmax(0, 1.35fr);
+  gap: 0;
+  padding: 14px;
+  flex: 1;
+  min-height: 0;
+}
+@media (max-width: 1180px) {
+  .app { height: auto; }
+  .layout {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .splitter { display: none !important; }
+}
+
+.splitter {
+  width: 14px;
+  cursor: col-resize;
+  position: relative;
+  background: transparent;
+  user-select: none;
+  touch-action: none;
+}
+.splitter::before {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0; left: 50%;
+  width: 1px;
+  background: var(--border);
+  transform: translateX(-0.5px);
+  transition: background .12s, width .12s;
+}
+.splitter:hover::before,
+.splitter.dragging::before {
+  width: 3px;
+  background: var(--accent);
+}
+.splitter::after {
+  content: "";
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 4px; height: 36px;
+  border-radius: 4px;
+  background: var(--border-strong);
+  opacity: 0;
+  transition: opacity .12s;
+}
+.splitter:hover::after,
+.splitter.dragging::after { opacity: 1; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  box-shadow: 0 1px 0 rgba(17, 24, 39, 0.02);
+}
+.panel-header {
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.panel-header .title {
+  font-size: 16px; font-weight: 600; color: var(--text);
+  letter-spacing: 0.1px;
+}
+.panel-header .meta {
+  font-size: 13.5px; color: var(--text-3);
+}
+.panel-body {
+  padding: 14px 16px;
+  overflow: auto;
+  flex: 1;
+  container-type: inline-size;
+}
+.panel-body.tight { padding: 0; }

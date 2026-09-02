@@ -1,12 +1,10 @@
+// 에러코드 → 의미 마스터 (5분 캐시). 없으면 빈 맵 — 화면은 코드만 보인다.
+
 import { getAppDbConfig } from "./config";
 import { logger } from "./logger";
 
-// 에러 코드 → 의미 매핑. 앱 자체 DB(= GAIA, config.ts APP_DB_LAYER 참고)의
-// TRX_ERRMSG_COD 마스터 테이블에서 로드한다. 대시보드 "주요 에러" 카드의 호버 툴팁에 노출.
 export type ErrorCodeMap = Record<string, string>;
 
-// oracledb 는 next.config 의 serverComponentsExternalPackages 로 빠져 있어 lazy import.
-// 네이티브 드라이버가 없으면 에러를 삼키고 null → 빈 맵 반환(앱은 정상 동작).
 let oracledbCached: typeof import("oracledb") | null = null;
 async function getOracle(): Promise<typeof import("oracledb") | null> {
   if (oracledbCached) return oracledbCached;
@@ -19,7 +17,6 @@ async function getOracle(): Promise<typeof import("oracledb") | null> {
   }
 }
 
-// 마스터 데이터라 자주 안 바뀌므로 짧게 캐시. 실패 시 직전 캐시로 폴백.
 const TTL_MS = 5 * 60_000;
 let cache: { at: number; map: ErrorCodeMap } | null = null;
 

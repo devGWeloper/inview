@@ -1,0 +1,634 @@
+/* Tokens — 리더보드 · 질문별 토큰 표 · 호출 타임라인 · 공용 toast/툴팁 */
+/* ── 노드별/모델별 리더보드 카드 (Tokens 탭, TokenBreakdown) ──
+   카드별 색상은 컴포넌트가 inline CSS 변수(--hue/--hue-soft)로 주입한다. */
+.tbd { display: flex; flex-direction: column; gap: 12px; }
+.tbd-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.tbd-metrics {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.tbd-metric-btn {
+  border: 0;
+  background: transparent;
+  padding: 6px 16px;
+  border-radius: 7px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: background .1s, color .1s;
+}
+.tbd-metric-btn:hover { color: var(--text); }
+.tbd-metric-btn.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.35);
+}
+.tbd-hint { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+
+.tbd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.tbd-board {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tbd-board-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 4px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.tbd-dot {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 3.5px;
+  background: var(--hue);
+}
+.tbd-board-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.tbd-board-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+.tbd-filterchip {
+  margin-left: auto;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: var(--mono);
+  color: var(--hue);
+  background: var(--hue-soft);
+}
+
+.tbd-rows { display: flex; flex-direction: column; gap: 2px; }
+.tbd-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 10px 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  transition: background .12s, border-color .12s;
+}
+button.tbd-row:not(:disabled) { cursor: pointer; }
+button.tbd-row:not(:disabled):hover {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+.tbd-row.active {
+  background: var(--hue-soft);
+  border-color: var(--hue);
+}
+
+.tbd-rank {
+  flex: none;
+  width: 27px;
+  height: 27px;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--surface-3);
+  font-family: var(--mono);
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--text-3);
+}
+.tbd-rank.top { background: var(--hue); color: #fff; }
+
+.tbd-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tbd-line1 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tbd-key {
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tbd-key.none { font-style: italic; font-weight: 500; color: var(--text-muted); }
+.tbd-val {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.tbd-barrow { display: flex; align-items: center; gap: 9px; }
+.tbd-bar {
+  flex: 1;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.tbd-bar-f {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  transition: width .3s;
+}
+.tbd-pct {
+  flex: none;
+  width: 50px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+.tbd-meta {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 교차 구성 — 노드 행이 실제 쓴 모델들(모델 행이면 노드들)과 토큰 비중. "노드=모델 1개" 오해 방지 */
+.tbd-sub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+.tbd-sub-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  margin-right: 2px;
+}
+.tbd-sub-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--mono);
+  background: color-mix(in srgb, var(--hue) 9%, transparent);
+  color: var(--text-2);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tbd-sub-chip em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--hue);
+}
+.tbd-sub-more { font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+
+/* ── token 최근 호출 테이블 ── */
+.dash-title-note { color: var(--text-muted); }
+.token-recent-wrap { overflow-x: auto; }
+.token-recent {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.token-recent th,
+.token-recent td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.token-recent th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.token-recent td.num,
+.token-recent th.num { text-align: right; }
+.token-recent tbody tr:hover { background: var(--surface-2); }
+
+/* ── 질문별 토큰 테이블 (QuestionsTable) ── */
+.qtable-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.qtable-meta { font-size: 13px; color: var(--text-muted); font-family: var(--mono); white-space: nowrap; }
+.qfilter-clear {
+  padding: 5px 11px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.qfilter-clear:hover { border-color: var(--border-strong); background: var(--surface-2); }
+
+/* 정렬 가능한 헤더 — 클릭 = 정렬, 재클릭 = 방향 토글 */
+.qth-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.qth-sort:hover { color: var(--text); }
+.qth-sort.active { color: var(--accent); }
+.qth-arrow { font-size: 9px; opacity: 0.55; }
+.qth-sort.active .qth-arrow { opacity: 1; }
+
+/* 컬럼별 필터 행 (thead 2번째 줄) */
+.qfilter-row th { padding: 4px 6px 8px; }
+.qft-input,
+.qft-select {
+  width: 100%;
+  min-width: 72px;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+.qft-input::placeholder { color: var(--text-muted); }
+.qft-input:focus,
+.qft-select:focus { outline: none; border-color: var(--accent); }
+
+/* ── 질문별 토큰 표 페이징 ── */
+.qpager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 12px 4px 2px;
+}
+.qpage-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.qpage-btn:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-2); }
+.qpage-btn:disabled { opacity: 0.4; cursor: default; }
+.qpage-info { font-size: 12.5px; font-family: var(--mono); color: var(--text-2); font-weight: 600; }
+.qpage-range { color: var(--text-muted); font-weight: 400; }
+
+/* 질문 표는 기본 표보다 글자를 키워 눈에 들어오게 */
+.qtable { font-size: 14px; }
+.qtable th, .qtable td { padding: 10px; }
+.qtable thead tr:first-child th { font-size: 12px; }
+.qtable .qcell-exp { width: 22px; text-align: center; color: var(--text-muted); }
+.qrow.expandable { cursor: pointer; }
+.qrow.expandable:hover { background: var(--surface-2); }
+.qrow.open { background: var(--surface-2); }
+.qrow .muted { color: var(--text-muted); }
+
+/* 질문 셀 — 원본 질의(주인공) 위, TRACE_ID(참조 정보) 아래 */
+.qcell-q { max-width: 460px; }
+.qq-text {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.qq-trace {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* 노드/모델 칩 — 질문이 실제 거친 전부를 나열 (TokenBreakdown 색과 동일: 노드=파랑, 모델=보라) */
+.qchips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.qnode,
+.qmodel {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: var(--mono);
+}
+.qnode {
+  background: color-mix(in srgb, #2563eb 11%, transparent);
+  color: #2563eb;
+}
+.qmodel {
+  background: color-mix(in srgb, #7c3aed 11%, transparent);
+  color: #7c3aed;
+}
+
+
+/* TOTAL 셀: 값 뒤에 옅은 막대로 상대 크기 표현 */
+.qtable td.qtotal { position: relative; }
+.qtotal-bar {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 60%;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-radius: 3px;
+  z-index: 0;
+}
+.qtotal-val { position: relative; z-index: 1; }
+
+.qsubrow > td { background: var(--surface-2); padding: 0; }
+.qsub { padding: 8px 12px 10px !important; white-space: normal !important; }
+
+/* ── 펼침 상세: 호출 타임라인 ─────────────────────────────────────────────
+   요약 스트립(호출 수 · 노드 흐름 · 총 토큰 · 구간) 아래에
+   순번 레일 + 호출 카드(노드→모델 · 응답시간 · 토큰 바 · 접힌 쿼리)를 시간순으로. */
+.qcalls { display: flex; flex-direction: column; gap: 10px; }
+.qcalls-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 9px 12px;
+  font-size: 14px;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.qcalls-count { font-weight: 700; color: var(--text); }
+.qcalls-flow { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.qcalls-aux { font-size: 13px; color: var(--text-muted); }
+/* 상세는 TRACE_ID 로만 조회 → 표의 CALLS(기간 내)보다 많을 때 그 차이를 알린다 */
+.qcalls-note {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.qcall-arrow { color: var(--text-muted); font-size: 12px; }
+
+.qcall-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.qcall { display: flex; gap: 10px; padding-bottom: 10px; }
+.qcall:last-child { padding-bottom: 2px; }
+.qcall-rail { flex: none; width: 24px; display: flex; flex-direction: column; align-items: center; }
+.qcall-dot {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--mono);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--accent);
+}
+.qcall:not(:last-child) .qcall-rail::after {
+  content: "";
+  flex: 1;
+  width: 2px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.qcall-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 11px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.qcall-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.qcall-lat {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: color-mix(in srgb, #dc2626 9%, transparent);
+  color: #dc2626;
+}
+.qcall-time { margin-left: auto; font-size: 13px; color: var(--text-muted); white-space: nowrap; }
+.qcall-gap { color: var(--text-3); }
+
+.qcall-tok { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.qcall-tokbar {
+  flex: none;
+  width: clamp(80px, 24%, 200px);
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.qcall-tokbar > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 60%, transparent), var(--accent));
+}
+.qcall-toknum { font-size: 13.5px; color: var(--text-2); white-space: nowrap; }
+.qcall-toknum b { font-weight: 700; color: var(--text); }
+
+/* ── 질의 본문 (원본 질의 블록 / 호출 카드의 다른 쿼리 공용) ──
+   사용자 질문은 자연어 → 산세리프로 크게, 기본 전체 노출. 아주 길면 3줄 접힘 + 더 보기 */
+.qtext {
+  font-size: 15px;
+  line-height: 1.6;
+  font-weight: 500;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.qtext.clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.qtext-more {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.qtext-more:hover { border-color: var(--border-strong); background: var(--surface-2); }
+
+/* 원본 질의 — 펼침 상세의 헤드라인. 이 질문이 무엇이었는지가 가장 먼저 보이게 */
+.qorigin {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 11px 14px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-left: 4px solid var(--accent);
+  border-radius: 10px;
+}
+.qorigin.none { border-left-color: var(--border-strong); background: var(--surface); }
+.qorigin-label {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.qorigin.none .qorigin-label { color: var(--text-muted); }
+
+/* 호출 카드 안: 원본과 다른 쿼리가 들어간 호출에만 표시 */
+.qcall-qdiff {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 12px;
+  background: var(--surface-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+}
+.qcall-qdiff .qtext { font-size: 14px; }
+.qcall-qdiff-label {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+/* ── toast ──────────────────────────────────────────────────────────────── */
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translate(-50%, 10px);
+  background: rgba(31, 35, 40, 0.92);
+  color: #fff;
+  font-size: 13px;
+  font-family: var(--sans);
+  padding: 9px 16px;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 9999;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+.app-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* 커스텀 호버 툴팁 (TopList 에러 코드 의미 등) — portal + fixed */
+.ttip {
+  position: fixed;
+  z-index: 9999;
+  transform: translate(-50%, -100%);   /* 앵커 위쪽에 표시 (기본) */
+  max-width: 300px;
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: rgba(31, 35, 40, 0.96);
+  color: #f5f6f8;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: normal;
+  word-break: keep-all;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.24);
+  pointer-events: none;
+  animation: ttip-in 90ms ease-out;
+}
+.ttip.below { transform: translate(-50%, 0); }  /* 상단 근처면 아래로 플립 */
+.ttip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  margin-left: -6px;
+  border: 6px solid transparent;
+}
+.ttip:not(.below)::after { top: 100%;    border-top-color: rgba(31, 35, 40, 0.96); }
+.ttip.below::after       { bottom: 100%; border-bottom-color: rgba(31, 35, 40, 0.96); }
+.ttip-main { font-weight: 600; }
+.ttip-sub  { margin-top: 3px; font-size: 11.5px; color: #aab2c0; }
+@keyframes ttip-in { from { opacity: 0; } to { opacity: 1; } }

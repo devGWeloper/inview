@@ -1,0 +1,140 @@
+/* 상단 탭 내비 · Agent 근무 현황 칩 */
+/* ---------------- top tab nav ---------------- */
+.tabnav {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 분석 탭 묶음 — 세그먼트 컨트롤 */
+.tabnav-group {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 38px;
+  background: var(--surface-3);
+  border-radius: 9px;
+  padding: 4px;
+  border: 1px solid var(--border);
+}
+.tabnav-group .tab {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 0 15px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-decoration: none;
+  transition: background .14s, color .14s, box-shadow .14s;
+  letter-spacing: 0.2px;
+  position: relative;
+}
+.tabnav-group .tab svg { opacity: .8; transition: opacity .14s, transform .14s; }
+.tabnav-group .tab:hover { color: var(--text); background: var(--surface); }
+.tabnav-group .tab:hover svg { opacity: 1; }
+.tabnav-group .tab.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.10), 0 0 0 1px rgba(37, 99, 235, .08);
+}
+.tabnav-group .tab.active svg { opacity: 1; transform: scale(1.04); }
+/* 활성 탭 하단 그라데이션 악센트 */
+.tabnav-group .tab.active::after {
+  content: "";
+  position: absolute;
+  left: 14px; right: 14px; bottom: -4px; height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #2563eb, #7c3aed);
+}
+
+/* Agent — 분석 탭과 성격이 다른 '근무 현황 카드'. 우상단에 자리를 차지하며
+   살아있는 상태등으로 "지금 일하는 주체"임을 드러낸다. (원형 칩 → 둥근 사각 카드)
+   ⚠️ 클래스명 nav-agent* : /agent 페이지의 .agent-card(신분증) 와 충돌 방지용 별도 네임스페이스 */
+.nav-agent {
+  display: inline-flex; align-items: center; gap: 11px;
+  height: 48px;
+  padding: 0 16px 0 0;        /* 사진을 카드 좌측 끝까지 붙인다 */
+  border-radius: 13px;
+  overflow: hidden;          /* 사진을 카드 모서리에 맞춰 클립 → 삐져나옴 차단 */
+  text-decoration: none;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(135deg, #f7f9ff, #faf6ff) padding-box,
+    linear-gradient(135deg, rgba(37,99,235,.30), rgba(124,58,237,.30)) border-box;
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.05);
+  transition: box-shadow .18s, transform .18s, background .18s;
+}
+.nav-agent:hover {
+  text-decoration: none;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(124, 58, 237, .20);
+  background:
+    linear-gradient(135deg, #eef3ff, #f5ecff) padding-box,
+    linear-gradient(135deg, #2563eb, #7c3aed) border-box;
+}
+.nav-agent.active {
+  background:
+    linear-gradient(135deg, #e7eeff, #f1e6ff) padding-box,
+    linear-gradient(135deg, #2563eb, #7c3aed) border-box;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, .22);
+}
+
+/* 사진 = 카드 높이를 가득 채우는 좌측 스트립 (사원증 느낌) */
+.nav-agent-photo {
+  align-self: stretch;
+  width: 48px; flex-shrink: 0;
+  position: relative;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: #fff;
+}
+.nav-agent-photo img {
+  width: 100%; height: 100%; object-fit: cover; object-position: center top; display: block;
+}
+.nav-agent-emoji { font-size: 24px; line-height: 1; }
+/* 사진 위 미세한 광택 + 텍스트와의 경계선 */
+.nav-agent-photo::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(0,0,0,.10));
+  box-shadow: inset -1px 0 0 rgba(17, 24, 39, .10);
+}
+
+.nav-agent-id { display: flex; flex-direction: column; gap: 2px; line-height: 1.1; }
+.nav-agent-name {
+  font-size: 14px; font-weight: 700; color: var(--text);
+  letter-spacing: 0.1px;
+}
+.nav-agent-status { display: inline-flex; align-items: center; gap: 6px; }
+/* 인라인 펄스 근무중 점 */
+.nav-agent-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  background: #16a34a;
+  box-shadow: 0 0 0 0 rgba(22, 163, 74, .5);
+  animation: nav-agent-pulse 2s ease-out infinite;
+}
+@keyframes nav-agent-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(22, 163, 74, .5); }
+  70%  { box-shadow: 0 0 0 5px rgba(22, 163, 74, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+}
+.nav-agent-live { font-size: 11px; font-weight: 600; color: #15803d; }
+.nav-agent-role {
+  position: relative;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+  padding-left: 8px;
+  background: linear-gradient(90deg, #2563eb, #7c3aed);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.nav-agent-role::before {
+  content: ""; position: absolute; left: 0; top: 50%;
+  width: 1px; height: 9px; margin-top: -4.5px;
+  background: var(--border-strong);
+}
+
+@media (max-width: 760px) {
+  .tabnav-group .tab span { display: none; }
+  .tabnav-group .tab { padding: 0 11px; }
+  .nav-agent-id { display: none; }
+  .nav-agent { padding: 0; }
+}

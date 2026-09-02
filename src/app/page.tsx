@@ -1,7 +1,7 @@
 "use client";
 
 import { CSSProperties, Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { TraceTimeline } from "@/components/TraceTimeline";
+import { TraceTimeline } from "@/features/traces/TraceTimeline";
 import {
   LAYER_COLOR, LAYER_ORDER,
   TraceFilter, TraceListResponse, TraceDetailResponse, TraceRow,
@@ -14,7 +14,6 @@ const MIN_LEFT = 360;
 const MIN_RIGHT = 480;
 const SPLITTER_W = 14;
 
-// 기간 프리셋 — datetime-local 두 개 대신 원클릭 범위. 'custom' 만 직접 입력을 편다.
 type DatePreset = "all" | "24h" | "7d" | "30d" | "custom";
 const DATE_PRESETS: { key: Exclude<DatePreset, "custom">; label: string; hours: number }[] = [
   { key: "all", label: "전체", hours: 0 },
@@ -28,19 +27,16 @@ function fmtTs(ts: string | null): string {
   return ts.replace("T", " ").slice(0, 19);
 }
 
-/** Date → 로컬 ISO(TZ 없음, 초 포함) — DB TO_TIMESTAMP('YYYY-MM-DD"T"HH24:MI:SS') 포맷과 일치 */
 function toLocalIso(d: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-/** datetime-local 값("YYYY-MM-DDTHH:mm", 초 없음)에 초를 보정해 DB 포맷과 맞춘다 */
 function withSeconds(v: string | undefined): string | undefined {
   if (!v) return undefined;
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v) ? `${v}:00` : v;
 }
 
-/** 상태 뱃지 — 묶음 행과 TRACE 행이 같은 모양을 쓴다 */
 function statusPill(status: TraceStatus) {
   if (status === "error") return <span className="pill err"><span className="dot" />ERROR</span>;
   if (status === "fail") return <span className="pill fail"><span className="dot" />FAIL</span>;
@@ -48,25 +44,15 @@ function statusPill(status: TraceStatus) {
   return <span className="pill warn"><span className="dot" />PARTIAL</span>;
 }
 
-/**
- * 묶음 대표 사용자 = 후값(POST)을 요청한 사람.
- * 흐름을 끝맺는 사람이라 작업의 주인으로 보기 가장 자연스럽다.
- * 아직 후값이 안 온 미완결 묶음은 첫 요청자로 대신한다.
- */
 function workUserLabel(w: WorkSummary): string {
   const post = w.traces.find((t) => t.actionLabel === "POST" && t.userId);
   return post?.userId ?? w.traces.find((t) => t.userId)?.userId ?? "—";
 }
 
-/**
- * 목록의 TRACE 행. 묶음이 1건짜리면 그대로 최상위 행으로, 여러 건이면 펼친 자식 행으로 쓰인다.
- * (child 여부만 다르고 내용은 동일 — 묶음 도입 전 화면과 같은 정보를 보여준다)
- */
 function traceRow(t: WorkTraceItem, active: boolean, onClick: () => void, child = false, last = false) {
   return (
     <tr
       key={t.traceId}
-      // last = 묶음의 마지막 자식. 덩어리를 닫는 선을 긋는 자리다(.work-last)
       className={(child ? "work-child" : "") + (child && last ? " work-last" : "") + (active ? " active" : "")}
       onClick={onClick}
     >
@@ -102,26 +88,18 @@ function traceRow(t: WorkTraceItem, active: boolean, onClick: () => void, child 
 
 export default function Page() {
   const [filter, setFilter] = useState<TraceFilter>(DEFAULT_FILTER);
-  // 목록 1행 = 묶음(현장 작업 1건). 대부분은 TRACE 1건짜리라 지금까지의 행과 같아 보인다.
   const [works, setWorks] = useState<WorkSummary[]>([]);
-  // 펼쳐놓은 묶음 (TRACE 2건 이상인 것만 펼침 대상)
   const [expandedWorks, setExpandedWorks] = useState<Set<string>>(new Set());
-  // 묶음만 보기 — 서버가 "묶음 먼저" 로 찾아 내려준다 (상한 안에 묶음이 안 걸리는 문제를 피한다)
   const [groupedOnly, setGroupedOnly] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [detailRows, setDetailRows] = useState<TraceRow[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
-  // 조회 실패 사유 (세션 만료·권한·DB 오류 등) — 빈 표 대신 이유를 보여준다
   const [listErr, setListErr] = useState<string | null>(null);
   const [detailErr, setDetailErr] = useState<string | null>(null);
-  // FAIL CODE 드롭다운 옵션 — TRX_ERRMSG_COD 마스터(/api/error-codes)에서 로드
   const [errCodes, setErrCodes] = useState<Array<{ code: string; desc: string }>>([]);
-  // FAB 드롭다운 옵션 — MCP DB 의 DISTINCT FAC_ID(/api/facs)에서 로드
   const [facs, setFacs] = useState<string[]>([]);
-  // ACTION_TYP 드롭다운 옵션 — DISTINCT ACTION_TYP(/api/action-types)에서 로드
   const [actionTypes, setActionTypes] = useState<string[]>([]);
-  // 기간 프리셋 선택 상태 (UI 전용)
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
 
   const layoutRef = useRef<HTMLDivElement>(null);
@@ -182,9 +160,7 @@ export default function Page() {
       if (df) q.set("dateFrom", df);
       if (dt) q.set("dateTo", dt);
       if (f.onlyError) q.set("onlyError", "true");
-      // 묶음만 — 서버가 조회 순서를 바꿔 "묶음 먼저" 로 찾는다 (route.ts resolveGroupedTraceIds)
       if (grouped) q.set("groupedOnly", "true");
-      // apiJson: 401(세션 만료)/에러 응답을 데이터로 오인하지 않고 ApiError 로 던진다.
       const data = await apiJson<TraceListResponse>(`/api/traces?${q.toString()}`, { cache: "no-store" });
       setWorks(asArray<WorkSummary>(data.works));
     } catch (e) {
@@ -213,7 +189,6 @@ export default function Page() {
 
   useEffect(() => { loadList(filter); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
-  // FAIL CODE 옵션 로드 (TRX_ERRMSG_COD). 실패/미구성 시 빈 목록 → 셀렉트는 '전체'만.
   useEffect(() => {
     apiJson<{ codes?: Record<string, string> }>("/api/error-codes", { cache: "no-store" })
       .then((data) => {
@@ -227,14 +202,12 @@ export default function Page() {
       .catch(() => setErrCodes([]));
   }, []);
 
-  // FAB 옵션 로드 (MCP DISTINCT FAC_ID). 실패/미구성 시 빈 목록 → 셀렉트는 '전체'만.
   useEffect(() => {
     apiJson<{ values?: string[] }>("/api/facs", { cache: "no-store" })
       .then((data) => setFacs(asArray<string>(data.values)))
       .catch(() => setFacs([]));
   }, []);
 
-  // ACTION_TYP 옵션 로드. 실패/미구성 시 빈 목록 → 셀렉트는 '전체'만.
   useEffect(() => {
     apiJson<{ values?: string[] }>("/api/action-types", { cache: "no-store" })
       .then((data) => setActionTypes(asArray<string>(data.values)))
@@ -242,7 +215,6 @@ export default function Page() {
   }, []);
   useEffect(() => { if (selected) loadDetail(selected); }, [selected, loadDetail]);
 
-  // 첫 묶음의 첫 TRACE 를 자동 선택. 여러 건짜리면 선택한 행이 보이도록 같이 펼쳐준다.
   useEffect(() => {
     if (selected || works.length === 0) return;
     const first = works[0];
@@ -259,7 +231,6 @@ export default function Page() {
     loadList(f, grouped);
   };
 
-  // 묶음 행 클릭 = 펼침/접힘. 펼칠 때는 첫 TRACE 를 골라 오른쪽 상세를 바로 띄운다.
   const toggleWork = (w: WorkSummary) => {
     const opening = !expandedWorks.has(w.workId);
     setExpandedWorks((prev) => {
@@ -283,7 +254,6 @@ export default function Page() {
     runList(DEFAULT_FILTER, false);
   };
 
-  // 프리셋 클릭 = 기간을 즉시 적용하고 재조회 (다른 필터는 현재 값 유지). 'custom' 은 입력만 편다.
   const applyPreset = (p: Exclude<DatePreset, "custom">) => {
     setDatePreset(p);
     const from = p === "all" ? undefined : toLocalIso(new Date(Date.now() - DATE_PRESETS.find((x) => x.key === p)!.hours * 3600_000));
@@ -471,7 +441,6 @@ export default function Page() {
                   </td></tr>
                 )}
                 {works.map((w) => {
-                  // TRACE 1건짜리 묶음(대부분)은 펼칠 게 없으니 지금까지의 목록 행 그대로 둔다.
                   if (w.traces.length <= 1) {
                     const only = w.traces[0];
                     return only ? traceRow(only, selected === only.traceId, () => setSelected(only.traceId)) : null;

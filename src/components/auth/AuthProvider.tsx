@@ -9,24 +9,15 @@ export interface SessionUser {
   userId: string;
   name: string;
   role: Role;
-  /**
-   * 소속 에이전트 id (TRX_USER_MAS.AGENT_ID). null = 미배정.
-   * ⚠️ **이 값만으로 범위를 판정하지 말 것** — global 과 함께 봐야 한다.
-   *    세션을 그대로 비춘 표시·진단용이며, 실제 차단은 서버 라우트의 403 이 한다.
-   */
   agentId?: string | null;
-  /** 전역(모든 에이전트) 계정인가. false + agentId=null 이면 미배정(잠금). */
   global?: boolean;
 }
 
 interface AuthContextValue {
   user: SessionUser | null;
   loading: boolean;
-  /** /api/auth/me 를 다시 읽어 상태 동기화 */
   refresh: () => Promise<SessionUser | null>;
-  /** 로그아웃 후 로그인 페이지로 이동 */
   logout: () => Promise<void>;
-  /** 로그인 성공 등으로 사용자를 즉시 반영 */
   setUser: (u: SessionUser | null) => void;
 }
 
@@ -61,8 +52,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  // 열어둔 탭에서 세션이 만료되면(어느 API 든 401) 안내 모달을 띄운다.
-  // 화면이 401 응답을 데이터로 오인해 터지는 일을 막는 마지막 장치.
   useEffect(() => onSessionExpired(() => {
     setUser(null);
     setExpired(true);

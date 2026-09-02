@@ -1,8 +1,5 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// 시간 버킷 헬퍼 — 시계열 집계(대시보드 stats / 토큰 tokens)가 공유한다.
-//   granularity 규칙: 구간 ≤2h → 5분, ≤48h → 1시간, 그 이상 → 1일.
-//   시각 문자열은 'YYYY-MM-DDTHH:MM:SS'(TZ 없음, 로컬 기준)로 다룬다.
-// ─────────────────────────────────────────────────────────────────────────────
+
+// 시간 버킷 격자 — 추이 차트를 쓰는 집계들이 공유한다.
 
 export type Granularity = "5m" | "1h" | "1d";
 
@@ -20,7 +17,6 @@ export function bucketMs(g: Granularity): number {
 export function floorToBucket(ms: number, g: Granularity): number {
   const step = bucketMs(g);
   if (g === "1d") {
-    // 로컬 자정 기준 floor
     const d = new Date(ms);
     d.setHours(0, 0, 0, 0);
     return d.getTime();
@@ -36,15 +32,10 @@ export function isoNoTz(ms: number): string {
 
 export function parseTs(ts: string | null): number | null {
   if (!ts) return null;
-  // 'YYYY-MM-DDTHH:MM:SS.fff' → 로컬 파싱 (TZ 제거된 형태이므로 그대로 Date 생성)
   const t = Date.parse(ts);
   return Number.isFinite(t) ? t : null;
 }
 
-/**
- * from~to 구간을 덮는 버킷 시작 시각(ms) 목록을 오름차순으로 반환.
- * 시계열 차트가 빈 구간도 균일하게 보이도록 "빈 버킷 채우기"에 사용한다.
- */
 export function enumerateBucketStarts(fromMs: number, toMs: number, g: Granularity): number[] {
   const out: number[] = [];
   const startBucket = floorToBucket(fromMs, g);

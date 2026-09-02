@@ -1,20 +1,9 @@
-// FTE 성과 지표 계산 (이억수 TL).
-//
-//   연간 FTE = Σ(액션별 성공 수 × 액션별 환산 분) ÷ 연간 분
-//   월별 FTE = (해당 월 환산 분 합) ÷ 연간 분 × 12   (월 → 연 환산)
-//   FTE 1 = 1년간 1인분(1 person-year).
-//
-//   '액션 성공' 은 db.ts monthlyActionSuccess() 가 월별·액션(ACTION_TYP)별로 집계한다.
-//   계산식은 프로필에서 커스터마이즈: fteActionMinutes(ACTION_TYP→분, 예: NEST_Seasoning=5,
-//   AutoQual_Abort=10), fteDefaultMinutes(목록에 없는 액션·ACTION_TYP 미상, 기본 5),
-//   fteAnnualMinutes(기본 65,984) — 모두 /admin 에서 편집.
-//
-// ※ server-only (db.ts 를 통해 Oracle 조회). 클라이언트에서 import 금지.
+
+// FTE(절감 인력) 계산. 환산 분은 프로필에서 편집한다. docs/architecture/metrics.md
 
 import { monthlyActionSuccess } from "./db";
 import { AgentProfile, FteMonth, FteStats } from "./types";
 
-/** 산정 시작 시점 (2026-01-01) */
 export const FTE_START_ISO = "2026-01-01T00:00:00";
 
 function isoNoTz(d: Date): string {
@@ -26,11 +15,6 @@ function ym(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-/**
- * 2026-01 ~ 현재 월까지 월별 FTE 와 누적 연간 FTE 를 계산한다.
- * 계산식 상수(액션별 분/기본 분/연간 분)는 profile 에서 읽는다.
- * DB(CUBE) 가 연결돼 있지 않으면 null (이 경우 카드는 '—' 표시).
- */
 export async function computeFteStats(profile: AgentProfile, now: Date = new Date()): Promise<FteStats | null> {
   const from = FTE_START_ISO;
   const to = isoNoTz(now);
@@ -42,7 +26,6 @@ export async function computeFteStats(profile: AgentProfile, now: Date = new Dat
   const minutesFor = (action: string | null): number =>
     (action === null ? undefined : minuteByAction.get(action)) ?? profile.fteDefaultMinutes;
 
-  // 월별 성공 수 + 환산 분 합계 (액션별 분 가중)
   const byYm = new Map<string, { count: number; minutes: number }>();
   for (const g of grouped) {
     let m = byYm.get(g.ym);

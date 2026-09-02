@@ -1,6 +1,5 @@
-// 레이어 간 메시지(CUBE SEND/RESP 등)는 보통 JSON envelope 이다.
-// 사람이 읽는 문장만 뽑고, 못 찾으면 원문을 그대로 돌려준다.
-// (Improvement Center 의 대화 로그와 Timeout 대시보드가 공유한다.)
+
+// JSON envelope 에서 사람이 읽는 문장만 뽑는 best-effort 추출.
 
 const TEXT_KEYS = [
   "query", "question", "message", "msg", "text", "content",

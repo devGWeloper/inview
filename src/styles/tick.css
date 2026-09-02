@@ -1,0 +1,363 @@
+/* 틱(1TICK) 뷰 · 에이전트 전환 셀렉터 */
+/* ─────────────────────────────────────────────────────────────────────────────
+   틱 — 롤링 60초 모니터 (Dashboard / Tokens / Timeout 공용)
+   화면은 게이지 → 추이 → 순간 목록 3단. 한도 초과는 전부 --err 톤 하나로만 표시한다.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* 보기 전환 (집계 ↔ 틱) — thumb 이 미끄러지는 스위치.
+   ⚠️ 자리는 머리말 우상단(.dash-head-row)이다. 조회 줄(.dash-filter) 안에 두면 폭이
+      모자란 화면에서 이 토글만 윗줄로 튀어 올라 줄이 통째로 깨져 보인다.
+   ⚠️ 칸 폭은 grid 로 **강제로 균등**하게 준다 — 글자 수가 달라(집계/틱) 내용 폭에
+      맡기면 thumb 이 미끄러지지 않고 폭이 변한다. */
+.view-toggle {
+  position: relative;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 3px;
+  flex: none;
+}
+/* 미끄러지는 배경. 컨테이너의 padding box 기준 50% 라 좌우 padding(3px)을 뺀 값이 정확히 반 칸이다. */
+.view-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.1), 0 0 0 1px rgba(17, 24, 39, 0.04);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.view-toggle.is-live .view-toggle-thumb { transform: translateX(100%); }
+@media (prefers-reduced-motion: reduce) {
+  .view-toggle-thumb { transition: none; }
+}
+.view-toggle-btn {
+  position: relative;      /* thumb 위로 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.18s ease;
+}
+.view-toggle-btn:hover { color: var(--text); }
+.view-toggle-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.view-toggle-btn.active { color: var(--accent); }
+.view-toggle-btn.live.active { color: var(--err); }
+
+/* 틱 쪽 점 — 자동 갱신이 도는 동안에만 깜빡인다.
+   "지금 살아 있는 값인가" 를 글자 없이 알리는 유일한 표시라 문구로 설명하지 않는다. */
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex: none;
+}
+.view-toggle-btn.live.active .live-dot { background: var(--err); }
+.live-dot.pulse { animation: live-pulse 1.6s ease-in-out infinite; }
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--err-soft); }
+  50%      { opacity: 0.45; box-shadow: 0 0 0 4px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot.pulse { animation: none; }
+}
+
+/* 틱 본문 맨 위 요약 줄 (조회 구간 · 행 수) */
+.tick-summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.tick-summary-range { font-family: var(--mono); }
+.tick-summary-sep { color: var(--border-strong); }
+.tick-summary b { color: var(--text); font-weight: 700; }
+
+.tick-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  cursor: pointer;
+  user-select: none;
+}
+.tick-auto input { accent-color: var(--accent); cursor: pointer; }
+/* 직접 설정(과거 구간) 모드에서는 자동 갱신이 의미가 없어 잠근다 */
+.tick-auto.off { opacity: 0.45; cursor: not-allowed; }
+.tick-auto.off input { cursor: not-allowed; }
+
+.tick-range-hint { font-size: 12px; color: var(--text-muted); }
+.tick-range-err { font-size: 12.5px; color: var(--err); font-weight: 600; }
+
+.tick-notice {
+  padding: 11px 15px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.tick-notice.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+.tick-notice a { color: var(--accent); font-weight: 600; }
+
+.tick-empty {
+  padding: 26px 8px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.tick-empty.ok { color: var(--ok); font-weight: 700; font-size: 14px; }
+
+/* ── 게이지 카드 (TPM / RPM) — 클릭하면 아래 차트·목록이 그 지표로 바뀐다 ── */
+.tick-gauges {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 700px) { .tick-gauges { grid-template-columns: 1fr; } }
+
+.tick-gauge {
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 16px 20px 15px;
+  cursor: pointer;
+  transition: border-color 0.14s, box-shadow 0.14s;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.tick-gauge:hover { border-color: var(--border-strong); }
+.tick-gauge.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.tick-gauge.over.selected {
+  border-color: var(--err);
+  box-shadow: 0 0 0 3px var(--err-soft);
+}
+
+.tick-gauge-top { display: flex; align-items: center; gap: 9px; }
+.tick-gauge-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: var(--text-3);
+}
+.tick-gauge-state {
+  font-size: 11.5px;
+  font-weight: 700;
+  border-radius: 5px;
+  padding: 2px 8px;
+  color: var(--ok);
+  background: var(--ok-soft);
+}
+.tick-gauge.over .tick-gauge-state { color: var(--err); background: var(--err-soft); }
+
+.tick-gauge-val {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  line-height: 1;
+  color: var(--text);
+}
+.tick-gauge.over .tick-gauge-val { color: var(--err); }
+.tick-gauge-unit {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
+.tick-gauge-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.tick-gauge-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--ok);
+  transition: width 0.35s ease;
+}
+.tick-gauge.over .tick-gauge-bar i { background: var(--err); }
+
+.tick-gauge-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.tick-gauge-pct { font-family: var(--mono); font-weight: 700; color: var(--text-2); }
+.tick-gauge-quiet { color: var(--text-muted); }
+.tick-ok-mark { color: var(--text-3); }
+.tick-gauge.over .tick-gauge-pct { color: var(--err); }
+.tick-gauge-cnt {
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--err);
+  background: var(--err-soft);
+  border-radius: 5px;
+  padding: 2px 8px;
+}
+
+/* 범례 항목 중 클릭 대상이 아닌 것 (1TICK 차트는 시리즈 토글이 없다) */
+.ts-legend-item.static { cursor: default; background: transparent; }
+.ts-legend-item.static:hover { background: transparent; }
+.legend-swatch.dashed {
+  background-image: repeating-linear-gradient(90deg, currentColor 0 3px, transparent 3px 6px);
+}
+
+/* ── 초과한 순간 목록 ── */
+.tick-seg-list { display: flex; flex-direction: column; gap: 8px; }
+.tick-seg-item {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--err);
+  border-radius: 9px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.tick-seg-item.open { background: var(--surface); box-shadow: 0 1px 3px rgba(17, 24, 39, 0.06); }
+.tick-seg-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  padding: 12px 15px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  flex-wrap: wrap;
+}
+.tick-seg-head:hover { background: var(--surface-3); }
+.tick-seg-caret { color: var(--text-muted); font-size: 12px; width: 12px; }
+.tick-seg-time {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.tick-seg-dur {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-3);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+.tick-seg-peak {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--mono);
+}
+.tick-seg-peak b { font-size: 17px; font-weight: 700; color: var(--err); letter-spacing: -0.4px; }
+.tick-seg-slash { font-size: 12.5px; color: var(--text-muted); }
+/* 한도가 없는 화면(대시보드/타임아웃)의 목록은 '초과' 가 아니라 '가장 몰린 순간' 이다 —
+   빨강을 쓰면 정상값을 사고로 읽게 된다. */
+.tick-seg-item.neutral .tick-seg-peak b { color: var(--text); }
+.tick-seg-over {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--err);
+  background: var(--err-soft);
+  border-radius: 5px;
+  padding: 3px 9px;
+  min-width: 52px;
+  text-align: center;
+}
+.tick-seg-body { border-top: 1px solid var(--border); padding: 12px 15px 14px; }
+.tick-win-sum { font-size: 12.5px; color: var(--text-3); margin-bottom: 9px; }
+.tick-win-sum b { color: var(--text); font-weight: 700; }
+
+.token-recent.tick-calls td.mono { font-family: var(--mono); font-size: 12.5px; }
+.token-recent.tick-calls td.dim { color: var(--text-muted); }
+.token-recent.tick-calls td.strong { font-weight: 700; color: var(--text); }
+.tick-call-flag {
+  display: inline-block;
+  margin-left: 6px;
+  font-family: var(--sans);
+  font-size: 10.5px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.tick-call-flag.timeout { color: var(--err); background: var(--err-soft); }
+.tick-call-flag.error { color: var(--fail); background: var(--fail-soft); }
+
+/* ── 에이전트 전환 셀렉터 (상단바) ─────────────────────────────────── */
+/* .usermenu-* (위 "유저 메뉴" 섹션)와 짝을 이루는 상단바 드롭다운 — 톤을 맞춘다 */
+.agent-switch { position: relative; }
+.agent-switch-btn {
+  display: flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 9px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: background .12s, border-color .12s, box-shadow .12s;
+}
+.agent-switch-btn:hover { background: var(--surface-3); border-color: var(--border-strong); }
+.agent-switch-btn.open { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.agent-switch-emoji { font-size: 14px; line-height: 1; }
+.agent-switch-caret { font-size: 9px; opacity: .6; }
+.agent-switch-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
+  min-width: 220px; margin: 0; padding: 4px; list-style: none;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); box-shadow: 0 12px 40px -12px rgba(17,24,39,.35), 0 2px 8px rgba(17,24,39,.06);
+  overflow: hidden; animation: usermenu-in .12s ease-out;
+}
+.agent-switch-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 7px 8px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--text); text-align: left; cursor: pointer;
+}
+.agent-switch-item:hover, .agent-switch-item.active { background: var(--surface-3); }
+.agent-switch-label { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.agent-switch-label .agent-switch-name { font-size: 12.5px; font-weight: 600; }
+.agent-switch-meta { font-size: 10.5px; color: var(--text-muted); }
+.nav-agent.static { cursor: default; }
+
+/* 결속 에이전트가 설정에 없을 때의 안내 띠 (상단바 아래 전폭) */
+.agent-scope-warn {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 10px 22px; font-size: 12.5px; line-height: 1.5;
+  color: var(--warn); background: var(--warn-soft);
+  border-bottom: 1px solid #f6d9b0;
+}
+

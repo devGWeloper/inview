@@ -13,7 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { StatsResponse, TimeBucket } from "@/lib/types";
-import { granularityLabel, tickLabeler } from "@/lib/timeBuckets";
+import { granularityLabel, tickAxis } from "@/lib/timeBuckets";
 
 const STATUS_KEYS = ["ok", "fail", "pending"] as const;
 type StatusKey = typeof STATUS_KEYS[number];
@@ -75,9 +75,9 @@ function CustomTooltip({
 
 export function TimeSeriesChart({ stats }: { stats: Pick<StatsResponse, "granularity" | "buckets"> }) {
   const granularity = stats.granularity;
-  // X축 눈금은 구간 길이가 정한다 — 하루를 넘는데 시:분만 찍으면 라벨이 날마다 되돌아온다.
-  const fmtTick = useMemo(
-    () => tickLabeler(stats.buckets[0]?.ts, stats.buckets[stats.buckets.length - 1]?.ts, granularity),
+  // 눈금 key 는 유일해야 하고(안 그러면 라벨이 날마다 되돌아온다) 보이는 글자는 짧아야 한다.
+  const axis = useMemo(
+    () => tickAxis(stats.buckets[0]?.ts, stats.buckets[stats.buckets.length - 1]?.ts, granularity),
     [stats.buckets, granularity]
   );
   const [hidden, setHidden] = useState<Record<StatusKey, boolean>>({
@@ -87,13 +87,13 @@ export function TimeSeriesChart({ stats }: { stats: Pick<StatsResponse, "granula
   const data: Row[] = useMemo(() => {
     return stats.buckets.map((b: TimeBucket) => ({
       ts: b.ts,
-      tick: fmtTick(b.ts),
+      tick: axis.key(b.ts),
       ok: b.ok,
       fail: b.fail,
       pending: b.pending,
       total: b.ok + b.fail + b.pending,
     }));
-  }, [stats.buckets, fmtTick]);
+  }, [stats.buckets, axis]);
 
   const { peakIdx, peakVal, peakTs, avgSuccess } = useMemo(() => {
     let pIdx = -1, pVal = 0, totalAll = 0, okAll = 0;
@@ -153,6 +153,7 @@ export function TimeSeriesChart({ stats }: { stats: Pick<StatsResponse, "granula
             </defs>
             <XAxis
               dataKey="tick"
+              tickFormatter={axis.short}
               tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}
               tickLine={{ stroke: "var(--border-strong)" }}
               axisLine={{ stroke: "var(--border-strong)" }}

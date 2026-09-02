@@ -38,8 +38,8 @@
   안쪽에 마운트되고 `useTimeRange()` 로 `{ sel, ready, setPreset, setCustom, resolve }` 를 공급한다.
   `RANGE_PRESETS`(1H/6H/24H/7D/30D) · `CUSTOM_LABEL`("직접 설정") · `DEFAULT_PRESET`("7d") 도 여기
 - **페이지에 프리셋 배열이나 기간 state 를 다시 두지 말 것**
-- **분 단위 프리셋을 여기 넣지 말 것** — 기간과 해상도는 다른 축이다. 차트를 잘게 보고 싶은 요구는
-  기간이 아니라 해상도(`ResolutionSelect`)가 받는다 → [tick.md](../screens/tick.md)
+- **분 단위 프리셋을 여기 넣지 말 것** — 기간과 차트 단위는 다른 축이다. 차트를 잘게 보고 싶은 요구는
+  기간이 아니라 틱(`TickSelect`)이 받는다 → [tick.md](../screens/tick.md)
 - 저장은 `localStorage["tracex.timeRange"]`(`{preset, customFrom, customTo}`). 모르는 프리셋,
   구간이 빈 `custom` 은 기본값으로. SSR 에선 읽을 수 없으므로 **`ready` 가 true 가 된 뒤에 조회**한다
   (안 그러면 기본값으로 한 번, 복원값으로 한 번 이중 조회)

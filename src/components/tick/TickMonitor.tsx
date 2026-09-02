@@ -87,12 +87,14 @@ function inWindow<T>(items: T[], tsOf: (x: T) => string | null, startTs: string 
 const fmtInt = (n: number) => Math.round(n).toLocaleString();
 
 export function TickMonitor({
-  stats, metrics, rowsLabel, limitHref,
+  stats, metrics, rowsLabel, limitHref, headSlot,
 }: {
   stats: TickStatsResponse;
   metrics: [TickMetricDef, TickMetricDef];
   rowsLabel: string;
   limitHref?: string;
+  // 단위 선택은 차트 카드 머리 안에 있다 — 집계 보기와 같은 자리를 쓴다.
+  headSlot?: React.ReactNode;
 }) {
   const [slot, setSlot] = useState<TickSlot>("a");
   const [openMoment, setOpenMoment] = useState<string | null>(null);
@@ -162,6 +164,7 @@ export function TickMonitor({
             <span className="dash-card-title">{def.name} 추이</span>
           </div>
           <div className="dash-card-aux">
+            {headSlot}
             <span className={"aux-pill" + (limit > 0 && peak.value > limit ? " err" : "")}>
               <span className="aux-pill-key">최고</span>
               <span className="aux-pill-val">{fmtInt(peak.value)}</span>

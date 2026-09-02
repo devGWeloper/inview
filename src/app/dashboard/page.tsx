@@ -68,7 +68,7 @@ export default function DashboardPage() {
   const [tick, setTick] = useState<TickStatsResponse | null>(null);
 
   const spanMs = useMemo(() => spanOf(preset, customFrom, customTo), [preset, customFrom, customTo]);
-  const { unit, options: unitOptions, ready: unitReady, setUnit, unitFor } = useTickUnit("dashboard", spanMs);
+  const { unit, enabled: unitEnabled, ready: unitReady, setUnit, unitFor } = useTickUnit("dashboard", spanMs);
   const [auto, setAuto] = useAutoRefresh("dashboard");
 
   const [loading, setLoading] = useState(false);
@@ -224,6 +224,15 @@ export default function DashboardPage() {
     run(preset, unit, { excludeErrCds: undefined });
   };
 
+  const tickCtl = (
+    <TickSelect
+      value={unit}
+      enabled={unitEnabled}
+      onChange={onUnit}
+      pulsing={auto && preset !== "custom"}
+    />
+  );
+
   return (
     <div className="dash">
       <div className="dash-header stacked">
@@ -320,28 +329,31 @@ export default function DashboardPage() {
           {/* 1. Hero KPIs — 한눈에 보는 핵심 지표 */}
           <StatsCards stats={stats} />
 
-          {/* 틱 단위 — 차트 바로 위 자기 줄. ⚠️ 차트 카드 머리 안으로 넣지 말 것:
-              1분 조회가 실패하면 그 카드가 통째로 사라져 되돌릴 컨트롤이 없어진다. */}
-          <div className="tick-bar">
-            <TickSelect
-              value={unit}
-              options={unitOptions}
-              onChange={onUnit}
-              pulsing={auto && preset !== "custom"}
-            />
-          </div>
-
           {unit === "1m" && actionTyp && (
             <div className="tick-notice warn">
               1분 추이는 진입 레이어 행에서 세므로 <b>ACTION_TYP 이 걸리지 않습니다</b> — 위 KPI 와 대상이 다릅니다.
             </div>
           )}
 
+          {/* 2. 일별/시간별 추이 — 임원이 가장 보고 싶어하는 차트, 메인으로 노출.
+              단위 선택(TickSelect)은 이 카드 머리 안에 있고, 틱 보기도 **같은 자리**를 쓴다.
+              ⚠️ 틱 조회가 비어도 카드 껍데기는 그려야 한다 — 안 그리면 되돌릴 컨트롤이 사라진다. */}
           {unit === "1m" ? (
-            tick && <TickMonitor stats={tick} metrics={BIZ_METRICS} rowsLabel="요청" />
+            tick ? (
+              <TickMonitor stats={tick} metrics={BIZ_METRICS} rowsLabel="요청" headSlot={tickCtl} />
+            ) : (
+              <section className="dash-card dash-card-hero">
+                <div className="dash-card-head">
+                  <div className="dash-card-title-group">
+                    <span className="dash-card-title">사용 추이</span>
+                  </div>
+                  <div className="dash-card-aux">{tickCtl}</div>
+                </div>
+                <div className="dash-card-body"><div className="tick-empty">—</div></div>
+              </section>
+            )
           ) : (
           <>
-          {/* 2. 일별/시간별 추이 — 임원이 가장 보고 싶어하는 차트, 메인으로 노출 */}
           <section className="dash-card dash-card-hero">
             <div className="dash-card-head">
               <div className="dash-card-title-group">
@@ -349,6 +361,7 @@ export default function DashboardPage() {
                 <span className="dash-card-sub">상태별 적층 · {granularityLabel(stats.granularity)} 단위</span>
               </div>
               <div className="dash-card-aux">
+                {tickCtl}
                 <span className="aux-pill">
                   <span className="aux-pill-key">총</span>
                   <span className="aux-pill-val">{stats.totals.total.toLocaleString()}</span>

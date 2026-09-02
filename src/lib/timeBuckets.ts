@@ -64,17 +64,13 @@ export function granOfTickUnit(u: TickUnit): Granularity | undefined {
   return u === "5m" || u === "10m" || u === "30m" ? u : undefined;
 }
 
-// 집계 격자 = 유효한 것 중 100칸 이상이면서 가장 성긴 것. 없으면 가장 잔 것.
-// (7D 가 7칸으로 뭉뚝하던 원인이 여기 있었다 — 이제 168칸이다.)
+// 집계 격자. **이건 원래 규칙 그대로다 — 건드리지 말 것.**
+// 차트를 잘게 보고 싶은 요구는 집계가 아니라 틱 단위가 받는다.
 export function pickGranularity(fromMs: number, toMs: number): Granularity {
-  const span = Math.max(0, toMs - fromMs);
-  const cands = (Object.keys(GRAN_MS) as Granularity[]).filter((g) => {
-    const n = span / GRAN_MS[g];
-    return n >= MIN_POINTS && n <= MAX_POINTS;
-  });
-  if (cands.length === 0) return "5m";
-  const enough = cands.filter((g) => span / GRAN_MS[g] >= TARGET_POINTS);
-  return enough.length > 0 ? enough[enough.length - 1] : cands[0];
+  const hours = (toMs - fromMs) / 3_600_000;
+  if (hours <= 2) return "5m";
+  if (hours <= 48) return "1h";
+  return "1d";
 }
 
 // 쿼리스트링의 g= 파싱. 모르는 값은 undefined 로 떨궈 집계 격자를 쓰게 한다.
@@ -95,20 +91,36 @@ export function resolveGranularity(
   return n >= MIN_POINTS && n <= MAX_POINTS ? want : pickGranularity(fromMs, toMs);
 }
 
-// 추이 차트 X축 라벨. **granularity 가 아니라 구간 길이가 정한다** —
-// 하루를 넘는 구간을 시:분만으로 찍으면 `06:00 13:00 20:00 03:00 …` 처럼 날짜마다
-// 라벨이 되돌아와 차트가 되풀이되는 것처럼 보인다. 눈금은 항상 유일해야 한다.
-export function tickLabeler(
+// 추이 차트 X축. **눈금 key 는 유일해야 하고(recharts 의 category dataKey),
+// 화면에 보이는 글자는 짧아야 한다** — 이 둘을 같은 문자열로 쓰면 하나를 잃는다.
+//
+// key 가 겹치면(30일치를 시:분만으로 찍는 경우) `06:00 13:00 20:00 03:00 …` 처럼 라벨이
+// 날마다 되돌아와 차트가 되풀이되는 것처럼 보이고, peak 선·툴팁이 첫 번째 것에 붙는다.
+// 반대로 전부 `08-03 06:00` 으로 찍으면 글자가 짜잘해진다.
+// 그래서 key 는 날짜까지 갖되, 보이는 건 **자정에만 날짜, 나머지는 시:분**이다(증권 차트 방식).
+export interface TickAxis {
+  key: (ts: string) => string;
+  short: (key: string) => string;
+}
+
+const asIs = (v: string) => v;
+
+export function tickAxis(
   firstTs: string | undefined,
   lastTs: string | undefined,
   g: Granularity
-): (ts: string) => string {
+): TickAxis {
+  if (g === "1d") return { key: (ts) => ts.slice(5, 10), short: asIs };
+
   const a = firstTs ? Date.parse(firstTs) : NaN;
   const b = lastTs ? Date.parse(lastTs) : NaN;
   const multiDay = Number.isFinite(a) && Number.isFinite(b) && b - a > 86_400_000;
-  if (g === "1d") return (ts) => ts.slice(5, 10);
-  if (multiDay) return (ts) => `${ts.slice(5, 10)} ${ts.slice(11, 16)}`;
-  return (ts) => ts.slice(11, 16);
+  if (!multiDay) return { key: (ts) => ts.slice(11, 16), short: asIs };
+
+  return {
+    key: (ts) => `${ts.slice(5, 10)} ${ts.slice(11, 16)}`,
+    short: (k) => (k.endsWith(" 00:00") ? k.slice(0, 5) : k.slice(6)),
+  };
 }
 
 export function bucketMs(g: Granularity): number {

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { TimeoutStatsResponse, TimeoutModelSeries, TimeoutModelCell } from "@/lib/types";
-import { granularityLabel, tickLabeler } from "@/lib/timeBuckets";
+import { granularityLabel, tickAxis } from "@/lib/timeBuckets";
 
 type Gran = TimeoutStatsResponse["granularity"];
 
@@ -34,9 +34,9 @@ export function TimeoutModelHeatmap({
   onSelectModel?: (model: string) => void;
 }) {
   const { modelTrend, buckets, granularity } = stats;
-  // X축 눈금은 구간 길이가 정한다 — 하루를 넘는데 시:분만 찍으면 라벨이 날마다 되돌아온다.
-  const fmtTick = useMemo(
-    () => tickLabeler(buckets[0]?.ts, buckets[buckets.length - 1]?.ts, granularity),
+  // 히트맵 열 머리는 좁아서 짧은 쪽만 쓴다.
+  const axis = useMemo(
+    () => tickAxis(buckets[0]?.ts, buckets[buckets.length - 1]?.ts, granularity),
     [buckets, granularity]
   );
   const [hover, setHover] = useState<{ m: string; i: number } | null>(null);
@@ -88,7 +88,7 @@ export function TimeoutModelHeatmap({
           {buckets.map((b, i) =>
             tickIdx.includes(i) ? (
               <span key={b.ts} className="hm-tick mono">
-                {fmtTick(b.ts)}
+                {axis.short(axis.key(b.ts))}
               </span>
             ) : (
               <span key={b.ts} className="hm-tick-empty" />

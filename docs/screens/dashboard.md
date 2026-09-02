@@ -35,8 +35,8 @@ BIZ 트레이스 집계. 개발자용 진단 화면.
 - 액션 타입별 집계의 `라우팅 실패`(= `ROUTING_FAIL_LABEL`)는 표기 전용 라벨이라 실제 `ACTION_TYP`
   값이 아니다 → `DimensionBreakdown` 에서 필터 클릭 대상에서 제외(흐리게 하지는 않는다)
 - FAC/AREA 의 `(none)` 은 MCP 미도달을 뜻한다. 빼 버리면 합이 총 건수와 안 맞는다
-- 해상도가 `1분` 이면 사용 추이 카드 자리만 `TickMonitor` 로 바뀐다. KPI·나머지 카드는 그대로.
-  ACTION_TYP 셀렉트는 계속 보이되(기간 줄은 해상도에 따라 바뀌지 않는다), BIZ 틱 집계엔 그 값이 없어
+- 차트 단위가 `1분` 이면 사용 추이 카드 자리만 `TickMonitor` 로 바뀐다. KPI·나머지 카드는 그대로.
+  ACTION_TYP 셀렉트는 계속 보이되(기간 줄은 틱 단위에 따라 바뀌지 않는다), BIZ 틱 집계엔 그 값이 없어
   "이 추이엔 안 걸린다" 를 한 줄로 밝힌다 → [tick.md](./tick.md)
 - 에러 코드 제외 필터(`excludeErrCds`)는 칩 바(`.dash-exclude`)로 상태를 보인다
 - 분석 보기 상단의 `ScopeNote`(`src/components/ui/ScopeNote.tsx`) — 이 화면은 BIZ 트레이스 집계라

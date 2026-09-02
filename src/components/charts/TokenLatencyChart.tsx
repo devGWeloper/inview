@@ -13,7 +13,7 @@ import {
 } from "recharts";
 import { TokenBucket, TokenStatsResponse } from "@/lib/types";
 import { fmtDuration } from "@/lib/format";
-import { granularityLabel, tickLabeler } from "@/lib/timeBuckets";
+import { granularityLabel, tickAxis } from "@/lib/timeBuckets";
 
 const COLOR = "#f59e0b"; // latency 전용 색 (토큰 차트와 구분)
 
@@ -58,9 +58,9 @@ function CustomTooltip({
 
 export function TokenLatencyChart({ stats }: { stats: TokenSeries }) {
   const granularity = stats.granularity;
-  // X축 눈금은 구간 길이가 정한다 — 하루를 넘는데 시:분만 찍으면 라벨이 날마다 되돌아온다.
-  const fmtTick = useMemo(
-    () => tickLabeler(stats.buckets[0]?.ts, stats.buckets[stats.buckets.length - 1]?.ts, granularity),
+  // 눈금 key 는 유일해야 하고(안 그러면 라벨이 날마다 되돌아온다) 보이는 글자는 짧아야 한다.
+  const axis = useMemo(
+    () => tickAxis(stats.buckets[0]?.ts, stats.buckets[stats.buckets.length - 1]?.ts, granularity),
     [stats.buckets, granularity]
   );
 
@@ -68,11 +68,11 @@ export function TokenLatencyChart({ stats }: { stats: TokenSeries }) {
     () =>
       stats.buckets.map((b: TokenBucket) => ({
         ts: b.ts,
-        tick: fmtTick(b.ts),
+        tick: axis.key(b.ts),
         avgLatencyMs: b.avgLatencyMs,
         calls: b.calls,
       })),
-    [stats.buckets, fmtTick]
+    [stats.buckets, axis]
   );
 
   const { peakIdx, peakVal, peakTs, hasData } = useMemo(() => {
@@ -117,6 +117,7 @@ export function TokenLatencyChart({ stats }: { stats: TokenSeries }) {
             </defs>
             <XAxis
               dataKey="tick"
+              tickFormatter={axis.short}
               tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}
               tickLine={{ stroke: "var(--border-strong)" }}
               axisLine={{ stroke: "var(--border-strong)" }}

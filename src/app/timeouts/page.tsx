@@ -57,7 +57,7 @@ export default function TimeoutsPage() {
   const [tick, setTick] = useState<TickStatsResponse | null>(null);
 
   const spanMs = useMemo(() => spanOfSel(sel), [sel]);
-  const { unit, options: unitOptions, ready: unitReady, setUnit, unitFor } = useTickUnit("timeouts", spanMs);
+  const { unit, enabled: unitEnabled, ready: unitReady, setUnit, unitFor } = useTickUnit("timeouts", spanMs);
   const [auto, setAuto] = useAutoRefresh("timeouts");
 
   const agentIdRef = useRef(agentId);
@@ -169,6 +169,10 @@ export default function TimeoutsPage() {
   const customOpen = draftCustom || sel.preset === "custom";
   const scope = [node && `노드 ${node}`, model && `모델 ${model}`].filter(Boolean).join(" · ");
   const topNode = stats?.byNode[0];
+
+  const tickCtl = (
+    <TickSelect value={unit} enabled={unitEnabled} onChange={onUnit} pulsing={auto && !customOpen} />
+  );
 
   return (
     <div className="dash">
@@ -300,19 +304,22 @@ export default function TimeoutsPage() {
             </div>
           </div>
 
-          {/* 틱 단위 — 차트 바로 위 자기 줄. ⚠️ 차트 카드 머리 안으로 넣지 말 것:
-              1분 조회가 실패하면 그 카드가 통째로 사라져 되돌릴 컨트롤이 없어진다. */}
-          <div className="tick-bar">
-            <TickSelect
-              value={unit}
-              options={unitOptions}
-              onChange={onUnit}
-              pulsing={auto && !customOpen}
-            />
-          </div>
-
+          {/* 단위 선택(TickSelect)은 이 카드 머리 안에 있고, 틱 보기도 **같은 자리**를 쓴다.
+              ⚠️ 틱 조회가 비어도 카드 껍데기는 그려야 한다 — 안 그리면 되돌릴 컨트롤이 사라진다. */}
           {unit === "1m" ? (
-            tick && <TickMonitor stats={tick} metrics={TIMEOUT_METRICS} rowsLabel="호출" />
+            tick ? (
+              <TickMonitor stats={tick} metrics={TIMEOUT_METRICS} rowsLabel="호출" headSlot={tickCtl} />
+            ) : (
+              <section className="dash-card dash-card-hero">
+                <div className="dash-card-head">
+                  <div className="dash-card-title-group">
+                    <span className="dash-card-title">발생 추이</span>
+                  </div>
+                  <div className="dash-card-aux">{tickCtl}</div>
+                </div>
+                <div className="dash-card-body"><div className="tick-empty">—</div></div>
+              </section>
+            )
           ) : (
           <section className="dash-card dash-card-hero">
             <div className="dash-card-head">
@@ -320,6 +327,7 @@ export default function TimeoutsPage() {
                 <span className="dash-card-title">발생 추이</span>
                 <span className="dash-card-sub">호출 시각 기준{scope && ` · ${scope}`}</span>
               </div>
+              <div className="dash-card-aux">{tickCtl}</div>
             </div>
             <div className="dash-card-body">
               {stats.failedCalls === 0 ? (

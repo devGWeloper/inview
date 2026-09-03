@@ -57,33 +57,34 @@ export function TickSelect({
   onChange: (u: TickUnit) => void;
   pulsing?: boolean;
 }) {
-  // ⚠️ 못 고르는 단위도 **자리는 그대로 두고 잠근다.** 목록에서 빼면 기간을 바꿀 때마다
-  //    폭이 흔들리고 "아까 있던 게 어디 갔지" 가 된다. 왜 잠겼는지는 적지 않는다.
-  const btn = (u: TickUnit) => {
-    const off = !enabled.includes(u);
-    return (
-      <button
-        key={u}
-        type="button"
-        role="tab"
-        disabled={off}
-        aria-selected={value === u}
-        className={"tick-select-btn" + (value === u ? " active" : "") + (off ? " off" : "")}
-        onClick={() => onChange(u)}
-      >
-        {u === "1m" && (
-          <span className={"live-dot" + (value === u && pulsing ? " pulse" : "")} aria-hidden="true" />
-        )}
-        {tickUnitLabel(u)}
-      </button>
-    );
-  };
+  const on = value !== "agg";
 
+  // 켜짐/꺼짐 토글이다 — 아무것도 안 눌린 상태가 집계다.
+  // 같은 칩을 다시 누르면 꺼지고 집계로 돌아온다. `집계` 버튼을 다시 만들지 말 것:
+  // 성격이 다른 둘을 같은 줄에 세우면 무엇을 고르는 줄인지 흐려진다.
   return (
-    <div className="tick-select" role="tablist" aria-label="차트 단위">
-      {btn("agg")}
-      <span className="tick-select-key" aria-hidden="true">틱</span>
-      {TICK_UNITS.filter((u) => u !== "agg").map(btn)}
+    <div className={"tick-select" + (on ? " on" : "")}>
+      <span className="tick-select-key">틱</span>
+      {TICK_UNITS.filter((u) => u !== "agg").map((u) => {
+        const off = !enabled.includes(u);
+        const active = value === u;
+        return (
+          <button
+            key={u}
+            type="button"
+            disabled={off}
+            aria-pressed={active}
+            className={"tick-select-btn" + (active ? " active" : "") + (off ? " off" : "")}
+            onClick={() => onChange(active ? "agg" : u)}
+          >
+            {/* 점은 켜졌을 때만. 꺼진 칩에 회색 점이 있으면 그것도 골라진 것처럼 읽힌다. */}
+            {u === "1m" && active && (
+              <span className={"live-dot" + (pulsing ? " pulse" : "")} aria-hidden="true" />
+            )}
+            {tickUnitLabel(u)}
+          </button>
+        );
+      })}
     </div>
   );
 }

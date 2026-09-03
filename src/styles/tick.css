@@ -4,59 +4,55 @@
    화면은 게이지 → 추이 → 순간 목록 3단. 한도 초과는 전부 --err 톤 하나로만 표시한다.
    ───────────────────────────────────────────────────────────────────────────── */
 
-/* 차트 단위 — `집계 | 틱 1분 5분 10분 30분`.
-   ⚠️ 자리는 **차트 카드 머리**(.dash-card-head 의 .dash-card-aux)다. 집계 보기와 틱 보기가
-      같은 자리를 쓴다. 조회 줄로 내리지 말 것 — 기간을 고른 줄 알고 누른다.
-   ⚠️ 틱 조회가 비어도 카드 껍데기는 그린다(페이지 쪽) — 안 그리면 되돌릴 컨트롤이 사라진다.
-   ⚠️ 그 기간에서 못 그리는 단위도 **자리는 그대로 두고 잠근다**(.off). 목록에서 빼면
-      기간을 바꿀 때마다 폭이 흔들린다. 왜 잠겼는지는 적지 않는다. */
+/* 틱 토글 — `틱 [1분][5분][10분][30분]`. 켜짐/꺼짐이고, **아무것도 안 눌린 상태가 집계**다.
+   ⚠️ `집계` 버튼을 다시 만들지 말 것 — 성격이 다른 둘을 같은 줄에 세우면 무엇을 고르는 줄인지 흐려진다.
+   ⚠️ 자리는 **차트 카드 머리**(.dash-card-aux)다. 집계 보기와 틱 보기가 같은 자리를 쓴다.
+   ⚠️ 그 기간에서 못 그리는 단위도 자리는 지키고 잠근다(.off) — 빼면 기간마다 폭이 흔들린다.
+      왜 잠겼는지는 적지 않는다. */
 .tick-select {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 2px;
+  gap: 4px;
 }
-/* 집계와 틱 단위를 가르는 말머리. 이게 이 묶음이 '틱' 이라는 유일한 표시다. */
 .tick-select-key {
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
-  padding: 0 7px 0 9px;
-  margin-left: 3px;
-  border-left: 1px solid var(--border-strong);
+  margin-right: 3px;
   user-select: none;
+  transition: color 0.15s ease;
 }
+/* 하나라도 켜져 있으면 말머리가 같이 살아난다 — 이 줄이 지금 켜져 있다는 유일한 신호 */
+.tick-select.on .tick-select-key { color: var(--accent); }
+
 .tick-select-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  border: none;
-  background: transparent;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
   color: var(--text-3);
   font-size: 12px;
   font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 5px;
+  padding: 4px 11px;
+  border-radius: 999px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
-.tick-select-btn:hover:not(:disabled) { color: var(--text); background: var(--surface-3); }
-/* 이 기간에서 예산을 넘는 단위 — 자리만 지키고 눌리지 않는다 */
-.tick-select-btn.off {
-  color: var(--text-muted);
-  opacity: 0.4;
-  cursor: not-allowed;
-}
+.tick-select-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
 .tick-select-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .tick-select-btn.active {
-  color: var(--accent);
-  background: var(--surface);
-  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.08), 0 0 0 1px rgba(17, 24, 39, 0.05);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.tick-select-btn.active .live-dot { background: #fff; }
+/* 이 기간에서 예산을 넘는 단위 — 자리만 지키고 눌리지 않는다 */
+.tick-select-btn.off {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 /* 1분 버튼의 점 — 자동 갱신이 도는 동안에만 깜빡인다.
@@ -68,7 +64,6 @@
   background: var(--text-muted);
   flex: none;
 }
-.tick-select-btn.active .live-dot { background: var(--err); }
 .live-dot.pulse { animation: live-pulse 1.6s ease-in-out infinite; }
 @keyframes live-pulse {
   0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--err-soft); }

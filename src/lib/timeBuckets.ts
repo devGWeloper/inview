@@ -104,7 +104,6 @@ export interface TickAxis {
   ticks: string[];
 }
 
-const DAY_MS = 86_400_000;
 const MAX_TICKS = 12;
 
 // n 개 이하로 균등하게 솎는다. 첫 칸은 반드시 남긴다.
@@ -115,25 +114,24 @@ function thin<T>(items: T[], n: number): T[] {
 }
 
 export function tickAxis(allTs: string[], g?: Granularity): TickAxis {
-  const first = allTs[0];
-  const last = allTs[allTs.length - 1];
-  const a = first ? Date.parse(first) : NaN;
-  const b = last ? Date.parse(last) : NaN;
-  const span = Number.isFinite(a) && Number.isFinite(b) ? b - a : 0;
+  const first = allTs[0] ?? "";
+  const last = allTs[allTs.length - 1] ?? "";
 
   if (g === "1d") {
     const key = (ts: string) => ts.slice(5, 10);
     return { key, short: (k) => k, ticks: thin(allTs.map(key), MAX_TICKS) };
   }
 
-  const multiDay = span > DAY_MS;
-  const key = multiDay
+  // **자정을 넘으면 key 에 날짜가 있어야 한다.** 시:분만 쓰면 24시간 구간의 양 끝이
+  // 같은 값이 되어 눈금이 겹친다(정확히 하루인 틱 조회가 그렇다).
+  const crossesDay = first.slice(0, 10) !== last.slice(0, 10);
+  const key = crossesDay
     ? (ts: string) => `${ts.slice(5, 10)} ${ts.slice(11, 16)}`
     : (ts: string) => ts.slice(11, 16);
 
   // 자정 버킷이 둘 이상이면 날짜 축이다 — 눈금은 자정에만 찍고 글자는 `08-04`.
   const midnights = allTs.filter((ts) => ts.slice(11, 16) === "00:00");
-  if (multiDay && midnights.length >= 2) {
+  if (crossesDay && midnights.length >= 2) {
     return { key, short: (k) => k.slice(0, 5), ticks: thin(midnights.map(key), MAX_TICKS) };
   }
 
@@ -143,7 +141,7 @@ export function tickAxis(allTs: string[], g?: Granularity): TickAxis {
   const picked = hours.length >= 4 ? hours : allTs;
   return {
     key,
-    short: (k) => (multiDay ? (k.endsWith(" 00:00") ? k.slice(0, 5) : k.slice(6)) : k),
+    short: (k) => (crossesDay ? (k.endsWith(" 00:00") ? k.slice(0, 5) : k.slice(6)) : k),
     ticks: thin(picked.map(key), MAX_TICKS),
   };
 }

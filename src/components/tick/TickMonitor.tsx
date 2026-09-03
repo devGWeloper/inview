@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { TickCall, TickMetricDef, TickMinute, TickStatsResponse, TickTrace, TICK_WINDOW_SEC } from "@/lib/types";
+import { TickCall, TickMetricDef, TickMinute, TickStatsResponse, TICK_WINDOW_SEC } from "@/lib/types";
 import { callStatus } from "@/lib/tokenStatus";
 import { TickSlot, TickMonitorChart, fmtCompact, windowLabel } from "@/components/tick/TickMonitorChart";
 
@@ -231,13 +231,7 @@ function MomentRow({
   onToggle: () => void;
   stats: TickStatsResponse;
 }) {
-  const calls = open && stats.kind === "llm"
-    ? inWindow(stats.calls, (c) => c.callTm, moment.peakAt)
-    : [];
-  const traces = open && stats.kind === "biz"
-    ? inWindow(stats.traces, (t) => t.recvTm, moment.peakAt)
-    : [];
-  const rowCount = stats.kind === "llm" ? calls.length : traces.length;
+  const calls = open ? inWindow(stats.calls, (c) => c.callTm, moment.peakAt) : [];
 
   return (
     <div className={"tick-seg-item" + (open ? " open" : "") + (limit > 0 ? "" : " neutral")}>
@@ -259,22 +253,15 @@ function MomentRow({
       </button>
       {open && (
         <div className="tick-seg-body">
-          {rowCount === 0 ? (
+          {calls.length === 0 ? (
             <div className="tick-empty">—</div>
-          ) : stats.kind === "llm" ? (
+          ) : (
             <>
               <div className="tick-win-sum">
                 호출 <b>{calls.length}</b>건 ·{" "}
                 <b>{fmtInt(calls.reduce((a, c) => a + c.totalTokens, 0))}</b> 토큰
               </div>
               <CallsTable calls={calls} />
-            </>
-          ) : (
-            <>
-              <div className="tick-win-sum">
-                요청 <b>{traces.length}</b>건 · 실패 <b>{traces.filter((t) => t.failed).length}</b>건
-              </div>
-              <TracesTable traces={traces} />
             </>
           )}
         </div>
@@ -381,37 +368,3 @@ function CallsTable({ calls }: { calls: TickCall[] }) {
   );
 }
 
-function TracesTable({ traces }: { traces: TickTrace[] }) {
-  return (
-    <div className="token-recent-wrap">
-      <table className="token-recent tick-calls">
-        <thead>
-          <tr>
-            <th>수신 시각</th>
-            <th>사용자</th>
-            <th>상태</th>
-            <th>에러 코드</th>
-            <th>TRACE_ID</th>
-          </tr>
-        </thead>
-        <tbody>
-          {traces.map((t, i) => (
-            <tr key={i}>
-              <td className="mono">{t.recvTm ? t.recvTm.slice(11, 19) : "—"}</td>
-              <td>{t.userId ?? "—"}</td>
-              <td>
-                {t.failed ? (
-                  <span className="tick-call-flag error">실패</span>
-                ) : (
-                  <span className="tick-ok-mark">정상</span>
-                )}
-              </td>
-              <td className="mono">{t.errCd ?? "—"}</td>
-              <td className="mono trace">{t.traceId ?? "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}

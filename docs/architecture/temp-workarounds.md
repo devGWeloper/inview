@@ -31,7 +31,6 @@
   `classifyPendingByCubeResp` 로 교체
 - `src/lib/stats.ts` 트레이스 루프 — `matchedActionFailCodes(list)` 의 가상 코드를 `errCount` 에
   +1 해서 Top Errors 에 노출(제외 필터 `excludeErrCds` 도 같은 코드로 매칭)
-- `src/lib/bizTickStats.ts` — 틱 뷰의 실패 판정
 - `src/lib/db.ts` `monthlyActionSuccess()` — FTE 집계의 성공 제외
 - `src/app/api/insights/route.ts` — `ACTION_FAIL_LABELS` 로 실패 사유 표기
 

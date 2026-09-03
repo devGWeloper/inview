@@ -8,8 +8,8 @@ BIZ 트레이스 집계. 개발자용 진단 화면.
   `DimensionBreakdown` `CubeLatencyChart`
 - 공용 컴포넌트: `src/components/charts/TimeSeriesChart` · `src/components/ui/TopList` ·
   `src/components/tick/*`
-- API: `src/app/api/stats/route.ts`(파싱+인가만) · `src/app/api/stats/tick/route.ts`
-- 집계: `src/lib/stats.ts` `computeStats()` · `src/lib/bizTickStats.ts`
+- API: `src/app/api/stats/route.ts`(파싱+인가만)
+- 집계: `src/lib/stats.ts` `computeStats()`
 - 스타일: `src/styles/dashboard.css`
 - 권한: DEV 이상 + 기본 에이전트(BIZ)
 
@@ -35,9 +35,8 @@ BIZ 트레이스 집계. 개발자용 진단 화면.
 - 액션 타입별 집계의 `라우팅 실패`(= `ROUTING_FAIL_LABEL`)는 표기 전용 라벨이라 실제 `ACTION_TYP`
   값이 아니다 → `DimensionBreakdown` 에서 필터 클릭 대상에서 제외(흐리게 하지는 않는다)
 - FAC/AREA 의 `(none)` 은 MCP 미도달을 뜻한다. 빼 버리면 합이 총 건수와 안 맞는다
-- 차트 단위가 `1분` 이면 사용 추이 카드 자리만 `TickMonitor` 로 바뀐다. KPI·나머지 카드는 그대로.
-  ACTION_TYP 셀렉트는 계속 보이되(기간 줄은 틱 단위에 따라 바뀌지 않는다), BIZ 틱 집계엔 그 값이 없어
-  "이 추이엔 안 걸린다" 를 한 줄로 밝힌다 → [tick.md](./tick.md)
+- 틱 단위는 전부 집계 라우트의 `g=` 다 — `1분` 도 롤링 60초가 아니라 정각 분 격자다.
+  대시보드는 한도가 없어 TPM/RPM 판정이 뜻이 없다(그건 Tokens·Timeout 것) → [tick.md](./tick.md)
 - 에러 코드 제외 필터(`excludeErrCds`)는 칩 바(`.dash-exclude`)로 상태를 보인다
 - 분석 보기 상단의 `ScopeNote`(`src/components/ui/ScopeNote.tsx`) — 이 화면은 BIZ 트레이스 집계라
   `TRX_TOKEN_DET` 의 LLM 타임아웃이 따로 안 잡힌다는 한 줄 + `/timeouts` 링크. Tokens 와 공용

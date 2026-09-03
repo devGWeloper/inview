@@ -1,5 +1,5 @@
-// 틱(롤링 60초) 집계. rollupTick() 은 LLM 소스와 BIZ 소스가 공유하는 순수 함수다 —
-// 정의가 갈리면 같은 사건에서 다른 수치가 나온다. docs/screens/tick.md
+// 틱(롤링 60초) 집계 — TRX_TOKEN_DET 소스.
+// docs/screens/tick.md
 
 import { getAgentDbConfig } from "./config";
 import { logger } from "./logger";
@@ -131,14 +131,12 @@ export function rollupTick(
 function emptyStats(fromMs: number, toMs: number, statusAvailable = true): TickStatsResponse {
   const { minutes, peakA, peakB } = rollupTick([], fromMs, toMs);
   return {
-    kind: "llm",
     range: { from: isoNoTz(fromMs), to: isoNoTz(toMs) },
     minutes,
     peakA,
     peakB,
     totals: { a: 0, b: 0, rows: 0 },
     calls: [],
-    traces: [],
     truncated: false,
     statusAvailable,
   };
@@ -251,15 +249,13 @@ export async function fetchTickStats(filter: TickFilter): Promise<TickStatsRespo
     });
 
     return {
-      kind: "llm",
-      range: { from: eff.dateFrom ?? null, to: eff.dateTo ?? null },
+        range: { from: eff.dateFrom ?? null, to: eff.dateTo ?? null },
       minutes,
       peakA,
       peakB,
       totals,
       calls,
-      traces: [],
-      truncated,
+        truncated,
       statusAvailable: view === "failure" ? hasStatus : undefined,
     };
   } catch (e) {

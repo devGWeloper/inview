@@ -5,8 +5,8 @@
   `pickGranularity` `resolveGranularity` `parseGranularityParam` `tickLabeler`
 - 클라이언트: `src/components/charts/TickSelect.tsx`(`useTickUnit` + 세그먼트) ·
   `src/components/charts/AutoRefresh.tsx`
-- 1분 집계: `src/lib/tickStats.ts`(LLM 소스 + `rollupTick`) · `src/lib/bizTickStats.ts`(BIZ 소스)
-- 1분 라우트: `src/app/api/tokens/tick/route.ts` · `src/app/api/stats/tick/route.ts`
+- 롤링 60초 집계: `src/lib/tickStats.ts`(`rollupTick`)
+- 롤링 60초 라우트: `src/app/api/tokens/tick/route.ts`
 - 1분 화면: `src/components/tick/` — `TickMonitor` `TickMonitorChart`
 - 스타일: `src/styles/tick.css`
 
@@ -97,8 +97,8 @@ recharts 의 category 축은 `dataKey` 값이 **유일해야** 한다. 겹치면
 보인다. 그래서 **초 단위 SQL 집계 위에서 슬라이딩 60초 윈도우의 최대값**을 구한다. 윈도우 시작을
 "값이 있던 초" 로만 잡아도 실수 t 전체의 최대와 같으므로 **근사가 아니라 정확한 최대**다.
 
-**롤업은 순수 함수 `rollupTick()` 하나다** — LLM 소스와 BIZ 소스가 같이 쓴다. 슬라이딩 60초의
-정의가 소스마다 갈리면 같은 사건에서 다른 수치가 나온다.
+**롤업은 순수 함수 `rollupTick()` 하나다.** 경계 조건(정확히 60초 간격은 창 밖, 빈 입력,
+같은 초 다건) 검증도 여기 하나로 끝난다.
 
 ### 지표는 화면마다 다르고 서버는 이름을 모른다
 
@@ -110,7 +110,6 @@ recharts 의 category 축은 `dataKey` 값이 **유일해야** 한다. 겹치면
 |---|---|---|---|---|---|
 | `/tokens` | TPM(토큰) | RPM(호출) | `agents[].tpmLimit/rpmLimit` | `TRX_TOKEN_DET` | `/api/tokens/tick?view=usage` |
 | `/timeouts` | 타임아웃/분 | 실패/분 | 없음(0) | `TRX_TOKEN_DET` | `/api/tokens/tick?view=failure` |
-| `/dashboard` | 요청/분 | 실패/분 | 없음(0) | `BIZ` 진입 레이어 | `/api/stats/tick` |
 
 - **Timeout 에 TPM/RPM 을 복제하지 않는다** — 숫자가 Tokens 탭과 글자 하나까지 같아져 화면이
   있을 이유가 없어진다
@@ -119,9 +118,6 @@ recharts 의 category 축은 `dataKey` 값이 **유일해야** 한다. 겹치면
 - **BIZ 집계는 진입 레이어(`LAYER_ORDER[0]`) 하나만 읽는다.** 사용자 요청 1건 = 진입 레이어 수신
   1건이라 "분당 몇 건" 은 여기서만 정의된다. 실패 판정은 화면 나머지와 같은 규칙이다
   (`ERR_CD` 또는 TEMP 액션 실패 문구)
-- BIZ 틱에는 `ACTION_TYP`/`FAC_ID` 가 담기지 않는다(진입 레이어 행에 없다). 그래서 대시보드는
-  1분이면서 ACTION_TYP 이 걸려 있을 때 "이 추이엔 안 걸린다" 를 한 줄로 밝힌다 —
-  **셀렉트를 감추지는 않는다**. 기간 줄은 틱 단위에 따라 바뀌지 않아야 하고, KPI 에는 실제로 걸린다
 - 라우트가 `/api/traces/tick` 이 **아닌** 이유: 그쪽엔 `[traceId]` 동적 세그먼트가 있어 "tick" 이라는
   이름의 트레이스와 경로가 겹친다
 - `/api/tokens/tick` 의 **모르는 `view` 는 400 이다** — 조용히 기본으로 떨구면 실패 수를 사용량으로
@@ -161,7 +157,6 @@ recharts 의 category 축은 `dataKey` 값이 **유일해야** 한다. 겹치면
 - **순간 목록은 한도 유무로 갈린다**: 한도가 있으면 "초과한 순간"(연속 초과 분을 구간으로 병합),
   없으면 "가장 몰린 순간"(값 상위 TOP 5). 후자는 이미 고른 순간과 60초 안에서 겹치는 후보를 건너뛰고,
   **빨간색을 쓰지 않는다**(`.tick-seg-item.neutral` — 초과가 아닌 정상값을 사고로 읽게 된다)
-- 행을 열면 그 피크 60초의 원본 행이 나온다 — LLM 소스는 호출 표(`TickCall`), BIZ 소스는 요청 표
-  (`TickTrace`). **하나의 범용 표로 합치지 않았다**(열이 겹치지 않아 빈 칸투성이가 된다)
+- 행을 열면 그 피크 60초의 원본 호출(`TickCall`)이 표로 나온다
 - 시각은 `windowLabel()` 로 `09:16:30 ~ 09:17:30` 처럼 끝 시각을 직접 적는다.
   **화면 문구는 값이 무엇인지 설명하려 들지 말고 숫자·시각·%만 보여줄 것**

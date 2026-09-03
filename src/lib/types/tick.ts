@@ -1,7 +1,5 @@
 // 틱(롤링 60초) 집계.
 
-export type TickSourceKind = "llm" | "biz";
-
 export type TickView = "usage" | "failure";
 
 export interface TickMetricDef {
@@ -19,12 +17,6 @@ export interface TickFilter {
   modelNm?: string;
   view?: TickView;
   agentId?: string;
-}
-
-export interface BizTickFilter {
-  dateFrom?: string;
-  dateTo?: string;
-  userId?: string;
 }
 
 export interface TickMinute {
@@ -56,24 +48,13 @@ export interface TickCall {
   errCtn: string | null;
 }
 
-export interface TickTrace {
-  recvTm: string | null;
-  traceId: string | null;
-  userId: string | null;
-  errCd: string | null;
-  /** 실패로 판정됐는지 (ERR_CD 또는 TEMP 액션 실패 문구) */
-  failed: boolean;
-}
-
 export interface TickStatsResponse {
-  kind: TickSourceKind;
   range: { from: string | null; to: string | null };
   minutes: TickMinute[];
   peakA: TickPeak;
   peakB: TickPeak;
   totals: { a: number; b: number; rows: number };
   calls: TickCall[];
-  traces: TickTrace[];
   truncated: boolean;
   statusAvailable?: boolean;
   agentId?: string;

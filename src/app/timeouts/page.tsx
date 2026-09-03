@@ -18,8 +18,8 @@ import {
   spanOfSel,
   useTimeRange,
 } from "@/components/ui/TimeRangeProvider";
-
-import { ViewToggle, useTickView } from "@/components/tick/ViewToggle";
+import { TickUnit, granOfTickUnit } from "@/lib/timeBuckets";
+import { TickSelect, useTickUnit } from "@/components/charts/TickSelect";
 import { AutoRefreshToggle, refreshMs, useAutoRefresh } from "@/components/charts/AutoRefresh";
 import { DimCard } from "@/features/timeouts/DimCard";
 import { ReasonList } from "@/features/timeouts/ReasonList";
@@ -57,7 +57,7 @@ export default function TimeoutsPage() {
   const [tick, setTick] = useState<TickStatsResponse | null>(null);
 
   const spanMs = useMemo(() => spanOfSel(sel), [sel]);
-  const { on: tickOn, canTick, ready: unitReady, setOn: setTickOn, onFor: tickOnFor } = useTickView("timeouts", spanMs);
+  const { unit, enabled: unitEnabled, ready: unitReady, setUnit, unitFor } = useTickUnit("timeouts", spanMs);
   const [auto, setAuto] = useAutoRefresh("timeouts");
 
   const agentIdRef = useRef(agentId);
@@ -65,7 +65,7 @@ export default function TimeoutsPage() {
 
   // 1분에서는 두 번 조회한다 — 집계(KPI·나머지 카드) + 틱(분당 타임아웃/실패).
   const load = useCallback(
-    async (r: Range, nodeNm: string, modelNm: string, tickOn: boolean) => {
+    async (r: Range, nodeNm: string, modelNm: string, unit: TickUnit) => {
       const requestFor = agentId; // 이 요청이 향한 에이전트
       setLoading(true);
       setErr(null);
@@ -77,12 +77,14 @@ export default function TimeoutsPage() {
 
       const tq = new URLSearchParams(q);
       tq.set("view", "failure");
+      const g = granOfTickUnit(unit);
+      if (g) q.set("g", g);
 
       let tickErr: string | null = null;
       try {
         const [data, tickData] = await Promise.all([
           apiJson<TimeoutStatsResponse>(`/api/timeouts?${q.toString()}`, { cache: "no-store" }),
-          tickOn
+          unit === "1m"
             ? apiJson<TickStatsResponse>(`/api/tokens/tick?${tq.toString()}`, { cache: "no-store" })
                 .catch((e) => {
                   tickErr = errMessage(e, "틱 조회를 불러오지 못했습니다.");
@@ -115,15 +117,15 @@ export default function TimeoutsPage() {
     setModel("");
     setStats(null);
     setTick(null);
-    load(resolveRange(sel), "", "", tickOn);
+    load(resolveRange(sel), "", "", unit);
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [ready, rangeReady, unitReady, agentId]);
 
   useEffect(() => {
     if (!auto || sel.preset === "custom") return;
-    const id = setInterval(() => load(resolveRange(sel), node, model, tickOn), refreshMs(tickOn));
+    const id = setInterval(() => load(resolveRange(sel), node, model, unit), refreshMs(unit));
     return () => clearInterval(id);
-  }, [auto, sel, node, model, tickOn, load]);
+  }, [auto, sel, node, model, unit, load]);
 
   useEffect(() => {
     if (sel.preset === "custom" && sel.customFrom && sel.customTo) {
@@ -137,12 +139,12 @@ export default function TimeoutsPage() {
     const next: TimeRangeSel = { ...sel, preset: p };
     setPreset(p);
     setDraftCustom(false);
-    const r = tickOnFor(spanOfSel(next));
+    const r = unitFor(spanOfSel(next));
     load(resolveRange(next), node, model, r);
   };
-  const onTick = (v: boolean) => {
-    setTickOn(v);
-    load(currentRange(), node, model, v);
+  const onUnit = (r: TickUnit) => {
+    setUnit(r);
+    load(currentRange(), node, model, r);
   };
   const enterCustom = () => {
     if (!customFrom || !customTo) {
@@ -158,9 +160,9 @@ export default function TimeoutsPage() {
     const next: TimeRangeSel = { preset: "custom", customFrom, customTo };
     setCustom(customFrom, customTo);
     setDraftCustom(false);
-    load(resolveRange(next), node, model, tickOnFor(spanOfSel(next)));
+    load(resolveRange(next), node, model, unitFor(spanOfSel(next)));
   };
-  const reload = (nodeNm: string, modelNm: string) => load(currentRange(), nodeNm, modelNm, tickOn);
+  const reload = (nodeNm: string, modelNm: string) => load(currentRange(), nodeNm, modelNm, unit);
   const onNode = (k: string) => { const next = node === k ? "" : k; setNode(next); reload(next, model); };
   const onModel = (k: string) => { const next = model === k ? "" : k; setModel(next); reload(node, next); };
 
@@ -169,7 +171,7 @@ export default function TimeoutsPage() {
   const topNode = stats?.byNode[0];
 
   const tickCtl = (
-    <ViewToggle on={tickOn} canTick={canTick} onChange={onTick} pulsing={auto && !customOpen} />
+    <TickSelect value={unit} enabled={unitEnabled} onChange={onUnit} pulsing={auto && !customOpen} />
   );
 
   return (
@@ -302,9 +304,9 @@ export default function TimeoutsPage() {
             </div>
           </div>
 
-          {/* 보기 토글(ViewToggle)은 이 카드 머리 안에 있고, 틱 보기도 **같은 자리**를 쓴다.
+          {/* 단위 선택(TickSelect)은 이 카드 머리 안에 있고, 틱 보기도 **같은 자리**를 쓴다.
               ⚠️ 틱 조회가 비어도 카드 껍데기는 그려야 한다 — 안 그리면 되돌릴 컨트롤이 사라진다. */}
-          {tickOn ? (
+          {unit === "1m" ? (
             tick ? (
               <TickMonitor stats={tick} metrics={TIMEOUT_METRICS} title="발생 추이" rowsLabel="호출" headSlot={tickCtl} />
             ) : (

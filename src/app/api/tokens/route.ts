@@ -4,6 +4,7 @@ import { TokenFilter } from "@/lib/types";
 import { logger, reqContext } from "@/lib/logger";
 import { defaultAgentId, getAgent } from "@/lib/config";
 import { requireAgent } from "@/lib/auth/current";
+import { parseGranularityParam } from "@/lib/timeBuckets";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,7 @@ export async function GET(req: NextRequest) {
     modelNm: sp.get("modelNm") || undefined,
     traceId: sp.get("traceId") || undefined,
     agentId,
+    gran: parseGranularityParam(sp.get("g")),
   };
 
   logger.info("GET /api/tokens", { ...ctx, filter });

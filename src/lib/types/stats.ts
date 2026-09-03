@@ -8,6 +8,7 @@ export interface StatsFilter {
   userId?: string;
   actionTyp?: string;
   excludeErrCds?: string[];
+  gran?: Granularity;
 }
 
 export interface DimensionStats {

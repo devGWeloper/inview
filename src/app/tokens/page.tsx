@@ -22,8 +22,8 @@ import {
   spanOfSel,
   useTimeRange,
 } from "@/components/ui/TimeRangeProvider";
-import { granularityLabel } from "@/lib/timeBuckets";
-import { ViewToggle, useTickView } from "@/components/tick/ViewToggle";
+import { TickUnit, granOfTickUnit, granularityLabel } from "@/lib/timeBuckets";
+import { TickSelect, useTickUnit } from "@/components/charts/TickSelect";
 import { AutoRefreshToggle, refreshMs, useAutoRefresh } from "@/components/charts/AutoRefresh";
 
 
@@ -53,7 +53,7 @@ export default function TokensPage() {
   const [tick, setTick] = useState<TickStatsResponse | null>(null);
 
   const spanMs = useMemo(() => spanOfSel(sel), [sel]);
-  const { on: tickOn, canTick, ready: unitReady, setOn: setTickOn, onFor: tickOnFor } = useTickView("tokens", spanMs);
+  const { unit, enabled: unitEnabled, ready: unitReady, setUnit, unitFor } = useTickUnit("tokens", spanMs);
   const [auto, setAuto] = useAutoRefresh("tokens");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -64,7 +64,7 @@ export default function TokensPage() {
   agentIdRef.current = agentId;
 
   const computeFilter = useCallback(
-    (tick: boolean, from: TimeRangeSel = sel): TokenFilter => {
+    (u: TickUnit, from: TimeRangeSel = sel): TokenFilter => {
       const range = resolveRange(from);
       return {
         userId: userId || undefined,
@@ -72,13 +72,15 @@ export default function TokensPage() {
         modelNm: modelNm || undefined,
         dateFrom: range.from,
         dateTo: range.to,
+        // 집계·1분은 g 를 안 보낸다 — 집계는 서버가 고르고, 1분은 틱 라우트가 그린다.
+        gran: granOfTickUnit(u),
       };
     },
     [sel, userId, nodeNm, modelNm]
   );
 
   // 1분에서는 두 번 조회한다 — 집계(KPI·나머지 카드) + 틱(TPM/RPM).
-  const load = useCallback(async (f: TokenFilter, tick: boolean) => {
+  const load = useCallback(async (f: TokenFilter, r: TickUnit) => {
     const requestFor = agentId; // 이 요청이 향한 에이전트 (응답 도착 시점의 선택과 비교할 기준)
     setLoading(true);
     setErr(null);
@@ -93,12 +95,13 @@ export default function TokensPage() {
 
     const tq = new URLSearchParams(q);
     tq.set("view", "usage");
+    if (f.gran) q.set("g", f.gran);
 
     let tickErr: string | null = null;
     try {
       const [data, tickData] = await Promise.all([
         apiJson<TokenStatsResponse>(`/api/tokens?${q.toString()}`, { cache: "no-store" }),
-        tick
+        r === "1m"
           ? apiJson<TickStatsResponse>(`/api/tokens/tick?${tq.toString()}`, { cache: "no-store" })
               .catch((e) => {
                 tickErr = errMessage(e, "틱 조회를 불러오지 못했습니다.");
@@ -132,7 +135,7 @@ export default function TokensPage() {
     setModelOptions([]);
     setStats(null);
     setTick(null);
-    load({ ...computeFilter(tickOn), userId: undefined, nodeNm: undefined, modelNm: undefined }, tickOn);
+    load({ ...computeFilter(unit), userId: undefined, nodeNm: undefined, modelNm: undefined }, unit);
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [ready, rangeReady, unitReady, agentId]);
 
@@ -145,9 +148,9 @@ export default function TokensPage() {
 
   useEffect(() => {
     if (!auto || sel.preset === "custom") return;
-    const id = setInterval(() => load(computeFilter(tickOn), tickOn), refreshMs(tickOn));
+    const id = setInterval(() => load(computeFilter(unit), unit), refreshMs(unit));
     return () => clearInterval(id);
-  }, [auto, sel.preset, tickOn, load, computeFilter]);
+  }, [auto, sel.preset, unit, load, computeFilter]);
 
   const fetchCalls = useCallback(async (traceId: string): Promise<TokenRow[]> => {
     const query = new URLSearchParams({ traceId });
@@ -166,11 +169,11 @@ export default function TokensPage() {
       const next: TimeRangeSel = { preset: "custom", customFrom, customTo };
       setCustom(customFrom, customTo);
       setDraftCustom(false);
-      const r = tickOnFor(spanOfSel(next));
+      const r = unitFor(spanOfSel(next));
       load(computeFilter(r, next), r);
       return;
     }
-    load(computeFilter(tickOn), tickOn);
+    load(computeFilter(unit), unit);
   };
 
   // 기간을 바꾸면 고른 틱 단위가 무효가 될 수 있다 — 새 구간 기준으로 다시 고른다.
@@ -178,13 +181,13 @@ export default function TokensPage() {
     const next: TimeRangeSel = { ...sel, preset: k };
     setPreset(k);
     setDraftCustom(false);
-    const r = tickOnFor(spanOfSel(next));
+    const r = unitFor(spanOfSel(next));
     load(computeFilter(r, next), r);
   };
 
-  const onTick = (v: boolean) => {
-    setTickOn(v);
-    load(computeFilter(v), v);
+  const onUnit = (r: TickUnit) => {
+    setUnit(r);
+    load(computeFilter(r), r);
   };
 
   const onCustomClick = () => {
@@ -199,17 +202,17 @@ export default function TokensPage() {
   const onSelectNode = (k: string) => {
     const next = nodeNm === k ? "" : k;
     setNodeNm(next);
-    load({ ...computeFilter(tickOn), nodeNm: next || undefined }, tickOn);
+    load({ ...computeFilter(unit), nodeNm: next || undefined }, unit);
   };
 
   const onSelectModel = (k: string) => {
     const next = modelNm === k ? "" : k;
     setModelNm(next);
-    load({ ...computeFilter(tickOn), modelNm: next || undefined }, tickOn);
+    load({ ...computeFilter(unit), modelNm: next || undefined }, unit);
   };
 
   const reloadWith = (over: { userId?: string; nodeNm?: string; modelNm?: string }) => {
-    load({ ...computeFilter(tickOn), ...over }, tickOn);
+    load({ ...computeFilter(unit), ...over }, unit);
   };
 
   const customOpen = draftCustom || sel.preset === "custom";
@@ -222,7 +225,7 @@ export default function TokensPage() {
   };
 
   const tickCtl = (
-    <ViewToggle on={tickOn} canTick={canTick} onChange={onTick} pulsing={auto && !customOpen} />
+    <TickSelect value={unit} enabled={unitEnabled} onChange={onUnit} pulsing={auto && !customOpen} />
   );
 
   return (
@@ -324,9 +327,9 @@ export default function TokensPage() {
 
           <TokenStatsCards stats={stats} />
 
-          {/* 보기 토글(ViewToggle)은 이 카드 머리 안에 있고, 틱 보기도 **같은 자리**를 쓴다.
+          {/* 단위 선택(TickSelect)은 이 카드 머리 안에 있고, 틱 보기도 **같은 자리**를 쓴다.
               ⚠️ 틱 조회가 비어도 카드 껍데기는 그려야 한다 — 안 그리면 되돌릴 컨트롤이 사라진다. */}
-          {tickOn ? (
+          {unit === "1m" ? (
             tick ? (
               <TickMonitor
                 stats={tick}

@@ -4,66 +4,62 @@
    화면은 게이지 → 추이 → 순간 목록 3단. 한도 초과는 전부 --err 톤 하나로만 표시한다.
    ───────────────────────────────────────────────────────────────────────────── */
 
-/* 보기 전환 (집계 ↔ 틱) — thumb 이 미끄러지는 스위치.
-   ⚠️ 자리는 **차트 카드 머리**(.dash-card-aux)다. 집계 보기와 틱 보기가 같은 자리를 쓴다.
-      조회 줄(.dash-filter)로 내리지 말 것 — 기간을 고른 줄 알고 누른다.
-   ⚠️ 칸 폭은 grid 로 **강제로 균등**하게 준다 — 글자 수가 달라(집계/틱) 내용 폭에 맡기면
-      thumb 이 미끄러지지 않고 폭이 변한다.
-   ⚠️ 24시간을 넘는 기간에서는 틱 쪽만 잠긴다(.locked). 왜 잠겼는지는 적지 않는다. */
-.view-toggle {
-  position: relative;
-  display: inline-grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  background: var(--surface-3);
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  padding: 3px;
-  flex: none;
-}
-/* 미끄러지는 배경. 컨테이너의 padding box 기준 50% 라 좌우 padding(3px)을 뺀 값이 정확히 반 칸이다. */
-.view-toggle-thumb {
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  left: 3px;
-  width: calc(50% - 3px);
-  border-radius: 999px;
-  background: var(--surface);
-  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.1), 0 0 0 1px rgba(17, 24, 39, 0.04);
-  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.view-toggle.is-live .view-toggle-thumb { transform: translateX(100%); }
-@media (prefers-reduced-motion: reduce) {
-  .view-toggle-thumb { transition: none; }
-}
-.view-toggle-btn {
-  position: relative;      /* thumb 위로 */
+/* 차트 단위 — `집계 | 틱 1분 5분 10분 30분`.
+   ⚠️ 자리는 **차트 카드 머리**(.dash-card-head 의 .dash-card-aux)다. 집계 보기와 틱 보기가
+      같은 자리를 쓴다. 조회 줄로 내리지 말 것 — 기간을 고른 줄 알고 누른다.
+   ⚠️ 틱 조회가 비어도 카드 껍데기는 그린다(페이지 쪽) — 안 그리면 되돌릴 컨트롤이 사라진다.
+   ⚠️ 그 기간에서 못 그리는 단위도 **자리는 그대로 두고 잠근다**(.off). 목록에서 빼면
+      기간을 바꿀 때마다 폭이 흔들린다. 왜 잠겼는지는 적지 않는다. */
+.tick-select {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
+  gap: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 2px;
+}
+/* 집계와 틱 단위를 가르는 말머리. 이게 이 묶음이 '틱' 이라는 유일한 표시다. */
+.tick-select-key {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 0 7px 0 9px;
+  margin-left: 3px;
+  border-left: 1px solid var(--border-strong);
+  user-select: none;
+}
+.tick-select-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   border: none;
   background: transparent;
   color: var(--text-3);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 700;
-  padding: 5px 15px;
-  border-radius: 999px;
+  padding: 4px 10px;
+  border-radius: 5px;
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.18s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
-.view-toggle-btn:hover:not(:disabled) { color: var(--text); }
-.view-toggle-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.tick-select-btn:hover:not(:disabled) { color: var(--text); background: var(--surface-3); }
+/* 이 기간에서 예산을 넘는 단위 — 자리만 지키고 눌리지 않는다 */
+.tick-select-btn.off {
+  color: var(--text-muted);
+  opacity: 0.4;
+  cursor: not-allowed;
 }
-.view-toggle-btn.active { color: var(--accent); }
-.view-toggle-btn.live.active { color: var(--err); }
-.view-toggle-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.tick-select-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tick-select-btn.active {
+  color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.08), 0 0 0 1px rgba(17, 24, 39, 0.05);
+}
 
-/* 틱 쪽 점 — 자동 갱신이 도는 동안에만 깜빡인다.
+/* 1분 버튼의 점 — 자동 갱신이 도는 동안에만 깜빡인다.
    "지금 살아 있는 값인가" 를 글자 없이 알리는 유일한 표시라 문구로 설명하지 않는다. */
 .live-dot {
   width: 7px;
@@ -72,7 +68,7 @@
   background: var(--text-muted);
   flex: none;
 }
-.view-toggle-btn.live.active .live-dot { background: var(--err); }
+.tick-select-btn.active .live-dot { background: var(--err); }
 .live-dot.pulse { animation: live-pulse 1.6s ease-in-out infinite; }
 @keyframes live-pulse {
   0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--err-soft); }

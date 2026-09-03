@@ -22,7 +22,7 @@ import {
   floorToBucket,
   isoNoTz,
   parseTs,
-  pickGranularity,
+  resolveGranularity,
 } from "./timeBuckets";
 
 type DashStatus = "ok" | "fail" | "pending";
@@ -71,6 +71,7 @@ export interface StatsQuery {
   userId?: string;
   actionTyp?: string;
   excludeErrCds?: string[];
+  gran?: Granularity;
 }
 
 export interface StatsResult {
@@ -135,7 +136,7 @@ export async function computeStats(q: StatsQuery): Promise<StatsResult> {
     s[status] += 1;
   };
 
-  const g = pickGranularity(effectiveFromMs, effectiveToMs);
+  const g = resolveGranularity(q.gran, effectiveFromMs, effectiveToMs);
   const buckets = new Map<number, TimeBucket>();
 
   let latencySum = 0;

@@ -90,9 +90,9 @@ export function TickMonitor({
   limitHref?: string;
   // 단위 선택은 차트 카드 머리 안에 있다 — 집계 보기와 같은 자리를 쓴다.
   headSlot?: React.ReactNode;
-  // "status" = 집계와 같은 성공/실패 적층 차트(대시보드). 한도가 없는 BIZ 지표라
-  //   A/B 게이지가 뜻이 없고, 색이 달라지면 보기를 바꿀 때 다른 차트로 읽힌다.
-  // "gauge"  = A/B 단일 시리즈 + 한도 대비 게이지(Tokens·Timeout). TPM/RPM 판정이 그쪽 목적이다.
+  // "status" = 집계와 같은 성공/실패 적층 차트(대시보드). 한도가 없는 BIZ 지표라 A/B 게이지가
+  //   뜻이 없고, 색이 달라지면 보기를 바꿀 때 다른 차트로 읽힌다.
+  // "gauge"  = A/B 단일 시리즈 + 한도 대비 게이지(Tokens·Timeout). 분당 한도 판정이 목적이다.
   variant?: "gauge" | "status";
 }) {
   const status = variant === "status";

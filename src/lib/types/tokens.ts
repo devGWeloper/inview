@@ -42,6 +42,7 @@ export interface TokenFilter {
   traceId?: string;
   agentId?: string;
   skipQuestions?: boolean;
+  gran?: Granularity;
 }
 
 export interface TokenBucket {

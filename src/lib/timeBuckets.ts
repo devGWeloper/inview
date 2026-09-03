@@ -6,15 +6,16 @@ export type Granularity = "5m" | "10m" | "30m" | "1h" | "1d";
 // 차트가 무엇을 그리는가. "agg" = 기간에 맞춰 서버가 자동으로 고르는 집계 격자(기본값).
 // 나머지는 틱 단위이고, "1m" 만 집계가 아니라 틱 라우트(롤링 60초)로 간다 —
 // 정각 분 버킷은 TPM/RPM 판정 기준이 못 되므로 Granularity 에 넣지 않는다.
-export type TickUnit = "agg" | "1m" | "5m" | "10m" | "30m";
+export type TickUnit = "agg" | "1m" | "5m" | "10m" | "30m" | "1h";
 
-export const TICK_UNITS: readonly TickUnit[] = ["agg", "1m", "5m", "10m", "30m"] as const;
+export const TICK_UNITS: readonly TickUnit[] = ["agg", "1m", "5m", "10m", "30m", "1h"] as const;
 
 const UNIT_MS: Record<Exclude<TickUnit, "agg">, number> = {
   "1m": 60_000,
   "5m": 300_000,
   "10m": 600_000,
   "30m": 1_800_000,
+  "1h": 3_600_000,
 };
 
 const GRAN_MS: Record<Granularity, number> = {
@@ -31,7 +32,9 @@ const MIN_POINTS = 3;
 const TARGET_POINTS = 100;
 
 export function tickUnitLabel(u: TickUnit): string {
-  return u === "agg" ? "집계" : u === "1m" ? "1분" : u === "5m" ? "5분" : u === "10m" ? "10분" : "30분";
+  if (u === "agg") return "집계";
+  if (u === "1m") return "1분";
+  return granularityLabel(u);
 }
 
 export function granularityLabel(g: Granularity): string {
@@ -46,7 +49,7 @@ export function isTickUnit(v: unknown): v is TickUnit {
 // 비활성이 아니라 **목록에 아예 없다** — 없는 건 사유를 설명할 게 없다.
 // "집계" 는 서버가 알아서 고르므로 언제나 있다.
 export function tickUnitsFor(spanMs: number): TickUnit[] {
-  const units = (["1m", "5m", "10m", "30m"] as const).filter((u) => {
+  const units = (["1m", "5m", "10m", "30m", "1h"] as const).filter((u) => {
     const n = spanMs / UNIT_MS[u];
     return n >= MIN_POINTS && n <= MAX_POINTS;
   });
@@ -61,7 +64,7 @@ export function clampTickUnit(u: TickUnit, spanMs: number): TickUnit {
 // 틱 단위를 집계 라우트의 g= 로 옮긴다. 집계와 1분은 g 를 안 보낸다
 // (집계는 서버가 고르고, 1분은 틱 라우트가 그린다).
 export function granOfTickUnit(u: TickUnit): Granularity | undefined {
-  return u === "5m" || u === "10m" || u === "30m" ? u : undefined;
+  return u === "5m" || u === "10m" || u === "30m" || u === "1h" ? u : undefined;
 }
 
 // 집계 격자. **이건 원래 규칙 그대로다 — 건드리지 말 것.**

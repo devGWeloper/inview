@@ -5,6 +5,7 @@ import Link from "next/link";
 import { TickCall, TickMetricDef, TickMinute, TickStatsResponse, TickTrace, TICK_WINDOW_SEC } from "@/lib/types";
 import { callStatus } from "@/lib/tokenStatus";
 import { TickSlot, TickMonitorChart, fmtCompact, windowLabel } from "@/components/tick/TickMonitorChart";
+import { TimeSeriesChart } from "@/components/charts/TimeSeriesChart";
 
 
 const TOP_MOMENTS = 5;
@@ -79,7 +80,7 @@ function inWindow<T>(items: T[], tsOf: (x: T) => string | null, startTs: string 
 const fmtInt = (n: number) => Math.round(n).toLocaleString();
 
 export function TickMonitor({
-  stats, metrics, title, rowsLabel, limitHref, headSlot,
+  stats, metrics, title, rowsLabel, limitHref, headSlot, variant = "gauge",
 }: {
   stats: TickStatsResponse;
   metrics: [TickMetricDef, TickMetricDef];
@@ -89,8 +90,14 @@ export function TickMonitor({
   limitHref?: string;
   // 단위 선택은 차트 카드 머리 안에 있다 — 집계 보기와 같은 자리를 쓴다.
   headSlot?: React.ReactNode;
+  // "status" = 집계와 같은 성공/실패 적층 차트(대시보드). 한도가 없는 BIZ 지표라
+  //   A/B 게이지가 뜻이 없고, 색이 달라지면 보기를 바꿀 때 다른 차트로 읽힌다.
+  // "gauge"  = A/B 단일 시리즈 + 한도 대비 게이지(Tokens·Timeout). TPM/RPM 판정이 그쪽 목적이다.
+  variant?: "gauge" | "status";
 }) {
-  const [slot, setSlot] = useState<TickSlot>("a");
+  const status = variant === "status";
+  const [slotState, setSlot] = useState<TickSlot>("a");
+  const slot: TickSlot = status ? "a" : slotState;
   const [openMoment, setOpenMoment] = useState<string | null>(null);
 
   const def = slot === "a" ? metrics[0] : metrics[1];
@@ -108,6 +115,18 @@ export function TickMonitor({
 
   const noLimit = metrics[0].limit <= 0 && metrics[1].limit <= 0;
 
+  // A = 요청/분, B = 실패/분 → 집계 차트와 같은 {ok, fail} 모양으로 옮긴다.
+  const statusBuckets = useMemo(
+    () =>
+      stats.minutes.map((m) => ({
+        ts: m.ts,
+        ok: Math.max(0, m.rollA - m.rollB),
+        fail: m.rollB,
+        pending: 0,
+      })),
+    [stats.minutes]
+  );
+
   const pick = (s: TickSlot) => {
     setSlot(s);
     setOpenMoment(null);
@@ -123,7 +142,8 @@ export function TickMonitor({
           <div className="dash-card-title-group">
             <span className="dash-card-title">{title}</span>
             <span className="dash-card-sub">
-              {def.name} · 롤링 60초 · {rowsLabel} {fmtInt(stats.totals.rows)}건
+              {status ? "상태별 적층" : def.name} · 롤링 60초 · {rowsLabel}{" "}
+              {fmtInt(stats.totals.rows)}건
             </span>
           </div>
           <div className="dash-card-aux">
@@ -135,13 +155,17 @@ export function TickMonitor({
           </div>
         </div>
         <div className="dash-card-body">
-          <TickMonitorChart
-            minutes={stats.minutes}
-            slot={slot}
-            label={def.name}
-            unit={def.unit}
-            limit={limit}
-          />
+          {status ? (
+            <TimeSeriesChart stats={{ buckets: statusBuckets }} unitLabel="롤링 60초" />
+          ) : (
+            <TickMonitorChart
+              minutes={stats.minutes}
+              slot={slot}
+              label={def.name}
+              unit={def.unit}
+              limit={limit}
+            />
+          )}
         </div>
       </section>
 
@@ -158,6 +182,7 @@ export function TickMonitor({
       )}
 
       {/* 게이지는 차트 **아래**. 클릭이 위 차트의 A/B 를 바꾼다. */}
+      {!status && (
       <div className="tick-gauges">
         <Gauge
           def={metrics[0]}
@@ -174,6 +199,7 @@ export function TickMonitor({
           onSelect={() => pick("b")}
         />
       </div>
+      )}
 
       <section className="dash-card">
         <div className="dash-card-head">

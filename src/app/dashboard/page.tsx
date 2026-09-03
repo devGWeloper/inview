@@ -13,8 +13,8 @@ import { ScopeNote } from "@/components/ui/ScopeNote";
 import { StatsFilter, StatsResponse, TickMetricDef, TickStatsResponse } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 import { TickMonitor } from "@/components/tick/TickMonitor";
-import { TickUnit, granOfTickUnit, granularityLabel, isoNoTz } from "@/lib/timeBuckets";
-import { TickSelect, useTickUnit } from "@/components/charts/TickSelect";
+import { granularityLabel, isoNoTz } from "@/lib/timeBuckets";
+import { ViewToggle, useTickView } from "@/components/tick/ViewToggle";
 import { AutoRefreshToggle, refreshMs, useAutoRefresh } from "@/components/charts/AutoRefresh";
 
 type Preset = "1h" | "6h" | "24h" | "7d" | "30d" | "custom";
@@ -68,7 +68,7 @@ export default function DashboardPage() {
   const [tick, setTick] = useState<TickStatsResponse | null>(null);
 
   const spanMs = useMemo(() => spanOf(preset, customFrom, customTo), [preset, customFrom, customTo]);
-  const { unit, enabled: unitEnabled, ready: unitReady, setUnit, unitFor } = useTickUnit("dashboard", spanMs);
+  const { on: tickOn, canTick, ready: unitReady, setOn: setTickOn, onFor: tickOnFor } = useTickView("dashboard", spanMs);
   const [auto, setAuto] = useAutoRefresh("dashboard");
 
   const [loading, setLoading] = useState(false);
@@ -101,7 +101,7 @@ export default function DashboardPage() {
   }, []);
 
   const filterFor = useCallback(
-    (p: Preset, u: TickUnit, over: Partial<StatsFilter> = {}): StatsFilter => {
+    (p: Preset, tick: boolean, over: Partial<StatsFilter> = {}): StatsFilter => {
       const range = rangeOf(p, customFrom, customTo);
       return {
         userId: userId || undefined,
@@ -109,8 +109,6 @@ export default function DashboardPage() {
         excludeErrCds: excludeErrCds.length > 0 ? excludeErrCds : undefined,
         dateFrom: range.from || undefined,
         dateTo: range.to || undefined,
-        // 집계·1분은 g 를 안 보낸다 — 집계는 서버가 고르고, 1분은 틱 라우트가 그린다.
-        gran: granOfTickUnit(u),
         ...over,
       };
     },
@@ -119,7 +117,7 @@ export default function DashboardPage() {
 
   // 1분에서는 두 번 조회한다 — 집계(KPI·나머지 카드) + 틱(추이·게이지·순간목록).
   // 화면을 통째로 갈아끼우지 않는 대가이고, 1분은 24시간 이하에서만 고를 수 있어 감당된다.
-  const load = useCallback(async (f: StatsFilter, u: TickUnit) => {
+  const load = useCallback(async (f: StatsFilter, tick: boolean) => {
     setLoading(true);
     setErr(null);
 
@@ -131,7 +129,6 @@ export default function DashboardPage() {
     if (f.excludeErrCds && f.excludeErrCds.length > 0) {
       q.set("excludeErrCds", f.excludeErrCds.join(","));
     }
-    if (f.gran) q.set("g", f.gran);
 
     const tq = new URLSearchParams();
     if (f.dateFrom) tq.set("dateFrom", f.dateFrom);
@@ -142,7 +139,7 @@ export default function DashboardPage() {
     try {
       const [nextStats, nextTick] = await Promise.all([
         apiJson<StatsResponse>(`/api/stats?${q.toString()}`, { cache: "no-store" }),
-        u === "1m"
+        tick
           ? apiJson<TickStatsResponse>(`/api/stats/tick?${tq.toString()}`, { cache: "no-store" })
               .catch((e) => {
                 tickErr = errMessage(e, "틱 조회를 불러오지 못했습니다.");
@@ -163,72 +160,72 @@ export default function DashboardPage() {
   }, []);
 
   const run = useCallback(
-    (p: Preset, u: TickUnit, over: Partial<StatsFilter> = {}) => load(filterFor(p, u, over), u),
+    (p: Preset, tick: boolean, over: Partial<StatsFilter> = {}) => load(filterFor(p, tick, over), tick),
     [load, filterFor]
   );
 
   useEffect(() => {
     if (!unitReady) return;
-    run(preset, unit);
+    run(preset, tickOn);
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [unitReady]);
 
   useEffect(() => {
     if (!auto || preset === "custom") return;
-    const id = setInterval(() => run(preset, unit), refreshMs(unit));
+    const id = setInterval(() => run(preset, tickOn), refreshMs(tickOn));
     return () => clearInterval(id);
-  }, [auto, preset, unit, run]);
+  }, [auto, preset, tickOn, run]);
 
   const onApply = (e: React.FormEvent) => {
     e.preventDefault();
-    run(preset, unit);
+    run(preset, tickOn);
   };
 
   // 기간을 바꾸면 고른 틱 단위가 무효가 될 수 있다 — 새 구간 기준으로 다시 고른다.
   const onPresetClick = (k: Preset) => {
     setPreset(k);
-    if (k !== "custom") run(k, unitFor(spanOf(k, customFrom, customTo)));
+    if (k !== "custom") run(k, tickOnFor(spanOf(k, customFrom, customTo)));
   };
 
-  const onUnit = (r: TickUnit) => {
-    setUnit(r);
-    run(preset, r);
+  const onTick = (v: boolean) => {
+    setTickOn(v);
+    run(preset, v);
   };
 
   const onSelectAction = (k: string) => {
     const next = actionTyp === k ? "" : k;
     setActionTyp(next);
-    run(preset, unit, { actionTyp: next || undefined });
+    run(preset, tickOn, { actionTyp: next || undefined });
   };
 
   const hasFilter = !!(userId || actionTyp);
   const clearFilters = () => {
     setUserId("");
     setActionTyp("");
-    run(preset, unit, { userId: undefined, actionTyp: undefined });
+    run(preset, tickOn, { userId: undefined, actionTyp: undefined });
   };
 
   const addExclude = (code: string) => {
     if (excludeErrCds.includes(code)) return;
     const next = [...excludeErrCds, code];
     setExcludeErrCds(next);
-    run(preset, unit, { excludeErrCds: next });
+    run(preset, tickOn, { excludeErrCds: next });
   };
   const removeExclude = (code: string) => {
     const next = excludeErrCds.filter((c) => c !== code);
     setExcludeErrCds(next);
-    run(preset, unit, { excludeErrCds: next.length > 0 ? next : undefined });
+    run(preset, tickOn, { excludeErrCds: next.length > 0 ? next : undefined });
   };
   const clearExcludes = () => {
     setExcludeErrCds([]);
-    run(preset, unit, { excludeErrCds: undefined });
+    run(preset, tickOn, { excludeErrCds: undefined });
   };
 
   const tickCtl = (
-    <TickSelect
-      value={unit}
-      enabled={unitEnabled}
-      onChange={onUnit}
+    <ViewToggle
+      on={tickOn}
+      canTick={canTick}
+      onChange={onTick}
       pulsing={auto && preset !== "custom"}
     />
   );
@@ -296,7 +293,7 @@ export default function DashboardPage() {
             onChange={(e) => {
               const v = e.target.value;
               setActionTyp(v);
-              run(preset, unit, { actionTyp: v || undefined });
+              run(preset, tickOn, { actionTyp: v || undefined });
             }}
             aria-label="ACTION_TYP"
           >
@@ -329,18 +326,25 @@ export default function DashboardPage() {
           {/* 1. Hero KPIs — 한눈에 보는 핵심 지표 */}
           <StatsCards stats={stats} />
 
-          {unit === "1m" && actionTyp && (
+          {tickOn && actionTyp && (
             <div className="tick-notice warn">
               1분 추이는 진입 레이어 행에서 세므로 <b>ACTION_TYP 이 걸리지 않습니다</b> — 위 KPI 와 대상이 다릅니다.
             </div>
           )}
 
           {/* 2. 일별/시간별 추이 — 임원이 가장 보고 싶어하는 차트, 메인으로 노출.
-              단위 선택(TickSelect)은 이 카드 머리 안에 있고, 틱 보기도 **같은 자리**를 쓴다.
+              보기 토글(ViewToggle)은 이 카드 머리 안에 있고, 틱 보기도 **같은 자리**를 쓴다.
               ⚠️ 틱 조회가 비어도 카드 껍데기는 그려야 한다 — 안 그리면 되돌릴 컨트롤이 사라진다. */}
-          {unit === "1m" ? (
+          {tickOn ? (
             tick ? (
-              <TickMonitor stats={tick} metrics={BIZ_METRICS} title="사용 추이" rowsLabel="요청" headSlot={tickCtl} />
+              <TickMonitor
+                stats={tick}
+                metrics={BIZ_METRICS}
+                title="사용 추이"
+                rowsLabel="요청"
+                headSlot={tickCtl}
+                variant="status"
+              />
             ) : (
               <section className="dash-card dash-card-hero">
                 <div className="dash-card-head">

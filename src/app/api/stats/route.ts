@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { logger, reqContext } from "@/lib/logger";
 import { requireBiz } from "@/lib/auth/current";
 import { computeStats } from "@/lib/stats";
-import { parseGranularityParam } from "@/lib/timeBuckets";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +24,6 @@ export async function GET(req: NextRequest) {
     userId: sp.get("userId") || undefined,
     actionTyp: sp.get("actionTyp") || undefined,
     excludeErrCds,
-    gran: parseGranularityParam(sp.get("g")),
   };
 
   logger.info("GET /api/stats", { ...ctx, ...query });

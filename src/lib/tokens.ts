@@ -17,7 +17,7 @@ import {
   floorToBucket,
   isoNoTz,
   parseTs,
-  resolveGranularity,
+  pickGranularity,
 } from "./timeBuckets";
 import { SQL_ERR_PRED, SQL_OK_PRED } from "./tokenStatus";
 
@@ -116,7 +116,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
   const now = Date.now();
   const fromMs = filter.dateFrom ? Date.parse(filter.dateFrom) : now - 24 * 3_600_000;
   const toMs = filter.dateTo ? Date.parse(filter.dateTo) : now;
-  const g = resolveGranularity(filter.gran, fromMs, toMs);
+  const g = pickGranularity(fromMs, toMs);
   const emptyBuckets: TokenBucket[] = enumerateBucketStarts(fromMs, toMs, g).map((k) =>
     emptyBucket(isoNoTz(k))
   );

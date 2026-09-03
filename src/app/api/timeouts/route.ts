@@ -3,7 +3,6 @@ import { fetchTimeoutStats } from "@/lib/timeouts";
 import { logger, reqContext } from "@/lib/logger";
 import { defaultAgentId, getAgent } from "@/lib/config";
 import { requireAgent } from "@/lib/auth/current";
-import { parseGranularityParam } from "@/lib/timeBuckets";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +37,6 @@ export async function GET(req: NextRequest) {
     nodeNm: sp.get("nodeNm") || undefined,
     modelNm: sp.get("modelNm") || undefined,
     agentId,
-    gran: parseGranularityParam(sp.get("g")),
   };
 
   logger.info("GET /api/timeouts", { ...ctx, filter });

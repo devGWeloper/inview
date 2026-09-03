@@ -10,9 +10,8 @@ import { StatusDonut } from "@/features/dashboard/StatusDonut";
 import { TimeSeriesChart } from "@/components/charts/TimeSeriesChart";
 import { TopList } from "@/components/ui/TopList";
 import { ScopeNote } from "@/components/ui/ScopeNote";
-import { StatsFilter, StatsResponse, TickMetricDef, TickStatsResponse } from "@/lib/types";
+import { StatsFilter, StatsResponse } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
-import { TickMonitor } from "@/components/tick/TickMonitor";
 import { TickUnit, granOfTickUnit, granularityLabel, isoNoTz } from "@/lib/timeBuckets";
 import { TickSelect, useTickUnit } from "@/components/charts/TickSelect";
 import { AutoRefreshToggle, refreshMs, useAutoRefresh } from "@/components/charts/AutoRefresh";
@@ -27,10 +26,6 @@ const PRESETS: { key: Preset; label: string; hours: number }[] = [
   { key: "30d", label: "30D", hours: 720 },
 ];
 
-const BIZ_METRICS: [TickMetricDef, TickMetricDef] = [
-  { name: "요청", unitText: "건/분", unit: "건", limit: 0 },
-  { name: "실패", unitText: "건/분", unit: "건", limit: 0 },
-];
 
 function fmtRange(from: string | null, to: string | null): string {
   if (!from || !to) return "—";
@@ -65,7 +60,6 @@ export default function DashboardPage() {
   const [excludeErrCds, setExcludeErrCds] = useState<string[]>([]);
 
   const [stats, setStats] = useState<StatsResponse | null>(null);
-  const [tick, setTick] = useState<TickStatsResponse | null>(null);
 
   const spanMs = useMemo(() => spanOf(preset, customFrom, customTo), [preset, customFrom, customTo]);
   const { unit, enabled: unitEnabled, ready: unitReady, setUnit, unitFor } = useTickUnit("dashboard", spanMs);
@@ -133,30 +127,12 @@ export default function DashboardPage() {
     }
     if (f.gran) q.set("g", f.gran);
 
-    const tq = new URLSearchParams();
-    if (f.dateFrom) tq.set("dateFrom", f.dateFrom);
-    if (f.dateTo)   tq.set("dateTo",   f.dateTo);
-    if (f.userId)   tq.set("userId",   f.userId);
-
-    let tickErr: string | null = null;
     try {
-      const [nextStats, nextTick] = await Promise.all([
-        apiJson<StatsResponse>(`/api/stats?${q.toString()}`, { cache: "no-store" }),
-        u === "1m"
-          ? apiJson<TickStatsResponse>(`/api/stats/tick?${tq.toString()}`, { cache: "no-store" })
-              .catch((e) => {
-                tickErr = errMessage(e, "틱 조회를 불러오지 못했습니다.");
-                return null;
-              })
-          : Promise.resolve(null),
-      ]);
-      setStats(nextStats);
-      setTick(nextTick);
-      setErr(tickErr);
+      const data = await apiJson<StatsResponse>(`/api/stats?${q.toString()}`, { cache: "no-store" });
+      setStats(data);
     } catch (e) {
       setErr(errMessage(e, "통계를 불러오지 못했습니다."));
       setStats(null);
-      setTick(null);
     } finally {
       setLoading(false);
     }
@@ -329,38 +305,9 @@ export default function DashboardPage() {
           {/* 1. Hero KPIs — 한눈에 보는 핵심 지표 */}
           <StatsCards stats={stats} />
 
-          {unit === "1m" && actionTyp && (
-            <div className="tick-notice warn">
-              1분 추이는 진입 레이어 행에서 세므로 <b>ACTION_TYP 이 걸리지 않습니다</b> — 위 KPI 와 대상이 다릅니다.
-            </div>
-          )}
-
           {/* 2. 일별/시간별 추이 — 임원이 가장 보고 싶어하는 차트, 메인으로 노출.
-              단위 선택(TickSelect)은 이 카드 머리 안에 있고, 틱 보기도 **같은 자리**를 쓴다.
-              ⚠️ 틱 조회가 비어도 카드 껍데기는 그려야 한다 — 안 그리면 되돌릴 컨트롤이 사라진다. */}
-          {unit === "1m" ? (
-            tick ? (
-              <TickMonitor
-                stats={tick}
-                metrics={BIZ_METRICS}
-                title="사용 추이"
-                rowsLabel="요청"
-                headSlot={tickCtl}
-                variant="status"
-              />
-            ) : (
-              <section className="dash-card dash-card-hero">
-                <div className="dash-card-head">
-                  <div className="dash-card-title-group">
-                    <span className="dash-card-title">사용 추이</span>
-                  </div>
-                  <div className="dash-card-aux">{tickCtl}</div>
-                </div>
-                <div className="dash-card-body"><div className="tick-empty">—</div></div>
-              </section>
-            )
-          ) : (
-          <>
+              단위 선택(TickSelect)은 이 카드 머리 안에 있다. ⚠️ 여기 1분은 5·10·30분과
+              **똑같은 정각 분 격자**다 — 롤링 60초(TPM/RPM)는 Tokens·Timeout 것이다. */}
           <section className="dash-card dash-card-hero">
             <div className="dash-card-head">
               <div className="dash-card-title-group">
@@ -389,8 +336,6 @@ export default function DashboardPage() {
               <TimeSeriesChart stats={stats} />
             </div>
           </section>
-          </>
-          )}
 
           {/* 평균 응답 속도 추이 — Action end-to-end 응답시간(CUBE send→resp, LLM 포함 전 구간).
               Tokens 탭의 LLM 호출 지연(1콜 단위, 전 노드)과는 재는 대상이 다른 정규 지표다. */}

@@ -31,7 +31,7 @@ const STATUS_LABEL: Record<StatusKey, string> = {
 };
 
 
-function fmtFullTs(ts: string, g?: Granularity): string {
+function fmtFullTs(ts: string, g: Granularity): string {
   if (g === "1d") return ts.slice(0, 10);
   return ts.slice(0, 16).replace("T", " ");
 }
@@ -44,7 +44,7 @@ function CustomTooltip({
   active?: boolean;
   payload?: Array<{ name: string; value: number; color: string; dataKey: string; payload: Row }>;
   label?: string;
-  granularity?: Granularity;
+  granularity: Granularity;
 }) {
   if (!active || !payload || payload.length === 0) return null;
   const row = payload[0].payload;
@@ -73,14 +73,7 @@ function CustomTooltip({
   );
 }
 
-// 틱(롤링 60초) 보기도 **이 컴포넌트를 그대로 쓴다** — 색·격자·툴팁·Brush 가 집계와 한 글자도
-// 다르지 않아야 보기를 바꿔도 같은 차트로 읽힌다. 다른 건 단위 문구뿐이라 그것만 prop 이다.
-export function TimeSeriesChart({
-  stats, unitLabel,
-}: {
-  stats: { granularity?: Granularity; buckets: TimeBucket[] };
-  unitLabel?: string;
-}) {
+export function TimeSeriesChart({ stats }: { stats: Pick<StatsResponse, "granularity" | "buckets"> }) {
   const granularity = stats.granularity;
   // 눈금 key 는 유일해야 하고(안 그러면 라벨이 날마다 되돌아온다) 보이는 글자는 짧아야 한다.
   const axis = useMemo(
@@ -140,7 +133,7 @@ export function TimeSeriesChart({
           <span className="ts-meta">avg success {avgSuccess.toFixed(1)}%</span>
         )}
         <span className="ts-meta">
-          {data.length} buckets · {unitLabel ?? (granularity ? granularityLabel(granularity) : "")}
+          {data.length} buckets · {granularityLabel(granularity)}
         </span>
       </div>
 

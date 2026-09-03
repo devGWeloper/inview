@@ -73,7 +73,8 @@ export default function TokensPage() {
         dateFrom: range.from,
         dateTo: range.to,
         // 집계·1분은 g 를 안 보낸다 — 집계는 서버가 고르고, 1분은 틱 라우트가 그린다.
-        gran: granOfTickUnit(u),
+        // 1분은 롤링 60초 틱 라우트가 그린다 — 여기 g 로 보내면 같은 걸 두 번 집계한다.
+        gran: u === "1m" ? undefined : granOfTickUnit(u),
       };
     },
     [sel, userId, nodeNm, modelNm]

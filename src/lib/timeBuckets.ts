@@ -1,11 +1,13 @@
 // 시간 버킷 격자 — 추이 차트를 쓰는 집계들이 공유한다.
 // 기간과 틱 단위는 서로 독립된 축이다. docs/screens/tick.md
 
-export type Granularity = "5m" | "10m" | "30m" | "1h" | "1d";
+export type Granularity = "1m" | "5m" | "10m" | "30m" | "1h" | "1d";
 
 // 차트가 무엇을 그리는가. "agg" = 기간에 맞춰 서버가 자동으로 고르는 집계 격자(기본값).
-// 나머지는 틱 단위이고, "1m" 만 집계가 아니라 틱 라우트(롤링 60초)로 간다 —
-// 정각 분 버킷은 TPM/RPM 판정 기준이 못 되므로 Granularity 에 넣지 않는다.
+// 나머지는 전부 그 격자로 집계한다. **1분도 예외가 아니다** — 대시보드에서 1분은
+// 5·10·30분과 똑같이 정각 분 격자다.
+// 예외는 Tokens·Timeout 두 화면뿐이다: 거긴 분당 한도(TPM/RPM) 판정이 목적이라
+// 1분일 때만 롤링 60초 틱 라우트를 부른다(정각 분 격자로는 임의의 연속 60초를 못 잡는다).
 export type TickUnit = "agg" | "1m" | "5m" | "10m" | "30m" | "1h";
 
 export const TICK_UNITS: readonly TickUnit[] = ["agg", "1m", "5m", "10m", "30m", "1h"] as const;
@@ -19,6 +21,7 @@ const UNIT_MS: Record<Exclude<TickUnit, "agg">, number> = {
 };
 
 const GRAN_MS: Record<Granularity, number> = {
+  "1m": 60_000,
   "5m": 300_000,
   "10m": 600_000,
   "30m": 1_800_000,
@@ -32,13 +35,13 @@ const MIN_POINTS = 3;
 const TARGET_POINTS = 100;
 
 export function tickUnitLabel(u: TickUnit): string {
-  if (u === "agg") return "집계";
-  if (u === "1m") return "1분";
-  return granularityLabel(u);
+  return u === "agg" ? "집계" : granularityLabel(u);
 }
 
 export function granularityLabel(g: Granularity): string {
-  return g === "5m" ? "5분" : g === "10m" ? "10분" : g === "30m" ? "30분" : g === "1h" ? "1시간" : "1일";
+  if (g === "1h") return "1시간";
+  if (g === "1d") return "1일";
+  return g.replace("m", "분");
 }
 
 export function isTickUnit(v: unknown): v is TickUnit {
@@ -61,10 +64,11 @@ export function clampTickUnit(u: TickUnit, spanMs: number): TickUnit {
   return tickUnitsFor(spanMs).includes(u) ? u : "agg";
 }
 
-// 틱 단위를 집계 라우트의 g= 로 옮긴다. 집계와 1분은 g 를 안 보낸다
-// (집계는 서버가 고르고, 1분은 틱 라우트가 그린다).
+// 틱 단위를 집계 라우트의 g= 로 옮긴다. `집계` 만 안 보낸다(서버가 고른다).
+// 1분도 여기서는 그냥 정각 분 격자다 — 롤링 60초(TPM/RPM 판정)는 Tokens·Timeout 전용이고,
+// 그 두 화면은 1분일 때 g 대신 틱 라우트를 부른다.
 export function granOfTickUnit(u: TickUnit): Granularity | undefined {
-  return u === "5m" || u === "10m" || u === "30m" || u === "1h" ? u : undefined;
+  return u === "agg" ? undefined : u;
 }
 
 // 집계 격자. **이건 원래 규칙 그대로다 — 건드리지 말 것.**

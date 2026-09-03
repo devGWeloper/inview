@@ -77,7 +77,8 @@ export default function TimeoutsPage() {
 
       const tq = new URLSearchParams(q);
       tq.set("view", "failure");
-      const g = granOfTickUnit(unit);
+      // 1분은 롤링 60초 틱 라우트가 그린다 — 여기 g 로 보내면 같은 걸 두 번 집계한다.
+      const g = unit === "1m" ? undefined : granOfTickUnit(unit);
       if (g) q.set("g", g);
 
       let tickErr: string | null = null;

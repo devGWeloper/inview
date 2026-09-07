@@ -162,7 +162,7 @@ function toInsightsTimeouts(t: TimeoutStatsResponse): InsightsTimeouts {
   return {
     available: t.available,
     granularity: t.granularity,
-    buckets: t.buckets.map((b) => ({ ts: b.ts, failed: b.failed, timeout: b.timeout })),
+    buckets: t.buckets.map((b) => ({ ts: b.ts, calls: b.calls, failed: b.failed, timeout: b.timeout })),
     totalCalls: t.totalCalls,
     failedCalls: t.failedCalls,
     timeoutCalls: t.timeoutCalls,

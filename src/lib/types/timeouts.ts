@@ -3,6 +3,7 @@ import type { Granularity } from "../timeBuckets";
 
 export interface TimeoutBucket {
   ts: string;
+  calls: number;
   failed: number;
   timeout: number;
 }
@@ -42,24 +43,10 @@ export interface TimeoutStatsResponse {
   byModel: TimeoutDimStat[];
   byUser: TimeoutDimStat[];
   items: TimeoutItem[];
-  modelTrend: TimeoutModelSeries[];
+  /** 호출 많은 순 상위 모델 — 실패가 0건인 모델도 포함한다(분모를 보여주는 게 목적). */
+  modelVolume: TimeoutDimStat[];
   topReasons: TimeoutReason[];
   agentId?: string;
-}
-
-export interface TimeoutModelCell {
-  ts: string;
-  calls: number;
-  failed: number;
-  timeout: number;
-}
-
-export interface TimeoutModelSeries {
-  model: string;
-  totalCalls: number;
-  totalFailed: number;
-  totalTimeout: number;
-  cells: TimeoutModelCell[];
 }
 
 export interface TimeoutReason {

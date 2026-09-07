@@ -141,238 +141,111 @@
 .to-dim-val { font-size: 13px; font-weight: 700; color: var(--text); }
 .to-dim-rate { font-size: 12px; color: var(--text-muted); min-width: 46px; text-align: right; }
 
-/* ── 모델 × 시간 히트맵 (TimeoutModelHeatmap) ──
-   "이 시간대에 이 모델이 몇 건 요청 중 몇 건 실패했나" 를 셀 하나로 압축.
-   셀 색 = 실패율(6단계). 요청 자체가 없던 셀은 별도(lvl--1)로 구분해 "안 쓰였다" 를 표기. */
-.hm {
+/* ── 모델별 요청 대비 실패 막대 (ModelVolumeBars) ──
+   두 막대가 **같은 눈금**이다 — 위(전체 호출) 대비 아래(실패)의 길이 차이가 곧 안전 마진.
+   실패율을 색이 아니라 길이로 옮긴 게 이 카드의 전부다. 격자보다 행이 커서 라벨이 읽힌다. */
+.mv {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
-/* 상단 범례 — 색 스케일 · 요청 없음 · 데이터 요약 */
-.hm-legend {
+.mv-legend {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   flex-wrap: wrap;
   font-size: 12px;
   color: var(--text-3);
 }
-.hm-leg-lbl {
-  font-weight: 700;
-  font-size: 11px;
-  letter-spacing: 0.4px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-}
-.hm-leg-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--text-muted);
-}
-.hm-leg-hint.mono { font-family: var(--mono); }
-.hm-leg-spacer { flex: 1; }
-.hm-scale {
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-.hm-swatch {
-  display: inline-block;
-  width: 16px;
-  height: 12px;
-  border-radius: 2px;
-}
-/* 실패율 스케일 — 안정(초록) → 낮음(노랑) → 높음(주황) → 극심(빨강).
-   요청 없음(lvl--1)은 회색 격자 무늬로 "비활동" 을 표기. */
-.hm-swatch.lvl--1,
-.hm-cell.lvl--1 {
-  background: repeating-linear-gradient(
-    45deg,
-    var(--surface-3) 0 3px,
-    var(--surface-2) 3px 6px
-  );
-}
-.hm-swatch.lvl-0, .hm-cell.lvl-0 { background: var(--ok-soft); }
-.hm-swatch.lvl-1, .hm-cell.lvl-1 { background: #fef3c7; }
-.hm-swatch.lvl-2, .hm-cell.lvl-2 { background: #fde68a; }
-.hm-swatch.lvl-3, .hm-cell.lvl-3 { background: #fdba74; }
-.hm-swatch.lvl-4, .hm-cell.lvl-4 { background: #f97316; }
-.hm-swatch.lvl-5, .hm-cell.lvl-5 { background: var(--err); }
+.mv-leg-item { display: inline-flex; align-items: center; gap: 6px; }
+.mv-leg-spacer { flex: 1; }
+.mv-leg-hint { color: var(--text-muted); font-style: italic; }
+.mv-sw-calls   { background: #94a3b8; }
+.mv-sw-timeout { background: var(--err); }
+.mv-sw-other   { background: var(--llm-err); }
 
-/* 그리드 본체 — 왼쪽 모델/총호출 라벨 + 중앙 셀 열 + 오른쪽 실패율 요약 */
-.hm-grid {
+.mv-rows {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-2);
-  overflow-x: auto;
-}
-.hm-head {
-  display: grid;
-  align-items: end;
-  gap: 3px;
-  padding: 2px 4px 6px;
-  border-bottom: 1px solid var(--border);
-  min-width: 720px;
-}
-.hm-h-lbl {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-}
-.hm-h-lbl.num { text-align: right; }
-.hm-tick {
-  font-size: 11px;
-  color: var(--text-3);
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.hm-tick-empty { display: block; }
-
-.hm-row {
-  display: grid;
-  align-items: center;
-  gap: 3px;
-  padding: 3px 4px;
-  border-radius: 6px;
-  min-width: 720px;
-  transition: background 120ms ease;
-}
-.hm-row:hover { background: var(--surface); }
-.hm-row.is-selected {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  outline: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-}
-
-.hm-model {
-  border: none;
-  background: none;
-  padding: 4px 8px;
-  border-radius: 6px;
-  text-align: left;
-  font-family: var(--mono);
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text);
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.hm-model:disabled { cursor: default; }
-.hm-model:not(:disabled):hover { background: var(--accent-soft); color: var(--accent); }
-.hm-total {
-  font-size: 12px;
-  color: var(--text-3);
-  text-align: right;
-  padding-right: 6px;
-  font-family: var(--mono);
-}
-
-.hm-cell {
-  height: 22px;
-  border-radius: 3px;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  transition: transform 100ms ease, box-shadow 100ms ease, outline-color 100ms ease;
-  outline: 1px solid transparent;
-}
-.hm-cell:hover,
-.hm-cell.is-hover {
-  transform: scale(1.6);
-  z-index: 2;
-  position: relative;
-  outline-color: var(--text);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
-}
-.hm-cell:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-.hm-cell.lvl--1 { cursor: default; }
-.hm-cell.lvl--1:hover { transform: none; box-shadow: none; outline-color: transparent; }
-
-.hm-rate {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  padding: 0 4px;
-  line-height: 1.15;
-}
-.hm-rate-val {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-}
-.hm-rate-val.is-worst { color: var(--err); }
-.hm-rate-sub {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-family: var(--mono);
-}
-
-/* hover 상세 카드 — 그리드 아래 고정 슬롯(높이 유지, 내용만 교체) */
-.hm-detail {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  min-height: 34px;
-  padding: 7px 12px;
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  font-size: 12.5px;
-  color: var(--text-2);
-  transition: border-color 120ms ease, background 120ms ease;
-}
-.hm-detail.is-active {
-  border-style: solid;
-  border-color: var(--border-strong);
-  background: var(--surface);
-}
-.hm-detail-head {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.hm-detail-chip {
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-}
-.hm-detail-stat {
-  display: inline-flex;
-  align-items: baseline;
   gap: 4px;
 }
-.hm-detail-stat b { font-weight: 700; color: var(--text); }
-.hm-detail-stat.is-fail b { color: var(--fail); }
-.hm-detail-stat.is-timeout b { color: var(--err); }
-.hm-detail-rate {
-  color: var(--text-muted);
-  font-family: var(--mono);
-  font-size: 11.5px;
+
+.mv-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 190px) 1fr 96px 68px;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 10px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
 }
-.hm-detail-hint {
-  color: var(--text-muted);
-  font-size: 12px;
-  font-style: italic;
+.mv-row:disabled { cursor: default; }
+.mv-row:not(:disabled):hover { background: var(--surface-2); }
+.mv-row.is-selected {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.mv-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.mv-name {
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mv-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.mv-bar {
+  display: flex;
+  gap: 2px; /* 인접 채움 사이 표면 간격 — 두 계열이 한 덩어리로 뭉치지 않게 */
+  height: 12px;
+  border-radius: 3px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+/* 아래 막대도 같은 트랙을 깐다 — 두 막대가 같은 자로 잰 것임을 눈이 먼저 알아야 한다. */
+.mv-bar-fail { height: 9px; }
+.mv-bar > span { display: block; height: 100%; border-radius: 0 3px 3px 0; }
+.mv-seg-calls   { background: #94a3b8; }
+.mv-seg-timeout { background: var(--err); }
+.mv-seg-other   { background: var(--llm-err); }
+.mv-nums {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: right;
+}
+.mv-calls  { font-size: 13.5px; font-weight: 700; color: var(--text); }
+.mv-failed { font-size: 11.5px; color: var(--text-muted); }
+
+.mv-rate {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: right;
+}
+.mv-rate-val { font-size: 15px; font-weight: 800; color: var(--text-2); }
+.mv-rate-val.is-worst { color: var(--err); }
+.mv-rate-val.is-clean { color: var(--ok); }
+.mv-rate-sub { font-size: 11px; color: var(--text-muted); }
+
+@media (max-width: 860px) {
+  .mv-row { grid-template-columns: minmax(96px, 140px) 1fr 60px; gap: 10px; }
+  .mv-nums { display: none; }
 }
 
 /* ── 오류 사유 리스트 (ReasonList) ──

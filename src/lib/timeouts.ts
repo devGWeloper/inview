@@ -7,8 +7,6 @@ import {
   TimeoutBucket,
   TimeoutDimStat,
   TimeoutItem,
-  TimeoutModelCell,
-  TimeoutModelSeries,
   TimeoutReason,
   TimeoutStatsResponse,
 } from "./types";
@@ -23,7 +21,7 @@ import {
 
 const ITEM_LIMIT = 200; // 목록에 내릴 최근 실패 호출 수
 const DIM_LIMIT = 10;   // 노드/모델/사용자 분포 상위 N
-const MODEL_TREND_LIMIT = 8; // 히트맵에 노출할 모델 수 (호출 많은 순)
+const MODEL_VOL_LIMIT = 8; // 요청 대비 실패 막대에 노출할 모델 수 (호출 많은 순)
 const REASON_LIMIT = 8; // 오류 사유 top N
 const REASON_KEYLEN = 100; // ERR_CTN 앞 N자를 클러스터 키로
 
@@ -103,7 +101,7 @@ function emptyStats(
     byModel: [],
     byUser: [],
     items: [],
-    modelTrend: [],
+    modelVolume: [],
     topReasons: [],
   };
 }
@@ -116,6 +114,7 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
   const g: Granularity = resolveGranularity(filter.gran, fromMs, toMs);
   const emptyBuckets: TimeoutBucket[] = enumerateBucketStarts(fromMs, toMs, g).map((k) => ({
     ts: isoNoTz(k),
+    calls: 0,
     failed: 0,
     timeout: 0,
   }));
@@ -159,9 +158,10 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
       ` FROM TRX_TOKEN_DET${where}`;
     const totalRow = (await run("totals", totalSql))[0] ?? {};
 
+    // COUNT(*) 는 분모다 — 추이 차트가 "전체 몇 건 중 몇 건" 을 그리려면 버킷마다 총 호출이 있어야 한다.
     const bucketSql =
       `SELECT TO_CHAR(${bucketExpr(g)}, 'YYYY-MM-DD"T"HH24:MI:SS') AS BKT,` +
-      ` ${FAILED} AS F, ${TIMEOUT} AS T` +
+      ` COUNT(*) AS N, ${FAILED} AS F, ${TIMEOUT} AS T` +
       ` FROM TRX_TOKEN_DET${where} GROUP BY ${bucketExpr(g)} ORDER BY 1`;
     const bucketMap = new Map<number, TimeoutBucket>();
     for (const r of await run("buckets", bucketSql)) {
@@ -170,12 +170,13 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
       const key = floorToBucket(ms, g);
       bucketMap.set(key, {
         ts: isoNoTz(key),
+        calls: num(r.N ?? r.n),
         failed: num(r.F ?? r.f),
         timeout: num(r.T ?? r.t),
       });
     }
     const buckets = enumerateBucketStarts(fromMs, toMs, g).map(
-      (k) => bucketMap.get(k) ?? { ts: isoNoTz(k), failed: 0, timeout: 0 }
+      (k) => bucketMap.get(k) ?? { ts: isoNoTz(k), calls: 0, failed: 0, timeout: 0 }
     );
 
     const dimSql = (col: string) =>
@@ -193,47 +194,17 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
     const byModel = dimFrom(await run("byModel", dimSql("MODEL_NM")));
     const byUser = dimFrom(await run("byUser", dimSql("USER_ID")));
 
-    const modelTrendSql =
-      `SELECT NVL(MODEL_NM, '(없음)') AS M,` +
-      ` TO_CHAR(${bucketExpr(g)}, 'YYYY-MM-DD"T"HH24:MI:SS') AS BKT,` +
-      ` COUNT(*) AS N, ${FAILED} AS F, ${TIMEOUT} AS T` +
-      ` FROM TRX_TOKEN_DET${where}` +
-      ` GROUP BY NVL(MODEL_NM, '(없음)'), ${bucketExpr(g)}`;
-    const modelAgg = new Map<
-      string,
-      { totalCalls: number; totalFailed: number; totalTimeout: number; cells: Map<number, TimeoutModelCell> }
-    >();
-    for (const r of await run("modelTrend", modelTrendSql)) {
-      const m = String(r.M ?? r.m ?? "(없음)");
-      const ms = parseTs(str(r.BKT ?? r.bkt));
-      if (ms === null) continue;
-      const key = floorToBucket(ms, g);
-      const calls = num(r.N ?? r.n);
-      const failed = num(r.F ?? r.f);
-      const timeout = num(r.T ?? r.t);
-      let entry = modelAgg.get(m);
-      if (!entry) {
-        entry = { totalCalls: 0, totalFailed: 0, totalTimeout: 0, cells: new Map() };
-        modelAgg.set(m, entry);
-      }
-      entry.totalCalls += calls;
-      entry.totalFailed += failed;
-      entry.totalTimeout += timeout;
-      entry.cells.set(key, { ts: isoNoTz(key), calls, failed, timeout });
-    }
-    const bucketKeys = enumerateBucketStarts(fromMs, toMs, g);
-    const modelTrend: TimeoutModelSeries[] = [...modelAgg.entries()]
-      .sort((a, b) => b[1].totalCalls - a[1].totalCalls)
-      .slice(0, MODEL_TREND_LIMIT)
-      .map(([model, v]) => ({
-        model,
-        totalCalls: v.totalCalls,
-        totalFailed: v.totalFailed,
-        totalTimeout: v.totalTimeout,
-        cells: bucketKeys.map(
-          (k) => v.cells.get(k) ?? { ts: isoNoTz(k), calls: 0, failed: 0, timeout: 0 }
-        ),
-      }));
+    // byModel 과 달리 HAVING 이 없다 — "8천 건 중 0건" 인 모델도 분모로서 보여줘야 한다.
+    const modelVolSql =
+      `SELECT NVL(MODEL_NM, '(없음)') AS K, COUNT(*) AS N, ${FAILED} AS F, ${TIMEOUT} AS T` +
+      ` FROM TRX_TOKEN_DET${where} GROUP BY NVL(MODEL_NM, '(없음)')` +
+      ` ORDER BY N DESC FETCH FIRST ${MODEL_VOL_LIMIT} ROWS ONLY`;
+    const modelVolume: TimeoutDimStat[] = (await run("modelVolume", modelVolSql)).map((r) => ({
+      key: String(r.K ?? r.k ?? "(없음)"),
+      calls: num(r.N ?? r.n),
+      failed: num(r.F ?? r.f),
+      timeout: num(r.T ?? r.t),
+    }));
 
     const reasonSql =
       `SELECT SUBSTR(TRIM(ERR_CTN), 1, ${REASON_KEYLEN}) AS R,` +
@@ -287,7 +258,7 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
       byModel,
       byUser,
       items,
-      modelTrend,
+      modelVolume,
       topReasons,
     };
 

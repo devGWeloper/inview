@@ -3,9 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fmtDuration } from "@/lib/format";
 import { TimeoutTrendChart } from "@/components/charts/TimeoutTrendChart";
-import { TimeoutModelHeatmap } from "@/features/timeouts/TimeoutModelHeatmap";
-import { TickMetricDef, TickStatsResponse, TimeoutDimStat, TimeoutItem, TimeoutReason, TimeoutStatsResponse } from "@/lib/types";
-import { TickMonitor } from "@/components/tick/TickMonitor";
+import { ModelVolumeBars } from "@/features/timeouts/ModelVolumeBars";
+import { TimeoutDimStat, TimeoutItem, TimeoutReason, TimeoutStatsResponse } from "@/lib/types";
 import { callStatus } from "@/lib/tokenStatus";
 import { apiJson, errMessage } from "@/lib/apiClient";
 import { useAgentScope } from "@/components/agents/AgentScopeProvider";
@@ -28,10 +27,6 @@ import { FailedCallsTable } from "@/features/timeouts/FailedCallsTable";
 
 interface Range { from: string; to: string }
 
-const TIMEOUT_METRICS: [TickMetricDef, TickMetricDef] = [
-  { name: "타임아웃", unitText: "건/분", unit: "건", limit: 0 },
-  { name: "실패", unitText: "건/분", unit: "건", limit: 0 },
-];
 
 function fmtRange(from: string | null, to: string | null): string {
   if (!from || !to) return "—";
@@ -54,7 +49,6 @@ export default function TimeoutsPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const [tick, setTick] = useState<TickStatsResponse | null>(null);
 
   const spanMs = useMemo(() => spanOfSel(sel), [sel]);
   const { unit, enabled: unitEnabled, ready: unitReady, setUnit, unitFor } = useTickUnit("timeouts", spanMs);
@@ -63,7 +57,6 @@ export default function TimeoutsPage() {
   const agentIdRef = useRef(agentId);
   agentIdRef.current = agentId;
 
-  // 1분에서는 두 번 조회한다 — 집계(KPI·나머지 카드) + 틱(분당 타임아웃/실패).
   const load = useCallback(
     async (r: Range, nodeNm: string, modelNm: string, unit: TickUnit) => {
       const requestFor = agentId; // 이 요청이 향한 에이전트
@@ -74,35 +67,20 @@ export default function TimeoutsPage() {
       if (agentId) q.set("agent", agentId);
       if (nodeNm) q.set("nodeNm", nodeNm);
       if (modelNm) q.set("modelNm", modelNm);
-
-      const tq = new URLSearchParams(q);
-      tq.set("view", "failure");
-      // 1분은 롤링 60초 틱 라우트가 그린다 — 여기 g 로 보내면 같은 걸 두 번 집계한다.
-      const g = unit === "1m" ? undefined : granOfTickUnit(unit);
+      const g = granOfTickUnit(unit);
       if (g) q.set("g", g);
 
-      let tickErr: string | null = null;
       try {
-        const [data, tickData] = await Promise.all([
-          apiJson<TimeoutStatsResponse>(`/api/timeouts?${q.toString()}`, { cache: "no-store" }),
-          unit === "1m"
-            ? apiJson<TickStatsResponse>(`/api/tokens/tick?${tq.toString()}`, { cache: "no-store" })
-                .catch((e) => {
-                  tickErr = errMessage(e, "틱 조회를 불러오지 못했습니다.");
-                  return null;
-                })
-            : Promise.resolve(null),
-        ]);
+        const data = await apiJson<TimeoutStatsResponse>(`/api/timeouts?${q.toString()}`, {
+          cache: "no-store",
+        });
         const echoed = data.agentId ?? requestFor;
         if (agentIdRef.current && echoed !== agentIdRef.current) return;
         setStats(data);
-        setTick(tickData);
-        setErr(tickErr);
       } catch (e) {
         if (agentIdRef.current !== requestFor) return;
         setErr(errMessage(e, "타임아웃 집계를 불러오지 못했습니다."));
         setStats(null);
-        setTick(null);
       } finally {
         if (agentIdRef.current === requestFor) setLoading(false);
       }
@@ -117,7 +95,6 @@ export default function TimeoutsPage() {
     setNode("");
     setModel("");
     setStats(null);
-    setTick(null);
     load(resolveRange(sel), "", "", unit);
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [ready, rangeReady, unitReady, agentId]);
@@ -305,28 +282,18 @@ export default function TimeoutsPage() {
             </div>
           </div>
 
-          {/* 단위 선택(TickSelect)은 이 카드 머리 안에 있고, 틱 보기도 **같은 자리**를 쓴다.
-              ⚠️ 틱 조회가 비어도 카드 껍데기는 그려야 한다 — 안 그리면 되돌릴 컨트롤이 사라진다. */}
-          {unit === "1m" ? (
-            tick ? (
-              <TickMonitor stats={tick} metrics={TIMEOUT_METRICS} title="발생 추이" rowsLabel="호출" headSlot={tickCtl} />
-            ) : (
-              <section className="dash-card dash-card-hero">
-                <div className="dash-card-head">
-                  <div className="dash-card-title-group">
-                    <span className="dash-card-title">발생 추이</span>
-                  </div>
-                  <div className="dash-card-aux">{tickCtl}</div>
-                </div>
-                <div className="dash-card-body"><div className="tick-empty">—</div></div>
-              </section>
-            )
-          ) : (
+          {/* 단위 선택(TickSelect)은 이 카드 머리 안에 있다. ⚠️ 여기 1분은 5·10·30분과
+              **똑같은 정각 분 격자**다 — 롤링 60초(TPM/RPM)는 Tokens 것이다. */}
           <section className="dash-card dash-card-hero">
             <div className="dash-card-head">
               <div className="dash-card-title-group">
                 <span className="dash-card-title">발생 추이</span>
-                <span className="dash-card-sub">호출 시각 기준{scope && ` · ${scope}`}</span>
+                <span className="dash-card-sub">
+                  전체 호출 {stats.totalCalls.toLocaleString()}건 중 실패{" "}
+                  {stats.failedCalls.toLocaleString()}건 ({pct(stats.failedCalls, stats.totalCalls)})
+                  {" · "}타임아웃 {stats.timeoutCalls.toLocaleString()}건 (
+                  {pct(stats.timeoutCalls, stats.totalCalls)}){scope && ` · ${scope}`}
+                </span>
               </div>
               <div className="dash-card-aux">{tickCtl}</div>
             </div>
@@ -338,21 +305,19 @@ export default function TimeoutsPage() {
               )}
             </div>
           </section>
-          )}
 
-          {/* 모델 × 시간 히트맵 — "그 시간대에 이 모델이 몇 건 중 몇 건 실패" 를 셀 하나로 압축.
-              총 요청 수를 분모로 두는 게 핵심 — 색은 실패율, 라벨 옆 숫자는 총 호출. */}
+          {/* 분모를 길이로 보여주는 게 핵심 — 위 막대(전체 호출)와 아래 막대(실패)가 같은 눈금이다. */}
           <section className="dash-card dash-card-hero">
             <div className="dash-card-head">
               <div className="dash-card-title-group">
-                <span className="dash-card-title">모델별 요청·실패 격자</span>
+                <span className="dash-card-title">모델별 요청 대비 실패</span>
                 <span className="dash-card-sub">
-                  가로축 시간 · 세로축 모델 · 셀 색 = 그 슬롯의 실패율{scope && ` · ${scope}`}
+                  호출 많은 순 상위 {stats.modelVolume.length}개 · 막대 클릭 = 모델 필터{scope && ` · ${scope}`}
                 </span>
               </div>
             </div>
             <div className="dash-card-body">
-              <TimeoutModelHeatmap stats={stats} selectedModel={model} onSelectModel={onModel} />
+              <ModelVolumeBars models={stats.modelVolume} selectedModel={model} onSelectModel={onModel} />
             </div>
           </section>
 

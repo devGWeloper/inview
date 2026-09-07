@@ -30,11 +30,6 @@ const SERIES_LABEL: Record<SeriesKey, string> = {
   other:   "LLM 오류",
 };
 
-/** 두 패널의 X 눈금이 어긋나면 위아래를 같은 시각으로 못 읽는다 — 축 폭과 좌우 여백을 고정한다. */
-const Y_WIDTH = 52;
-const MARGIN = { top: 10, right: 18, bottom: 0, left: 0 };
-const SYNC_ID = "to-trend";
-
 type Gran = TimeoutStatsResponse["granularity"];
 
 export type TimeoutSeries = { granularity: Gran; buckets: TimeoutBucket[] };
@@ -48,7 +43,7 @@ type Row = {
   ts: string;
   tick: string;
   failed: number;
-  /** 호출이 0건인 버킷은 비율이 없다 — 0% 로 그리면 "안정" 으로 읽힌다. */
+  /** 호출이 0건인 버킷은 비율이 없다 — 0% 로 적으면 "안정" 으로 읽힌다. */
   rate: number | null;
 } & Record<SeriesKey, number>;
 
@@ -127,14 +122,7 @@ export function TimeoutTrendChart({ stats }: { stats: TimeoutSeries }) {
     return { peakIdx: pIdx, peakVal: pVal, peakTs: pIdx >= 0 ? data[pIdx].ts : null };
   }, [data]);
 
-  // 최대 타임아웃률이 0.2% 여도 축이 0.2% 까지만 차면 두더지 언덕이 산맥이 된다 — 1% 를 바닥으로 둔다.
-  const rateMax = useMemo(() => {
-    const m = Math.max(0, ...data.map((d) => d.rate ?? 0));
-    return Math.max(1, Math.ceil(m * 1.15));
-  }, [data]);
-
   const toggle = (k: SeriesKey) => setHidden((h) => ({ ...h, [k]: !h[k] }));
-  const brushKey = data.length + ":" + (data[0]?.tick ?? "");
 
   return (
     <div className="ts-wrap">
@@ -156,8 +144,8 @@ export function TimeoutTrendChart({ stats }: { stats: TimeoutSeries }) {
       </div>
 
       <div className="ts-chart">
-        <ResponsiveContainer width="100%" height={250}>
-          <AreaChart data={data} margin={MARGIN} syncId={SYNC_ID}>
+        <ResponsiveContainer width="100%" height={320}>
+          <AreaChart data={data} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
             <defs>
               {SERIES.map((k) => (
                 <linearGradient key={k} id={`to-grad-${k}`} x1="0" y1="0" x2="0" y2="1">
@@ -166,12 +154,21 @@ export function TimeoutTrendChart({ stats }: { stats: TimeoutSeries }) {
                 </linearGradient>
               ))}
             </defs>
-            <XAxis dataKey="tick" ticks={axis.ticks} hide />
+            <XAxis
+              dataKey="tick"
+              ticks={axis.ticks}
+              tickFormatter={axis.short}
+              tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}
+              tickLine={{ stroke: "var(--border-strong)" }}
+              axisLine={{ stroke: "var(--border-strong)" }}
+              tickMargin={8}
+              height={32}
+            />
             <YAxis
               tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}
               tickLine={{ stroke: "var(--border-strong)" }}
               axisLine={{ stroke: "var(--border-strong)" }}
-              width={Y_WIDTH}
+              width={52}
               allowDecimals={false}
               tickFormatter={(v) => Number(v).toLocaleString()}
             />
@@ -223,66 +220,10 @@ export function TimeoutTrendChart({ stats }: { stats: TimeoutSeries }) {
                 activeDot={{ r: 3, stroke: "var(--surface)", strokeWidth: 1.5 }}
               />
             ))}
-            <Legend content={() => null} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* 건수와 비율은 스케일이 달라 한 축에 못 얹는다 — X 를 공유하는 아래 패널로 뗀다.
-          syncId 가 툴팁 위치와 Brush 구간을 두 패널에 같이 물린다. */}
-      <div className="ts-sub-label">
-        <span className="ts-sub-title">타임아웃률</span>
-        <span className="ts-sub-hint">전체 호출 대비 · 요청 없는 구간은 끊긴다</span>
-      </div>
-      <div className="ts-chart ts-chart-sub">
-        <ResponsiveContainer width="100%" height={118}>
-          <AreaChart data={data} margin={MARGIN} syncId={SYNC_ID}>
-            <defs>
-              <linearGradient id="to-grad-rate" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={SERIES_COLOR.timeout} stopOpacity={0.42} />
-                <stop offset="100%" stopColor={SERIES_COLOR.timeout} stopOpacity={0.04} />
-              </linearGradient>
-            </defs>
-            <XAxis
-              dataKey="tick"
-              ticks={axis.ticks}
-              tickFormatter={axis.short}
-              tick={{ fill: "var(--text-2)", fontSize: 13, fontWeight: 600, fontFamily: "var(--mono)" }}
-              tickLine={{ stroke: "var(--border-strong)" }}
-              axisLine={{ stroke: "var(--border-strong)" }}
-              tickMargin={8}
-              height={32}
-            />
-            <YAxis
-              tick={{ fill: "var(--text-2)", fontSize: 12, fontWeight: 600, fontFamily: "var(--mono)" }}
-              tickLine={{ stroke: "var(--border-strong)" }}
-              axisLine={{ stroke: "var(--border-strong)" }}
-              width={Y_WIDTH}
-              domain={[0, rateMax]}
-              tickCount={3}
-              tickFormatter={(v) => `${Number(v)}%`}
-            />
-            {/* 위 패널이 상세를 띄운다 — 여기까지 툴팁을 그리면 두 개가 겹친다. 커서만 남긴다. */}
-            <Tooltip
-              content={() => null}
-              cursor={{ stroke: "var(--accent)", strokeDasharray: "3 3", strokeOpacity: 0.4 }}
-            />
-            <Area
-              type="monotone"
-              dataKey="rate"
-              name="타임아웃률"
-              stroke={SERIES_COLOR.timeout}
-              strokeWidth={1.8}
-              fill="url(#to-grad-rate)"
-              connectNulls={false}
-              isAnimationActive
-              animationDuration={500}
-              activeDot={{ r: 3, stroke: "var(--surface)", strokeWidth: 1.5 }}
-            />
             {/* key = 구간이 달라졌을 때만 remount. 없으면 recharts 내부 state 에 예전 표시 구간이 남는다. */}
             {data.length > 12 && (
               <Brush
-                key={brushKey}
+                key={data.length + ":" + (data[0]?.tick ?? "")}
                 dataKey="tick"
                 height={22}
                 stroke="var(--accent)"

@@ -141,16 +141,17 @@
 .to-dim-val { font-size: 13px; font-weight: 700; color: var(--text); }
 .to-dim-rate { font-size: 12px; color: var(--text-muted); min-width: 46px; text-align: right; }
 
-/* ── 모델별 요청 대비 실패 막대 (ModelVolumeBars) ──
-   두 막대가 **같은 눈금**이다 — 위(전체 호출) 대비 아래(실패)의 길이 차이가 곧 안전 마진.
-   실패율을 색이 아니라 길이로 옮긴 게 이 카드의 전부다. 격자보다 행이 커서 라벨이 읽힌다. */
-.mv {
+/* ── 모델별 요청 대비 실패 타일 (ModelFailureTiles) ──
+   한 모델을 카드 하나에 가둔다 — 화면 폭을 가로지르는 막대는 왼쪽 끝에서 오른쪽 숫자까지
+   눈이 멀리 이동하고 실패분이 점처럼 뭉갠다. 주인공은 큰 실패율 숫자, 막대는 카드끼리
+   비교하라고 있는 보조다(눈금은 격자 전체가 공유). */
+.mt {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-.mv-legend {
+.mt-legend {
   display: flex;
   align-items: center;
   gap: 14px;
@@ -158,95 +159,98 @@
   font-size: 12px;
   color: var(--text-3);
 }
-.mv-leg-item { display: inline-flex; align-items: center; gap: 6px; }
-.mv-leg-spacer { flex: 1; }
-.mv-leg-hint { color: var(--text-muted); font-style: italic; }
-.mv-sw-calls   { background: #94a3b8; }
-.mv-sw-timeout { background: var(--err); }
-.mv-sw-other   { background: var(--llm-err); }
+.mt-leg-item { display: inline-flex; align-items: center; gap: 6px; }
+.mt-leg-spacer { flex: 1; }
+.mt-leg-hint { color: var(--text-muted); font-style: italic; }
+.mt-sw-timeout { background: var(--err); }
+.mt-sw-other   { background: var(--llm-err); }
 
-.mv-rows {
+/* auto-fill 로 두면 넓은 화면에서 7열까지 벌어져 모델명이 잘린다 — 4열을 상한으로 못 박는다. */
+.mt-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 1180px) { .mt-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 860px)  { .mt-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px)  { .mt-grid { grid-template-columns: 1fr; } }
+
+.mt-tile {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-
-.mv-row {
-  display: grid;
-  grid-template-columns: minmax(120px, 190px) 1fr 96px 68px;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 10px 10px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  background: none;
+  align-items: stretch;
+  gap: 2px;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-2);
   text-align: left;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
 }
-.mv-row:disabled { cursor: default; }
-.mv-row:not(:disabled):hover { background: var(--surface-2); }
-.mv-row.is-selected {
+.mt-tile:disabled { cursor: default; }
+.mt-tile:not(:disabled):hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  box-shadow: 0 2px 10px rgba(17, 24, 39, 0.06);
+}
+.mt-tile.is-selected {
   background: var(--accent-soft);
   border-color: var(--accent);
 }
-.mv-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mt-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-.mv-name {
-  min-width: 0;
-  font-size: 13.5px;
+.mt-name {
+  font-size: 12.5px;
   font-weight: 700;
-  color: var(--text);
+  color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin-bottom: 8px;
 }
 
-.mv-bars {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+.mt-rate {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.5px;
+  color: var(--text);
 }
-.mv-bar {
+.mt-rate-unit { font-size: 17px; font-weight: 700; margin-left: 1px; }
+.mt-tile.is-worst .mt-rate { color: var(--err); }
+.mt-tile.is-clean .mt-rate { color: var(--ok); }
+
+.mt-rate-lbl {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.mt-bar {
   display: flex;
   gap: 2px; /* 인접 채움 사이 표면 간격 — 두 계열이 한 덩어리로 뭉치지 않게 */
-  height: 12px;
-  border-radius: 3px;
+  height: 8px;
+  border-radius: 4px;
   background: var(--surface-3);
   overflow: hidden;
+  margin-bottom: 11px;
 }
-/* 아래 막대도 같은 트랙을 깐다 — 두 막대가 같은 자로 잰 것임을 눈이 먼저 알아야 한다. */
-.mv-bar-fail { height: 9px; }
-.mv-bar > span { display: block; height: 100%; border-radius: 0 3px 3px 0; }
-.mv-seg-calls   { background: #94a3b8; }
-.mv-seg-timeout { background: var(--err); }
-.mv-seg-other   { background: var(--llm-err); }
-.mv-nums {
+.mt-bar > span { display: block; height: 100%; border-radius: 0 4px 4px 0; }
+.mt-seg-timeout { background: var(--err); }
+.mt-seg-other   { background: var(--llm-err); }
+
+.mt-foot {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  text-align: right;
+  gap: 3px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
 }
-.mv-calls  { font-size: 13.5px; font-weight: 700; color: var(--text); }
-.mv-failed { font-size: 11.5px; color: var(--text-muted); }
-
-.mv-rate {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  text-align: right;
-}
-.mv-rate-val { font-size: 15px; font-weight: 800; color: var(--text-2); }
-.mv-rate-val.is-worst { color: var(--err); }
-.mv-rate-val.is-clean { color: var(--ok); }
-.mv-rate-sub { font-size: 11px; color: var(--text-muted); }
-
-@media (max-width: 860px) {
-  .mv-row { grid-template-columns: minmax(96px, 140px) 1fr 60px; gap: 10px; }
-  .mv-nums { display: none; }
-}
+.mt-foot-main { font-size: 12px; color: var(--text-2); }
+.mt-foot-main b { font-weight: 700; color: var(--text); }
+.mt-foot-sub { font-size: 11.5px; color: var(--text-muted); }
+.mt-foot-sub b { font-weight: 700; color: var(--text-3); }
 
 /* ── 오류 사유 리스트 (ReasonList) ──
    좁은 카드 컬럼에 들어가는 미니 리스트 — 순위 · 문구 · 발생 수/비중. */

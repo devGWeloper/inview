@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fmtDuration } from "@/lib/format";
 import { TimeoutTrendChart } from "@/components/charts/TimeoutTrendChart";
-import { ModelVolumeBars } from "@/features/timeouts/ModelVolumeBars";
+import { ModelFailureTiles } from "@/features/timeouts/ModelFailureTiles";
 import { TimeoutDimStat, TimeoutItem, TimeoutReason, TimeoutStatsResponse } from "@/lib/types";
 import { callStatus } from "@/lib/tokenStatus";
 import { apiJson, errMessage } from "@/lib/apiClient";
@@ -306,18 +306,19 @@ export default function TimeoutsPage() {
             </div>
           </section>
 
-          {/* 분모를 길이로 보여주는 게 핵심 — 위 막대(전체 호출)와 아래 막대(실패)가 같은 눈금이다. */}
+          {/* 한 모델 = 카드 하나. 주인공은 큰 실패율 숫자고 막대는 카드끼리 비교하는 보조다. */}
           <section className="dash-card dash-card-hero">
             <div className="dash-card-head">
               <div className="dash-card-title-group">
                 <span className="dash-card-title">모델별 요청 대비 실패</span>
                 <span className="dash-card-sub">
-                  호출 많은 순 상위 {stats.modelVolume.length}개 · 막대 클릭 = 모델 필터{scope && ` · ${scope}`}
+                  호출 많은 순 상위 {stats.modelVolume.length}개를 실패율 높은 순으로 · 카드 클릭 = 모델 필터
+                  {scope && ` · ${scope}`}
                 </span>
               </div>
             </div>
             <div className="dash-card-body">
-              <ModelVolumeBars models={stats.modelVolume} selectedModel={model} onSelectModel={onModel} />
+              <ModelFailureTiles models={stats.modelVolume} selectedModel={model} onSelectModel={onModel} />
             </div>
           </section>
 

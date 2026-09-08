@@ -6,7 +6,20 @@ import { TimeoutDimStat } from "@/lib/types";
 /** 실패가 0.1% 여도 채움이 사라지면 "실패 없음" 으로 읽힌다 — 1건이라도 있으면 최소 폭을 준다. */
 const MIN_SEG = "3px";
 
+/** 숫자 색은 카드끼리 견주지 않고 이 절대 임계로 정한다 — "가장 나쁜 놈" 은 표본이 바뀌면 따라 바뀐다. */
+const RATE_CRIT = 0.1;
+const RATE_WARN = 0.03;
+
 const rateOf = (m: TimeoutDimStat): number => (m.calls > 0 ? m.failed / m.calls : 0);
+
+function toneOf(m: TimeoutDimStat): string {
+  if (m.calls === 0) return "";
+  if (m.failed === 0) return " is-clean";
+  const r = rateOf(m);
+  if (r >= RATE_CRIT) return " is-crit";
+  if (r >= RATE_WARN) return " is-warn";
+  return "";
+}
 
 export function ModelFailureTiles({
   models,
@@ -28,10 +41,8 @@ export function ModelFailureTiles({
     return <div className="top-empty">모델별 데이터가 없습니다</div>;
   }
 
-  const worstRate = Math.max(0, ...sorted.map(rateOf));
-  // 미니바는 카드끼리 비교하라고 있는 것이다 — 스케일은 카드마다가 아니라 격자 전체에서 하나.
-  const barW = (n: number, calls: number) =>
-    worstRate > 0 && calls > 0 ? `${(n / calls / worstRate) * 100}%` : "0%";
+  // 막대 전체 = 그 모델의 전체 호출. 카드마다 닫힌 절대 눈금이라 기준선이 표본에 따라 움직이지 않는다.
+  const barW = (n: number, calls: number) => (calls > 0 ? `${(n / calls) * 100}%` : "0%");
 
   return (
     <div className="mt">
@@ -43,7 +54,7 @@ export function ModelFailureTiles({
           <span className="legend-swatch mt-sw-other" />LLM 오류
         </span>
         <span className="mt-leg-spacer" />
-        <span className="mt-leg-hint">막대 눈금은 카드 전체가 공유한다 — 가장 나쁜 모델이 꽉 찬다</span>
+        <span className="mt-leg-hint">막대 전체 = 그 모델의 전체 호출 · 채워진 만큼이 실패분</span>
       </div>
 
       <div className="mt-grid">
@@ -51,12 +62,11 @@ export function ModelFailureTiles({
           const other = Math.max(0, m.failed - m.timeout);
           const rate = rateOf(m);
           const isSel = selectedModel === m.key;
-          const tone = m.failed === 0 ? " is-clean" : rate >= worstRate && worstRate > 0 ? " is-worst" : "";
           return (
             <button
               key={m.key}
               type="button"
-              className={"mt-tile" + tone + (isSel ? " is-selected" : "")}
+              className={"mt-tile" + toneOf(m) + (isSel ? " is-selected" : "")}
               onClick={onSelectModel ? () => onSelectModel(m.key) : undefined}
               disabled={!onSelectModel}
               title={onSelectModel ? `${m.key} — 이 모델로 좁히기` : m.key}

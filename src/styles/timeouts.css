@@ -144,7 +144,9 @@
 /* ── 모델별 요청 대비 실패 타일 (ModelFailureTiles) ──
    한 모델을 카드 하나에 가둔다 — 화면 폭을 가로지르는 막대는 왼쪽 끝에서 오른쪽 숫자까지
    눈이 멀리 이동하고 실패분이 점처럼 뭉갠다. 주인공은 큰 실패율 숫자, 막대는 카드끼리
-   비교하라고 있는 보조다(눈금은 격자 전체가 공유). */
+   비교하라고 있는 보조다.
+   ⚠️ 막대 눈금은 **카드마다 닫혀 있다** — 트랙 전체 = 그 모델의 전체 호출, 채움 = 실패분.
+   격자 전체가 눈금을 공유하면 최악 모델은 실패율이 몇 %든 항상 꽉 차서 "전부 실패" 로 읽힌다. */
 .mt {
   display: flex;
   flex-direction: column;
@@ -218,7 +220,8 @@
   color: var(--text);
 }
 .mt-rate-unit { font-size: 17px; font-weight: 700; margin-left: 1px; }
-.mt-tile.is-worst .mt-rate { color: var(--err); }
+.mt-tile.is-crit  .mt-rate { color: var(--err); }
+.mt-tile.is-warn  .mt-rate { color: var(--llm-err); }
 .mt-tile.is-clean .mt-rate { color: var(--ok); }
 
 .mt-rate-lbl {
@@ -227,12 +230,14 @@
   margin-bottom: 10px;
 }
 
+/* 트랙 전체가 그 모델의 전체 호출이다 — 채움은 대개 몇 % 라 얇으면 못 본다. 높이를 준다. */
 .mt-bar {
   display: flex;
   gap: 2px; /* 인접 채움 사이 표면 간격 — 두 계열이 한 덩어리로 뭉치지 않게 */
-  height: 8px;
+  height: 11px;
   border-radius: 4px;
   background: var(--surface-3);
+  border: 1px solid var(--border);
   overflow: hidden;
   margin-bottom: 11px;
 }

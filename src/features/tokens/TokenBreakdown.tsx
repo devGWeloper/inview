@@ -17,6 +17,7 @@ const METRICS: { key: MetricKey; label: string; hint: string }[] = [
 const HUE = {
   node:  { main: "#2563eb", soft: "#e8efff" },
   model: { main: "#7c3aed", soft: "#f3edfe" },
+  key:   { main: "#0d9488", soft: "#e3f5f2" },
 } as const;
 const LATENCY_BAR = "#dc2626";
 
@@ -192,15 +193,19 @@ export function TokenBreakdown({
   emptyText,
   onSelectNode,
   onSelectModel,
+  onSelectKey,
   selectedNode,
   selectedModel,
+  selectedKey,
 }: {
   stats: TokenStatsResponse;
   emptyText: string;
   onSelectNode?: (key: string) => void;
   onSelectModel?: (key: string) => void;
+  onSelectKey?: (key: string) => void;
   selectedNode?: string;
   selectedModel?: string;
+  selectedKey?: string;
 }) {
   const [metric, setMetric] = useState<MetricKey>("tokens");
   const current = METRICS.find((x) => x.key === metric)!;
@@ -252,6 +257,20 @@ export function TokenBreakdown({
           selected={selectedModel}
           emptyText={emptyText}
         />
+        {stats.keyAvailable && (
+          <Board
+            title="키별"
+            sub="KEY_NM · API 키 별칭(Tier)"
+            subLabel="모델"
+            hue={HUE.key}
+            dims={stats.byKey}
+            metric={metric}
+            shareBase={shareBase}
+            onSelect={onSelectKey}
+            selected={selectedKey}
+            emptyText={emptyText}
+          />
+        )}
       </div>
     </div>
   );

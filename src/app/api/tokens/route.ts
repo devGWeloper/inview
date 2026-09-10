@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
     userId: sp.get("userId") || undefined,
     nodeNm: sp.get("nodeNm") || undefined,
     modelNm: sp.get("modelNm") || undefined,
+    keyNm: sp.get("keyNm") || undefined,
     traceId: sp.get("traceId") || undefined,
     agentId,
     gran: parseGranularityParam(sp.get("g")),

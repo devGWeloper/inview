@@ -170,8 +170,15 @@ export async function fetchTickStats(filter: TickFilter): Promise<TickStatsRespo
 
     if (view === "failure" && !hasStatus) return emptyStats(fromMs, toMs, false);
 
+    let hasKeyNm = true;
+    try {
+      await conn.execute("SELECT KEY_NM FROM TRX_TOKEN_DET WHERE 1 = 0", {}, opts);
+    } catch {
+      hasKeyNm = false;
+    }
+
     const eff: TickFilter = { ...filter, dateFrom: isoNoTz(fromMs), dateTo: isoNoTz(toMs) };
-    const { where, binds } = buildWhere(eff);
+    const { where, binds } = buildWhere(eff, hasKeyNm);
 
     const run = async (name: string, sql: string): Promise<Array<Record<string, unknown>>> => {
       try {
@@ -219,6 +226,7 @@ export async function fetchTickStats(filter: TickFilter): Promise<TickStatsRespo
     const callSql =
       `SELECT * FROM (` +
       `SELECT TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS CTM, TRACE_ID, NODE_NM, MODEL_NM,` +
+      `${hasKeyNm ? " KEY_NM," : ""}` +
       ` USER_ID, INPUT_TOKENS, OUTPUT_TOKENS, TOTAL_TOKENS, LATENCY_MS${statCols}` +
       ` FROM TRX_TOKEN_DET${callWhere} ORDER BY CALL_TM DESC NULLS LAST` +
       `) WHERE ROWNUM <= ${TICK_CALL_LIMIT + 1}`;
@@ -229,6 +237,7 @@ export async function fetchTickStats(filter: TickFilter): Promise<TickStatsRespo
       traceId: str(r.TRACE_ID ?? r.trace_id),
       nodeNm: str(r.NODE_NM ?? r.node_nm),
       modelNm: str(r.MODEL_NM ?? r.model_nm),
+      keyNm: hasKeyNm ? str(r.KEY_NM ?? r.key_nm) : null,
       userId: str(r.USER_ID ?? r.user_id),
       inputTokens: num(r.INPUT_TOKENS ?? r.input_tokens),
       outputTokens: num(r.OUTPUT_TOKENS ?? r.output_tokens),
@@ -257,6 +266,7 @@ export async function fetchTickStats(filter: TickFilter): Promise<TickStatsRespo
       calls,
         truncated,
       statusAvailable: view === "failure" ? hasStatus : undefined,
+      keyAvailable: hasKeyNm,
     };
   } catch (e) {
     logger.error("fetchTickStats failed", { err: String(e), ms: Date.now() - t0 });

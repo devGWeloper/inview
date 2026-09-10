@@ -45,6 +45,7 @@ export default function TokensPage() {
   const [userId, setUserId] = useState("");
   const [nodeNm, setNodeNm] = useState("");
   const [modelNm, setModelNm] = useState("");
+  const [keyNm, setKeyNm] = useState("");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [draftCustom, setDraftCustom] = useState(false);
@@ -59,6 +60,7 @@ export default function TokensPage() {
   const [err, setErr] = useState<string | null>(null);
   const [nodeOptions, setNodeOptions] = useState<string[]>([]);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [keyOptions, setKeyOptions] = useState<string[]>([]);
 
   const agentIdRef = useRef(agentId);
   agentIdRef.current = agentId;
@@ -70,6 +72,7 @@ export default function TokensPage() {
         userId: userId || undefined,
         nodeNm: nodeNm || undefined,
         modelNm: modelNm || undefined,
+        keyNm: keyNm || undefined,
         dateFrom: range.from,
         dateTo: range.to,
         // 집계·1분은 g 를 안 보낸다 — 집계는 서버가 고르고, 1분은 틱 라우트가 그린다.
@@ -77,7 +80,7 @@ export default function TokensPage() {
         gran: u === "1m" ? undefined : granOfTickUnit(u),
       };
     },
-    [sel, userId, nodeNm, modelNm]
+    [sel, userId, nodeNm, modelNm, keyNm]
   );
 
   // 1분에서는 두 번 조회한다 — 집계(KPI·나머지 카드) + 틱(TPM/RPM).
@@ -93,6 +96,7 @@ export default function TokensPage() {
     if (f.userId) q.set("userId", f.userId);
     if (f.nodeNm) q.set("nodeNm", f.nodeNm);
     if (f.modelNm) q.set("modelNm", f.modelNm);
+    if (f.keyNm) q.set("keyNm", f.keyNm);
 
     const tq = new URLSearchParams(q);
     tq.set("view", "usage");
@@ -117,6 +121,7 @@ export default function TokensPage() {
       setErr(tickErr);
       setNodeOptions((prev) => unionKeys(prev, asArray<{ key: string }>(data.byNode).map((d) => d.key)));
       setModelOptions((prev) => unionKeys(prev, asArray<{ key: string }>(data.byModel).map((d) => d.key)));
+      setKeyOptions((prev) => unionKeys(prev, asArray<{ key: string }>(data.byKey).map((d) => d.key)));
     } catch (e) {
       if (agentIdRef.current !== requestFor) return; // 이미 전환된 뒤의 실패는 화면에 반영하지 않는다
       setErr(errMessage(e, "토큰 통계를 불러오지 못했습니다."));
@@ -132,11 +137,16 @@ export default function TokensPage() {
     setUserId("");
     setNodeNm("");
     setModelNm("");
+    setKeyNm("");
     setNodeOptions([]);
     setModelOptions([]);
+    setKeyOptions([]);
     setStats(null);
     setTick(null);
-    load({ ...computeFilter(unit), userId: undefined, nodeNm: undefined, modelNm: undefined }, unit);
+    load(
+      { ...computeFilter(unit), userId: undefined, nodeNm: undefined, modelNm: undefined, keyNm: undefined },
+      unit
+    );
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [ready, rangeReady, unitReady, agentId]);
 
@@ -212,17 +222,24 @@ export default function TokensPage() {
     load({ ...computeFilter(unit), modelNm: next || undefined }, unit);
   };
 
-  const reloadWith = (over: { userId?: string; nodeNm?: string; modelNm?: string }) => {
+  const onSelectKey = (k: string) => {
+    const next = keyNm === k ? "" : k;
+    setKeyNm(next);
+    load({ ...computeFilter(unit), keyNm: next || undefined }, unit);
+  };
+
+  const reloadWith = (over: { userId?: string; nodeNm?: string; modelNm?: string; keyNm?: string }) => {
     load({ ...computeFilter(unit), ...over }, unit);
   };
 
   const customOpen = draftCustom || sel.preset === "custom";
-  const hasFilter = !!(userId || nodeNm || modelNm);
+  const hasFilter = !!(userId || nodeNm || modelNm || keyNm);
   const clearFilters = () => {
     setUserId("");
     setNodeNm("");
     setModelNm("");
-    reloadWith({ userId: undefined, nodeNm: undefined, modelNm: undefined });
+    setKeyNm("");
+    reloadWith({ userId: undefined, nodeNm: undefined, modelNm: undefined, keyNm: undefined });
   };
 
   const tickCtl = (
@@ -298,6 +315,17 @@ export default function TokensPage() {
             <option value="">MODEL (전체)</option>
             {modelOptions.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
           </select>
+          {(stats?.keyAvailable ?? false) && (
+            <select
+              className="user-input user-select"
+              value={keyNm}
+              onChange={(e) => { const v = e.target.value; setKeyNm(v); reloadWith({ keyNm: v || undefined }); }}
+              aria-label="KEY"
+            >
+              <option value="">KEY (전체)</option>
+              {keyOptions.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+          )}
           {hasFilter && (
             <button type="button" className="btn ghost" onClick={clearFilters}>필터 초기화</button>
           )}
@@ -399,8 +427,10 @@ export default function TokensPage() {
             emptyText="데이터 없음"
             onSelectNode={onSelectNode}
             onSelectModel={onSelectModel}
+            onSelectKey={onSelectKey}
             selectedNode={nodeNm || undefined}
             selectedModel={modelNm || undefined}
+            selectedKey={keyNm || undefined}
           />
 
           <section className="dash-card">
@@ -410,7 +440,7 @@ export default function TokensPage() {
               </div>
             </div>
             <div className="dash-card-body">
-              <QuestionsTable questions={stats.questions} onExpand={fetchCalls} />
+              <QuestionsTable questions={stats.questions} onExpand={fetchCalls} showKey={stats.keyAvailable} />
             </div>
           </section>
 

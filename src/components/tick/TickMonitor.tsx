@@ -322,6 +322,7 @@ function Gauge({
 }
 
 function CallsTable({ calls }: { calls: TickCall[] }) {
+  const showKey = calls.some((c) => c.keyNm);
   return (
     <div className="token-recent-wrap">
       <table className="token-recent tick-calls">
@@ -330,6 +331,7 @@ function CallsTable({ calls }: { calls: TickCall[] }) {
             <th>호출 시각</th>
             <th>노드</th>
             <th>모델</th>
+            {showKey && <th>키</th>}
             <th>사용자</th>
             <th className="num">IN</th>
             <th className="num">OUT</th>
@@ -353,6 +355,7 @@ function CallsTable({ calls }: { calls: TickCall[] }) {
                 </td>
                 <td>{c.nodeNm ?? "—"}</td>
                 <td>{c.modelNm ?? "—"}</td>
+                {showKey && <td>{c.keyNm ?? "—"}</td>}
                 <td>{c.userId ?? "—"}</td>
                 <td className="num">{fmtInt(c.inputTokens)}</td>
                 <td className="num">{fmtInt(c.outputTokens)}</td>

@@ -27,15 +27,10 @@
    기존 BIZ 데이터(ERR_CD)만으로 타임아웃을 추적하는 화면. 대시보드/토큰 탭의
    dash-*, kpi-*, top-* 스타일을 그대로 쓰고 목록/그리드만 여기서 정의한다. */
 .to-grid {
+  /* 카드 수가 KEY_NM 유무로 3↔4 로 바뀐다 — auto-fit 이 폭에 맞춰 접는다 */
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 14px;
-}
-@media (max-width: 1180px) {
-  .to-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (max-width: 900px) {
-  .to-grid { grid-template-columns: 1fr; }
 }
 
 /* 서버 조회 범위(노드/모델 필터) 칩 바 — 지금 보고 있는 게 무엇의 추이인지 밝힌다 */
@@ -71,6 +66,12 @@
   border-color: color-mix(in srgb, #7c3aed 32%, transparent);
   background: color-mix(in srgb, #7c3aed 11%, transparent);
   color: #7c3aed;
+}
+/* 키 칩도 같은 규칙 — qkey 와 색을 맞춘다 */
+.to-chip.is-key {
+  border-color: color-mix(in srgb, #0d9488 32%, transparent);
+  background: color-mix(in srgb, #0d9488 11%, transparent);
+  color: #0d9488;
 }
 
 /* 목록은 테이블 — 카드보다 훑기 쉽고 컬럼 비교가 된다 */

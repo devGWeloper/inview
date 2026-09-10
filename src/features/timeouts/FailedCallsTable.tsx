@@ -14,11 +14,18 @@ export type SortKey = "time" | "wait";
 export type SortDir = "asc" | "desc";
 export type Result = "" | "timeout" | "error";
 
-export function FailedCallsTable({ items }: { items: TimeoutItem[] }) {
+export function FailedCallsTable({
+  items,
+  showKey = false,
+}: {
+  items: TimeoutItem[];
+  showKey?: boolean;
+}) {
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "time", dir: "desc" });
   const [fResult, setFResult] = useState<Result>("");
   const [fNode, setFNode] = useState("");
   const [fModel, setFModel] = useState("");
+  const [fKey, setFKey] = useState("");
   const [fUser, setFUser] = useState("");
   const [fText, setFText] = useState("");
   const [page, setPage] = useState(0);
@@ -27,12 +34,14 @@ export function FailedCallsTable({ items }: { items: TimeoutItem[] }) {
     Array.from(new Set(items.map((it) => pick(it) ?? "(없음)"))).sort((a, b) => a.localeCompare(b));
   const nodeOptions = useMemo(() => opts((it) => it.nodeNm), [items]);
   const modelOptions = useMemo(() => opts((it) => it.modelNm), [items]);
+  const keyOptions = useMemo(() => opts((it) => it.keyNm), [items]);
 
-  const hasFilter = !!(fResult || fNode || fModel || fUser.trim() || fText.trim());
+  const hasFilter = !!(fResult || fNode || fModel || fKey || fUser.trim() || fText.trim());
   const clearFilters = () => {
     setFResult("");
     setFNode("");
     setFModel("");
+    setFKey("");
     setFUser("");
     setFText("");
   };
@@ -44,6 +53,7 @@ export function FailedCallsTable({ items }: { items: TimeoutItem[] }) {
     if (fResult) list = list.filter((it) => (callStatus(it.statCd, it.errCtn) === "timeout") === (fResult === "timeout"));
     if (fNode) list = list.filter((it) => (it.nodeNm ?? "(없음)") === fNode);
     if (fModel) list = list.filter((it) => (it.modelNm ?? "(없음)") === fModel);
+    if (fKey) list = list.filter((it) => (it.keyNm ?? "(없음)") === fKey);
     if (u) list = list.filter((it) => (it.userId ?? "").toLowerCase().includes(u));
     if (t)
       list = list.filter(
@@ -57,9 +67,9 @@ export function FailedCallsTable({ items }: { items: TimeoutItem[] }) {
       if (sort.key === "wait") return ((a.latencyMs ?? -1) - (b.latencyMs ?? -1)) * mul;
       return (a.callTm ?? "").localeCompare(b.callTm ?? "") * mul;
     });
-  }, [items, fResult, fNode, fModel, fUser, fText, sort]);
+  }, [items, fResult, fNode, fModel, fKey, fUser, fText, sort]);
 
-  useEffect(() => { setPage(0); }, [fResult, fNode, fModel, fUser, fText, sort, items]);
+  useEffect(() => { setPage(0); }, [fResult, fNode, fModel, fKey, fUser, fText, sort, items]);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const curPage = Math.min(page, pageCount - 1);
@@ -104,6 +114,7 @@ export function FailedCallsTable({ items }: { items: TimeoutItem[] }) {
               <th>결과</th>
               <th>노드</th>
               <th>모델</th>
+              {showKey && <th>키</th>}
               <SortTh k="wait" label="대기" num />
               <th>사용자</th>
               <th className="to-col-q">질의</th>
@@ -136,6 +147,14 @@ export function FailedCallsTable({ items }: { items: TimeoutItem[] }) {
                   {modelOptions.map((o) => <option key={o} value={o}>{o}</option>)}
                 </select>
               </th>
+              {showKey && (
+                <th>
+                  <select className="qft-select" value={fKey} onChange={(e) => setFKey(e.target.value)} aria-label="키 필터">
+                    <option value="">전체</option>
+                    {keyOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </th>
+              )}
               <th />
               <th>
                 <input
@@ -172,6 +191,7 @@ export function FailedCallsTable({ items }: { items: TimeoutItem[] }) {
                   </td>
                   <td>{it.nodeNm ? <span className="qnode">{it.nodeNm}</span> : "—"}</td>
                   <td>{it.modelNm ? <span className="qmodel">{it.modelNm}</span> : "—"}</td>
+                  {showKey && <td>{it.keyNm ? <span className="qkey">{it.keyNm}</span> : "—"}</td>}
                   <td className="num mono">{fmtDuration(it.latencyMs)}</td>
                   <td className="mono">{it.userId ?? "—"}</td>
                   <td className="to-col-q">
@@ -186,7 +206,7 @@ export function FailedCallsTable({ items }: { items: TimeoutItem[] }) {
             })}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9}>
+                <td colSpan={showKey ? 10 : 9}>
                   <div className="top-empty">조건에 맞는 호출이 없습니다</div>
                 </td>
               </tr>

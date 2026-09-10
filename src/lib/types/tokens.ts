@@ -7,6 +7,7 @@ export interface TokenRow {
   traceId: string | null;
   nodeNm: string | null;
   modelNm: string | null;
+  keyNm: string | null;
   userId: string | null;
   inputTokens: number;
   outputTokens: number;
@@ -23,6 +24,7 @@ export interface TokenQuestion {
   traceId: string | null;
   nodes: string[];
   models: string[];
+  keys: string[];
   queryCtn: string | null;
   userId: string | null;
   calls: number;
@@ -39,6 +41,7 @@ export interface TokenFilter {
   userId?: string;
   nodeNm?: string;
   modelNm?: string;
+  keyNm?: string;
   traceId?: string;
   agentId?: string;
   skipQuestions?: boolean;
@@ -79,6 +82,9 @@ export interface TokenStatsResponse {
   buckets: TokenBucket[];
   byNode: TokenDimStat[];
   byModel: TokenDimStat[];
+  byKey: TokenDimStat[];
+  /** KEY_NM 컬럼이 실제로 있는지 — 없으면 키 관련 표시를 숨긴다. */
+  keyAvailable: boolean;
   topUsers: TopItem[];
   questions: TokenQuestion[];
   calls: TokenRow[];

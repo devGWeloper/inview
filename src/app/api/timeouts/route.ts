@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
     dateTo: sp.get("dateTo") || isoNoTz(now),
     nodeNm: sp.get("nodeNm") || undefined,
     modelNm: sp.get("modelNm") || undefined,
+    keyNm: sp.get("keyNm") || undefined,
     agentId,
     gran: parseGranularityParam(sp.get("g")),
   };

@@ -47,6 +47,7 @@ LLM 호출 1건 = 1행. GAIA 가 `sql/dml_insert_token_det.sql` 로 적재. **�
 | `TRACE_ID` | nullable — 액션 호출에만 있음. 표시용, 집계 대상 아님 |
 | `NODE_NM` | 호출한 GAIA 노드(`action`/`judge`/`setup_guide`…) — **주 집계 차원** |
 | `MODEL_NM` | 호출 LLM (현재 사내 Qwen, 변경 가능) |
+| `KEY_NM` | 호출에 쓴 **API 키 별칭(Tier)**. 같은 모델도 키마다 등급이 달라 키 단위로 갈라 본다. 출처가 GAIA 설정(`LLMModelConfig.key_nm`)뿐이라 미설정이면 NULL |
 | `USER_ID` | |
 | `INPUT_TOKENS`/`OUTPUT_TOKENS`/`TOTAL_TOKENS` | provider-neutral 명칭. OpenAI 호환 응답의 `prompt_tokens`/`completion_tokens` 매핑 |
 | `LATENCY_MS` | LLM 요청→응답 ms, **nullable**. 없으면 집계에서 자동 제외 |
@@ -66,6 +67,10 @@ LLM 호출 1건 = 1행. GAIA 가 `sql/dml_insert_token_det.sql` 로 적재. **�
 **컬럼 미존재 내성**: `fetchTokenStats` 는 시작 시 `SELECT STAT_CD, ERR_CTN ... WHERE 1=0` 으로
 컬럼 존재를 탐지(`hasStatus`)하고, 없으면 실패 관련 표현식을 상수로 대체한다.
 덕분에 ALTER · GAIA 배포 · 앱 배포 순서가 자유롭다.
+
+`KEY_NM` 도 같은 방식이다(`hasKeyNm`, 세 집계 모두 — `tokens.ts`/`timeouts.ts`/`tickStats.ts`).
+없으면 SELECT 목록·GROUP BY·WHERE 에서 통째로 빠지고 응답의 `keyAvailable: false` 로 화면이
+키 관련 표시(보드·컬럼·필터)를 숨긴다. **한 컬럼이 없다고 전 쿼리가 ORA-00904 로 죽으면 안 된다.**
 
 ## 멀티 에이전트 — Tokens / Timeout 두 화면만
 

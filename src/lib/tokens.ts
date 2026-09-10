@@ -62,7 +62,11 @@ function bucketExpr(g: Granularity): string {
   return `TRUNC(CALL_TM, 'HH24') + FLOOR(TO_NUMBER(TO_CHAR(CALL_TM, 'MI')) / 5) * 5 / 1440`;
 }
 
-export function buildWhere(filter: TokenFilter): { where: string; binds: Record<string, unknown> } {
+// hasKeyNm=false 면 KEY_NM 조건을 통째로 버린다 — 컬럼 없는 DB 에서 ORA-00904 로 전 쿼리가 죽는다.
+export function buildWhere(
+  filter: TokenFilter,
+  hasKeyNm = true
+): { where: string; binds: Record<string, unknown> } {
   const where: string[] = [];
   const binds: Record<string, unknown> = {};
   if (filter.dateFrom) {
@@ -85,6 +89,10 @@ export function buildWhere(filter: TokenFilter): { where: string; binds: Record<
     where.push(`MODEL_NM = :modelNm`);
     binds.modelNm = filter.modelNm;
   }
+  if (filter.keyNm && hasKeyNm) {
+    where.push(`KEY_NM = :keyNm`);
+    binds.keyNm = filter.keyNm;
+  }
   if (filter.traceId) {
     where.push(`TRACE_ID = :traceId`);
     binds.traceId = filter.traceId;
@@ -106,6 +114,8 @@ function emptyStats(filter: TokenFilter, g: Granularity, buckets: TokenBucket[])
     buckets,
     byNode: [],
     byModel: [],
+    byKey: [],
+    keyAvailable: false,
     topUsers: [],
     questions: [],
     calls: [],
@@ -141,7 +151,15 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       logger.warn("fetchTokenStats: STAT_CD/ERR_CTN 미존재 — 실패 호출 집계 생략", { err: String(e) });
     }
 
-    const { where, binds } = buildWhere(filter);
+    let hasKeyNm = true;
+    try {
+      await conn.execute("SELECT KEY_NM FROM TRX_TOKEN_DET WHERE 1 = 0", {}, opts);
+    } catch (e) {
+      hasKeyNm = false;
+      logger.warn("fetchTokenStats: KEY_NM 미존재 — 키 집계 생략", { err: String(e) });
+    }
+
+    const { where, binds } = buildWhere(filter, hasKeyNm);
 
     const run = async (
       name: string,
@@ -221,6 +239,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       });
     const byNode = dimFrom(await run("byNode", dimSql("NODE_NM")));
     const byModel = dimFrom(await run("byModel", dimSql("MODEL_NM")));
+    const byKey = hasKeyNm ? dimFrom(await run("byKey", dimSql("KEY_NM"))) : [];
 
     const crossSql =
       `SELECT NVL(NODE_NM, '(none)') AS NK, NVL(MODEL_NM, '(none)') AS MK,` +
@@ -236,6 +255,23 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       const totalTokens = num(r.T ?? r.t);
       nodeIdx.get(nk)?.sub.push({ key: mk, calls, totalTokens });
       modelIdx.get(mk)?.sub.push({ key: nk, calls, totalTokens });
+    }
+
+    // 키 행에는 모델 구성을 얹는다 — 같은 키가 여러 모델을 태우는지가 Tier 판단의 핵심.
+    if (hasKeyNm && byKey.length > 0) {
+      const keyCrossSql =
+        `SELECT NVL(KEY_NM, '(none)') AS KK, NVL(MODEL_NM, '(none)') AS MK,` +
+        ` COUNT(*) AS N, SUM(TOTAL_TOKENS) AS T` +
+        ` FROM TRX_TOKEN_DET${where}` +
+        ` GROUP BY NVL(KEY_NM, '(none)'), NVL(MODEL_NM, '(none)') ORDER BY T DESC`;
+      const keyIdx = new Map(byKey.map((d) => [d.key, d]));
+      for (const r of await run("keyModelCross", keyCrossSql)) {
+        keyIdx.get(String(r.KK ?? r.kk ?? "(none)"))?.sub.push({
+          key: String(r.MK ?? r.mk ?? "(none)"),
+          calls: num(r.N ?? r.n),
+          totalTokens: num(r.T ?? r.t),
+        });
+      }
     }
 
     const skipQ = filter.skipQuestions === true;
@@ -254,9 +290,10 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     const agg = (col: string) =>
       `LISTAGG(${col}, ',' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY CALL_TM)`;
     const questionsSql =
-      `SELECT QKEY, TRACE_ID, NODES, MODELS, ERRNODES, QCTN, USR, CALLS, P, C, T, LAST_TM FROM (` +
+      `SELECT QKEY, TRACE_ID, NODES, MODELS, KEYNMS, ERRNODES, QCTN, USR, CALLS, P, C, T, LAST_TM FROM (` +
         `SELECT TRACE_ID AS QKEY, TRACE_ID,` +
-        ` ${agg("NODE_NM")} AS NODES, ${agg("MODEL_NM")} AS MODELS, ${errNodeExpr} AS ERRNODES,` +
+        ` ${agg("NODE_NM")} AS NODES, ${agg("MODEL_NM")} AS MODELS,` +
+        ` ${hasKeyNm ? agg("KEY_NM") : "NULL"} AS KEYNMS, ${errNodeExpr} AS ERRNODES,` +
         ` MIN(QUERY_CTN) KEEP (DENSE_RANK FIRST ORDER BY NVL2(QUERY_CTN, 0, 1), CALL_TM) AS QCTN,` +
         ` MAX(USER_ID) AS USR, COUNT(*) AS CALLS,` +
         ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T,` +
@@ -264,6 +301,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
         ` FROM TRX_TOKEN_DET${grpWhere("TRACE_ID IS NOT NULL")} GROUP BY TRACE_ID` +
         ` UNION ALL ` +
         `SELECT 'token:' || TOKEN_ID AS QKEY, NULL AS TRACE_ID, NODE_NM AS NODES, MODEL_NM AS MODELS,` +
+        ` ${hasKeyNm ? "KEY_NM" : "NULL"} AS KEYNMS,` +
         ` ${hasStatus ? `CASE WHEN ${SQL_ERR_PRED} THEN NODE_NM END` : "NULL"} AS ERRNODES,` +
         ` QUERY_CTN AS QCTN,` +
         ` USER_ID AS USR, 1 AS CALLS,` +
@@ -276,6 +314,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       traceId: str(r.TRACE_ID ?? r.trace_id),
       nodes: dedupeCsv(str(r.NODES ?? r.nodes)),
       models: dedupeCsv(str(r.MODELS ?? r.models)),
+      keys: dedupeCsv(str(r.KEYNMS ?? r.keynms)),
       errorNodes: dedupeCsv(str(r.ERRNODES ?? r.errnodes)),
       queryCtn: str(r.QCTN ?? r.qctn),
       userId: str(r.USR ?? r.usr),
@@ -293,6 +332,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
         traceId: str(r.TRACE_ID ?? r.trace_id),
         nodeNm: str(r.NODE_NM ?? r.node_nm),
         modelNm: str(r.MODEL_NM ?? r.model_nm),
+        keyNm: str(r.KEY_NM ?? r.key_nm),
         userId: str(r.USER_ID ?? r.user_id),
         inputTokens: num(r.INPUT_TOKENS ?? r.input_tokens),
         outputTokens: num(r.OUTPUT_TOKENS ?? r.output_tokens),
@@ -308,7 +348,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     let calls: TokenRow[] = [];
     if (filter.traceId && !skipQ) {
       const callsSql =
-        `SELECT TOKEN_ID, TRACE_ID, NODE_NM, MODEL_NM, USER_ID,` +
+        `SELECT TOKEN_ID, TRACE_ID, NODE_NM, MODEL_NM${hasKeyNm ? ", KEY_NM" : ""}, USER_ID,` +
         ` INPUT_TOKENS, OUTPUT_TOKENS, TOTAL_TOKENS, LATENCY_MS, QUERY_CTN${statCols},` +
         ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS CALL_TM` +
         ` FROM TRX_TOKEN_DET WHERE TRACE_ID = :traceId` +
@@ -331,6 +371,8 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       buckets,
       byNode,
       byModel,
+      byKey,
+      keyAvailable: hasKeyNm,
       topUsers,
       questions,
       calls,

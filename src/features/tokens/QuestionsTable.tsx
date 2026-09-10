@@ -28,15 +28,18 @@ const sortVal = (r: TokenQuestion, k: SortKey): number | string =>
 export function QuestionsTable({
   questions,
   onExpand,
+  showKey = false,
 }: {
   questions: TokenQuestion[];
   onExpand: (traceId: string) => Promise<TokenRow[]>;
+  showKey?: boolean;
 }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "time", dir: "desc" });
   const [fTrace, setFTrace] = useState("");
   const [fUser, setFUser] = useState("");
   const [fNode, setFNode] = useState("");
   const [fModel, setFModel] = useState("");
+  const [fKey, setFKey] = useState("");
   const [page, setPage] = useState(0);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [cache, setCache] = useState<Record<string, TokenRow[] | "loading">>({});
@@ -49,13 +52,18 @@ export function QuestionsTable({
     () => Array.from(new Set(questions.flatMap((x) => x.models))).sort((a, b) => a.localeCompare(b)),
     [questions]
   );
+  const keyOptions = useMemo(
+    () => Array.from(new Set(questions.flatMap((x) => x.keys))).sort((a, b) => a.localeCompare(b)),
+    [questions]
+  );
 
-  const hasFilter = !!(fTrace.trim() || fUser.trim() || fNode || fModel);
+  const hasFilter = !!(fTrace.trim() || fUser.trim() || fNode || fModel || fKey);
   const clearFilters = () => {
     setFTrace("");
     setFUser("");
     setFNode("");
     setFModel("");
+    setFKey("");
   };
 
   const rows = useMemo(() => {
@@ -69,6 +77,7 @@ export function QuestionsTable({
     if (u) list = list.filter((x) => (x.userId ?? "").toLowerCase().includes(u));
     if (fNode) list = list.filter((x) => x.nodes.includes(fNode));
     if (fModel) list = list.filter((x) => x.models.includes(fModel));
+    if (fKey) list = list.filter((x) => x.keys.includes(fKey));
     const mul = sort.dir === "asc" ? 1 : -1;
     return [...list].sort((a, b) => {
       const va = sortVal(a, sort.key);
@@ -76,9 +85,9 @@ export function QuestionsTable({
       const c = typeof va === "string" ? va.localeCompare(vb as string) : (va as number) - (vb as number);
       return c * mul;
     });
-  }, [questions, fTrace, fUser, fNode, fModel, sort]);
+  }, [questions, fTrace, fUser, fNode, fModel, fKey, sort]);
 
-  useEffect(() => { setPage(0); }, [fTrace, fUser, fNode, fModel, sort, questions]);
+  useEffect(() => { setPage(0); }, [fTrace, fUser, fNode, fModel, fKey, sort, questions]);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const curPage = Math.min(page, pageCount - 1);
@@ -146,6 +155,7 @@ export function QuestionsTable({
               <th>USER</th>
               <th>NODE</th>
               <th>MODEL</th>
+              {showKey && <th>KEY</th>}
               <SortTh k="in" label="IN" num />
               <SortTh k="out" label="OUT" num />
               <SortTh k="total" label="TOTAL" num />
@@ -186,6 +196,14 @@ export function QuestionsTable({
                   {modelOptions.map((o) => <option key={o} value={o}>{o}</option>)}
                 </select>
               </th>
+              {showKey && (
+                <th>
+                  <select className="qft-select" value={fKey} onChange={(e) => setFKey(e.target.value)} aria-label="KEY 필터">
+                    <option value="">전체</option>
+                    {keyOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </th>
+              )}
               <th colSpan={4} />
             </tr>
           </thead>
@@ -238,6 +256,13 @@ export function QuestionsTable({
                         {r.models.length === 0 ? "—" : r.models.map((m) => <span key={m} className="qmodel">{m}</span>)}
                       </span>
                     </td>
+                    {showKey && (
+                      <td>
+                        <span className="qchips">
+                          {r.keys.length === 0 ? "—" : r.keys.map((k) => <span key={k} className="qkey">{k}</span>)}
+                        </span>
+                      </td>
+                    )}
                     <td className="num mono">{fmtInt(r.inputTokens)}</td>
                     <td className="num mono">{fmtInt(r.outputTokens)}</td>
                     <td className="num mono strong qtotal">
@@ -249,13 +274,13 @@ export function QuestionsTable({
                   {isOpen && (
                     <tr className="qsubrow">
                       <td />
-                      <td colSpan={9} className="qsub">
+                      <td colSpan={showKey ? 10 : 9} className="qsub">
                         {sub === "loading" || sub === undefined ? (
                           <span className="muted">불러오는 중…</span>
                         ) : sub.length === 0 ? (
                           <span className="muted">호출 내역 없음</span>
                         ) : (
-                          <CallsDetail calls={sub} originQuery={r.queryCtn} rowCalls={r.calls} />
+                          <CallsDetail calls={sub} originQuery={r.queryCtn} rowCalls={r.calls} showKey={showKey} />
                         )}
                       </td>
                     </tr>
@@ -329,10 +354,12 @@ function CallsDetail({
   calls,
   originQuery,
   rowCalls,
+  showKey,
 }: {
   calls: TokenRow[];
   originQuery: string | null;
   rowCalls: number;
+  showKey: boolean;
 }) {
   const ordered = useMemo(() => [...calls].reverse(), [calls]); // API 는 최신순 → 시간순으로
   const maxTok = Math.max(1, ...ordered.map((c) => c.totalTokens));
@@ -405,6 +432,7 @@ function CallsDetail({
                   <span className={"qnode" + (isFail ? " is-err" : "")}>{c.nodeNm ?? "—"}</span>
                   <span className="qcall-arrow" aria-hidden>→</span>
                   <span className="qmodel">{c.modelNm ?? "—"}</span>
+                  {showKey && c.keyNm && <span className="qkey" title="이 호출에 쓴 API 키 별칭(Tier)">{c.keyNm}</span>}
                   {isFail && (
                     <span className="qcall-status" title={c.errCtn ?? undefined}>
                       {st === "timeout" ? "타임아웃" : "실패"}

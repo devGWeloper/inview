@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
     userId: sp.get("userId") || undefined,
     nodeNm: sp.get("nodeNm") || undefined,
     modelNm: sp.get("modelNm") || undefined,
+    keyNm: sp.get("keyNm") || undefined,
     agentId,
   };
 

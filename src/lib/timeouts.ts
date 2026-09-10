@@ -42,6 +42,7 @@ export interface TimeoutFilter {
   dateTo?: string;
   nodeNm?: string;
   modelNm?: string;
+  keyNm?: string;
   agentId?: string;
   gran?: Granularity;
 }
@@ -58,7 +59,11 @@ function bucketExpr(g: Granularity): string {
   return `TRUNC(CALL_TM, 'HH24') + FLOOR(TO_NUMBER(TO_CHAR(CALL_TM, 'MI')) / 5) * 5 / 1440`;
 }
 
-function buildWhere(filter: TimeoutFilter): { where: string; binds: Record<string, unknown> } {
+// hasKeyNm=false 면 KEY_NM 조건을 버린다 — 컬럼 없는 DB 에서 전 쿼리가 ORA-00904 로 죽는다.
+function buildWhere(
+  filter: TimeoutFilter,
+  hasKeyNm = true
+): { where: string; binds: Record<string, unknown> } {
   const where: string[] = [];
   const binds: Record<string, unknown> = {};
   if (filter.dateFrom) {
@@ -76,6 +81,10 @@ function buildWhere(filter: TimeoutFilter): { where: string; binds: Record<strin
   if (filter.modelNm) {
     where.push(`MODEL_NM = :modelNm`);
     binds.modelNm = filter.modelNm;
+  }
+  if (filter.keyNm && hasKeyNm) {
+    where.push(`KEY_NM = :keyNm`);
+    binds.keyNm = filter.keyNm;
   }
   return { where: where.length ? " WHERE " + where.join(" AND ") : "", binds };
 }
@@ -99,7 +108,9 @@ function emptyStats(
     buckets,
     byNode: [],
     byModel: [],
+    byKey: [],
     byUser: [],
+    keyAvailable: false,
     items: [],
     modelVolume: [],
     topReasons: [],
@@ -124,7 +135,6 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
   const oracle = await getOracle();
   if (!oracle) return emptyStats(filter, g, emptyBuckets, false);
 
-  const { where, binds } = buildWhere(filter);
   let conn: Awaited<ReturnType<typeof oracle.getConnection>> | undefined;
   try {
     conn = await oracle.getConnection(cfg);
@@ -136,6 +146,16 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
       logger.warn("fetchTimeoutStats: STAT_CD/ERR_CTN 미존재 — 적재 전", { err: String(e) });
       return emptyStats(filter, g, emptyBuckets, false);
     }
+
+    let hasKeyNm = true;
+    try {
+      await conn.execute("SELECT KEY_NM FROM TRX_TOKEN_DET WHERE 1 = 0", {}, opts);
+    } catch (e) {
+      hasKeyNm = false;
+      logger.warn("fetchTimeoutStats: KEY_NM 미존재 — 키 집계 생략", { err: String(e) });
+    }
+
+    const { where, binds } = buildWhere(filter, hasKeyNm);
 
     const rowsOf = (r: { rows?: unknown }) => (r.rows ?? []) as Array<Record<string, unknown>>;
     const run = async (name: string, sql: string): Promise<Array<Record<string, unknown>>> => {
@@ -192,6 +212,7 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
       }));
     const byNode = dimFrom(await run("byNode", dimSql("NODE_NM")));
     const byModel = dimFrom(await run("byModel", dimSql("MODEL_NM")));
+    const byKey = hasKeyNm ? dimFrom(await run("byKey", dimSql("KEY_NM"))) : [];
     const byUser = dimFrom(await run("byUser", dimSql("USER_ID")));
 
     // byModel 과 달리 HAVING 이 없다 — "8천 건 중 0건" 인 모델도 분모로서 보여줘야 한다.
@@ -223,7 +244,8 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
     }));
 
     const itemSql =
-      `SELECT TOKEN_ID, TRACE_ID, NODE_NM, MODEL_NM, USER_ID, QUERY_CTN, LATENCY_MS, STAT_CD, ERR_CTN,` +
+      `SELECT TOKEN_ID, TRACE_ID, NODE_NM, MODEL_NM${hasKeyNm ? ", KEY_NM" : ""},` +
+      ` USER_ID, QUERY_CTN, LATENCY_MS, STAT_CD, ERR_CTN,` +
       ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS') AS CALL_TM` +
       ` FROM TRX_TOKEN_DET${where}${where ? " AND" : " WHERE"} ${SQL_ERR_PRED}` +
       ` ORDER BY CALL_TM DESC FETCH FIRST ${ITEM_LIMIT} ROWS ONLY`;
@@ -235,6 +257,7 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
         traceId: str(r.TRACE_ID ?? r.trace_id),
         nodeNm: str(r.NODE_NM ?? r.node_nm),
         modelNm: str(r.MODEL_NM ?? r.model_nm),
+        keyNm: str(r.KEY_NM ?? r.key_nm),
         userId: str(r.USER_ID ?? r.user_id),
         queryCtn: str(r.QUERY_CTN ?? r.query_ctn),
         latencyMs: lat == null ? null : num(lat),
@@ -256,7 +279,9 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
       buckets,
       byNode,
       byModel,
+      byKey,
       byUser,
+      keyAvailable: hasKeyNm,
       items,
       modelVolume,
       topReasons,

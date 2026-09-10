@@ -15,6 +15,7 @@ export interface TickFilter {
   userId?: string;
   nodeNm?: string;
   modelNm?: string;
+  keyNm?: string;
   view?: TickView;
   agentId?: string;
 }
@@ -39,6 +40,7 @@ export interface TickCall {
   traceId: string | null;
   nodeNm: string | null;
   modelNm: string | null;
+  keyNm: string | null;
   userId: string | null;
   inputTokens: number;
   outputTokens: number;
@@ -57,6 +59,7 @@ export interface TickStatsResponse {
   calls: TickCall[];
   truncated: boolean;
   statusAvailable?: boolean;
+  keyAvailable?: boolean;
   agentId?: string;
 }
 

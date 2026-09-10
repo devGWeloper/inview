@@ -45,6 +45,7 @@ export default function TimeoutsPage() {
   const [draftCustom, setDraftCustom] = useState(false);
   const [node, setNode] = useState("");
   const [model, setModel] = useState("");
+  const [keyNm, setKeyNm] = useState("");
   const [stats, setStats] = useState<TimeoutStatsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -58,7 +59,7 @@ export default function TimeoutsPage() {
   agentIdRef.current = agentId;
 
   const load = useCallback(
-    async (r: Range, nodeNm: string, modelNm: string, unit: TickUnit) => {
+    async (r: Range, nodeNm: string, modelNm: string, keyNmSel: string, unit: TickUnit) => {
       const requestFor = agentId; // 이 요청이 향한 에이전트
       setLoading(true);
       setErr(null);
@@ -67,6 +68,7 @@ export default function TimeoutsPage() {
       if (agentId) q.set("agent", agentId);
       if (nodeNm) q.set("nodeNm", nodeNm);
       if (modelNm) q.set("modelNm", modelNm);
+      if (keyNmSel) q.set("keyNm", keyNmSel);
       const g = granOfTickUnit(unit);
       if (g) q.set("g", g);
 
@@ -94,16 +96,17 @@ export default function TimeoutsPage() {
     if (!ready || !rangeReady || !unitReady) return;
     setNode("");
     setModel("");
+    setKeyNm("");
     setStats(null);
-    load(resolveRange(sel), "", "", unit);
+    load(resolveRange(sel), "", "", "", unit);
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [ready, rangeReady, unitReady, agentId]);
 
   useEffect(() => {
     if (!auto || sel.preset === "custom") return;
-    const id = setInterval(() => load(resolveRange(sel), node, model, unit), refreshMs(unit));
+    const id = setInterval(() => load(resolveRange(sel), node, model, keyNm, unit), refreshMs(unit));
     return () => clearInterval(id);
-  }, [auto, sel, node, model, unit, load]);
+  }, [auto, sel, node, model, keyNm, unit, load]);
 
   useEffect(() => {
     if (sel.preset === "custom" && sel.customFrom && sel.customTo) {
@@ -118,11 +121,11 @@ export default function TimeoutsPage() {
     setPreset(p);
     setDraftCustom(false);
     const r = unitFor(spanOfSel(next));
-    load(resolveRange(next), node, model, r);
+    load(resolveRange(next), node, model, keyNm, r);
   };
   const onUnit = (r: TickUnit) => {
     setUnit(r);
-    load(currentRange(), node, model, r);
+    load(currentRange(), node, model, keyNm, r);
   };
   const enterCustom = () => {
     if (!customFrom || !customTo) {
@@ -138,14 +141,18 @@ export default function TimeoutsPage() {
     const next: TimeRangeSel = { preset: "custom", customFrom, customTo };
     setCustom(customFrom, customTo);
     setDraftCustom(false);
-    load(resolveRange(next), node, model, unitFor(spanOfSel(next)));
+    load(resolveRange(next), node, model, keyNm, unitFor(spanOfSel(next)));
   };
-  const reload = (nodeNm: string, modelNm: string) => load(currentRange(), nodeNm, modelNm, unit);
-  const onNode = (k: string) => { const next = node === k ? "" : k; setNode(next); reload(next, model); };
-  const onModel = (k: string) => { const next = model === k ? "" : k; setModel(next); reload(node, next); };
+  const reload = (nodeNm: string, modelNm: string, keyNmSel: string) =>
+    load(currentRange(), nodeNm, modelNm, keyNmSel, unit);
+  const onNode = (k: string) => { const next = node === k ? "" : k; setNode(next); reload(next, model, keyNm); };
+  const onModel = (k: string) => { const next = model === k ? "" : k; setModel(next); reload(node, next, keyNm); };
+  const onKey = (k: string) => { const next = keyNm === k ? "" : k; setKeyNm(next); reload(node, model, next); };
 
   const customOpen = draftCustom || sel.preset === "custom";
-  const scope = [node && `노드 ${node}`, model && `모델 ${model}`].filter(Boolean).join(" · ");
+  const scope = [node && `노드 ${node}`, model && `모델 ${model}`, keyNm && `키 ${keyNm}`]
+    .filter(Boolean)
+    .join(" · ");
   const topNode = stats?.byNode[0];
 
   const tickCtl = (
@@ -213,7 +220,7 @@ export default function TimeoutsPage() {
         </div>
       </div>
 
-      {(node || model) && (
+      {(node || model || keyNm) && (
         <div className="to-scope">
           <span className="to-scope-label">조회 범위</span>
           {node && (
@@ -224,6 +231,11 @@ export default function TimeoutsPage() {
           {model && (
             <button type="button" className="to-chip is-model" onClick={() => onModel(model)}>
               모델 <b>{model}</b> ✕
+            </button>
+          )}
+          {keyNm && (
+            <button type="button" className="to-chip is-key" onClick={() => onKey(keyNm)}>
+              키 <b>{keyNm}</b> ✕
             </button>
           )}
         </div>
@@ -337,6 +349,15 @@ export default function TimeoutsPage() {
               selected={model}
               onSelect={onModel}
             />
+            {stats.keyAvailable && (
+              <DimCard
+                title="키별"
+                sub="어느 API 키(Tier)에서 끊겼나"
+                dims={stats.byKey}
+                selected={keyNm}
+                onSelect={onKey}
+              />
+            )}
             <section className="dash-card">
               <div className="dash-card-head">
                 <div className="dash-card-title-group">
@@ -362,7 +383,7 @@ export default function TimeoutsPage() {
               </div>
             </div>
             <div className="dash-card-body">
-              <FailedCallsTable items={stats.items} />
+              <FailedCallsTable items={stats.items} showKey={stats.keyAvailable} />
             </div>
           </section>
         </>

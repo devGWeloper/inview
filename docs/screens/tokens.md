@@ -26,7 +26,7 @@ GAIA LLM 호출의 토큰 사용량·속도. **에이전트별로 갈리는 두 
 테이블/드라이버/설정 없음 ⇒ 빈 stats(0) ⇒ 빈 차트(무해).
 
 latency 도 같이 집계한다: 버킷별 `avgLatencyMs`(`SUM/COUNT` 로 NULL 제외) · 전체 `avgLatencyMs` ·
-`byNode`/`byModel` 의 `avgLatencyMs`. **성공 호출만** 대상이다
+`byNode`/`byModel`/`byKey` 의 `avgLatencyMs`. **성공 호출만** 대상이다
 → [metrics.md](../architecture/metrics.md)
 
 ## 화면 — 두 부분
@@ -34,20 +34,24 @@ latency 도 같이 집계한다: 버킷별 `avgLatencyMs`(`SUM/COUNT` 로 NULL �
 ### 현황
 
 `TokenStatsCards`(KPI) · `TokenChart`(추이) · `TokenLatencyChart`(LLM 속도 추이) ·
-`TokenBreakdown`(노드별/모델별 리더보드).
+`TokenBreakdown`(노드별/모델별/키별 리더보드).
 
-`TokenBreakdown` 은 `byNode`/`byModel` 을 **별도 카드**(노드=파랑, 모델=보라)로 렌더한다 —
-순위 배지 + 큰 값 + 1위 대비 상대 바 + 비중%, 토큰/호출/토큰·호출/속도 공유 메트릭 토글,
+`TokenBreakdown` 은 `byNode`/`byModel`/`byKey` 를 **별도 카드**(노드=파랑, 모델=보라, 키=청록)로
+렌더한다 — 순위 배지 + 큰 값 + 1위 대비 상대 바 + 비중%, 토큰/호출/토큰·호출/속도 공유 메트릭 토글,
 행 클릭 = 필터.
 
 **노드×모델 교차 집계**(`TokenDimStat.sub`, 별도 `GROUP BY NODE_NM, MODEL_NM` 쿼리)로 각 노드가 실제
 쓴 모델 구성을 행 안에 칩+비중% 로 노출한다. 한 질문이 여러 노드/모델을 거치므로
 (예: actionRouterNode=qwen3.6 → SeasoningNode=qwen3.5) "노드=모델 1개" 로 오해하지 않게 하는 장치다.
 
+**키별(`KEY_NM`)** 카드는 `keyAvailable` 일 때만 나온다. 행 안 칩은 **모델 구성**(별도
+`GROUP BY KEY_NM, MODEL_NM`) — 한 Tier 키가 어느 모델을 태우고 있는지가 등급 판단의 핵심이라서다.
+머리말 조회 줄의 `KEY (전체)` 셀렉트와 행 클릭이 같은 서버 필터(`keyNm`)를 건다.
+
 ### 질문별 토큰 (`QuestionsTable`)
 
 **"질문" = `TRACE_ID` 하나.** 한 질문의 호출은 라우터→실행 노드처럼 여러 노드/모델을 거칠 수 있어
-`questions` 는 대표값(MAX) 대신 거쳐간 노드/모델 **전부**를 내린다(`nodes[]`/`models[]`,
+`questions` 는 대표값(MAX) 대신 거쳐간 노드/모델/키 **전부**를 내린다(`nodes[]`/`models[]`/`keys[]`,
 `LISTAGG ... ON OVERFLOW TRUNCATE` 후 JS 중복 제거, 첫 호출 순). 표에는 칩으로 나열.
 
 `questions` 는 **최신 `LAST_TM` desc 상위 500건**이다(토큰순이면 최근 질문이 잘려 보이는 착시가 있다).
@@ -58,8 +62,9 @@ null-trace 행은 한 질문 = 한 호출로 취급.
 `MIN ... KEEP (DENSE_RANK FIRST ORDER BY NVL2(QUERY_CTN,0,1), CALL_TM)`)을 내리고, 표의 질문 셀은
 **질의(크게) + TRACE_ID(작게) 2줄**로 그린다.
 
-표에는 **컬럼별 필터**(질문/USER 텍스트, NODE/MODEL 셀렉트 — 로드된 상위 질문 범위 내 클라이언트
-필터)와 **헤더 클릭 정렬**(LAST_TM/IN/OUT/TOTAL/CALLS, 재클릭 = 방향 토글, 기본 LAST_TM desc)이 붙는다.
+표에는 **컬럼별 필터**(질문/USER 텍스트, NODE/MODEL/KEY 셀렉트 — 로드된 상위 질문 범위 내 클라이언트
+필터. KEY 열은 `keyAvailable` 일 때만)와 **헤더 클릭 정렬**(LAST_TM/IN/OUT/TOTAL/CALLS,
+재클릭 = 방향 토글, 기본 LAST_TM desc)이 붙는다.
 
 ### 질문 펼침 (`CallsDetail`)
 
@@ -74,7 +79,7 @@ null-trace 행은 한 질문 = 한 호출로 취급.
 
 구성: **원본 질의 블록**(액센트 보더, 전체 노출 — 280자 초과 시만 3줄 접힘 + 더 보기 `QueryText`)을
 헤드라인으로 두고, 아래에 **호출 타임라인** — 요약 스트립(호출 수 · 노드 흐름 · 총 토큰 · 첫→마지막
-구간) + 시간순 `#N` 레일 + 호출 카드(노드→모델 · ⏱응답시간 · 직전 호출과의 간격 · 토큰 바).
+구간) + 시간순 `#N` 레일 + 호출 카드(노드→모델 · 키 칩 · ⏱응답시간 · 직전 호출과의 간격 · 토큰 바).
 호출 카드의 쿼리는 **원본과 다를 때만**(공백 정규화 비교) "이 호출의 쿼리" 로 다시 표시한다.
 
 `QUERY_CTN` 은 `calls` 쿼리와 `questions` 의 원본 질의 집계에서만 SELECT 한다.

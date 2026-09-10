@@ -14,6 +14,7 @@ export interface TimeoutItem {
   traceId: string | null;
   nodeNm: string | null;
   modelNm: string | null;
+  keyNm: string | null;
   userId: string | null;
   queryCtn: string | null;
   latencyMs: number | null;
@@ -41,7 +42,10 @@ export interface TimeoutStatsResponse {
   buckets: TimeoutBucket[];
   byNode: TimeoutDimStat[];
   byModel: TimeoutDimStat[];
+  byKey: TimeoutDimStat[];
   byUser: TimeoutDimStat[];
+  /** KEY_NM 컬럼이 실제로 있는지 — 없으면 키 관련 표시를 숨긴다. */
+  keyAvailable: boolean;
   items: TimeoutItem[];
   /** 호출 많은 순 상위 모델 — 실패가 0건인 모델도 포함한다(분모를 보여주는 게 목적). */
   modelVolume: TimeoutDimStat[];

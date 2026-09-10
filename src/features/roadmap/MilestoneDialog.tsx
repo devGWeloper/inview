@@ -5,20 +5,29 @@ import { Milestone, MILESTONE_STATUSES, MILESTONE_STATUS_LABEL, MilestoneStatus 
 import { STATE_CLASS } from "@/lib/roadmapTime";
 
 
-type WhenKind = "day" | "month" | "none";
+type WhenKind = "day" | "range" | "month" | "none";
 
-function splitWhen(when: string): { kind: WhenKind; day: string; month: string } {
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function splitWhen(when: string): { kind: WhenKind; day: string; month: string; from: string; to: string } {
   const s = (when ?? "").trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return { kind: "day", day: s, month: s.slice(0, 7) };
-  if (/^\d{4}-\d{2}$/.test(s)) return { kind: "month", day: "", month: s };
-  return { kind: "none", day: "", month: "" };
+  const r = s.match(/^(\d{4}-\d{2}-\d{2})~(\d{4}-\d{2}-\d{2})$/);
+  if (r) return { kind: "range", day: r[1], month: r[1].slice(0, 7), from: r[1], to: r[2] };
+  if (DAY_RE.test(s)) return { kind: "day", day: s, month: s.slice(0, 7), from: s, to: s };
+  if (/^\d{4}-\d{2}$/.test(s)) return { kind: "month", day: "", month: s, from: "", to: "" };
+  return { kind: "none", day: "", month: "", from: "", to: "" };
 }
 
 const WHEN_KINDS: { key: WhenKind; label: string }[] = [
   { key: "day", label: "날짜" },
+  { key: "range", label: "기간" },
   { key: "month", label: "월만" },
   { key: "none", label: "미정" },
 ];
+
+function dayCount(from: string, to: string): number {
+  return Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
+}
 
 export function MilestoneDialog({
   initial,
@@ -48,6 +57,8 @@ export function MilestoneDialog({
   const [kind, setKind] = useState<WhenKind>(seed.kind);
   const [day, setDay] = useState(seed.day);
   const [month, setMonth] = useState(seed.month);
+  const [from, setFrom] = useState(seed.from || defaultDay);
+  const [to, setTo] = useState(seed.to || defaultDay);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const nameRef = useRef<HTMLInputElement>(null);
@@ -61,7 +72,15 @@ export function MilestoneDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, saving]);
 
-  const when = kind === "day" ? day : kind === "month" ? month : "";
+  const rangeOk = DAY_RE.test(from) && DAY_RE.test(to) && to >= from;
+  const when =
+    kind === "day"
+      ? day
+      : kind === "range"
+        ? rangeOk ? (to === from ? from : `${from}~${to}`) : ""
+        : kind === "month"
+          ? month
+          : "";
   const nameOk = name.trim() !== "";
   const whenOk = kind === "none" || when !== "";
   const canSave = nameOk && whenOk && !saving;
@@ -153,6 +172,35 @@ export function MilestoneDialog({
                 required
                 readOnly={readOnly}
               />
+            )}
+            {kind === "range" && (
+              <div className="rm-f-range">
+                <input
+                  className="rm-f-in rm-f-date"
+                  type="date"
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                  aria-label="시작 날짜"
+                  required
+                  readOnly={readOnly}
+                />
+                <span className="rm-f-range-sep" aria-hidden>~</span>
+                <input
+                  className="rm-f-in rm-f-date"
+                  type="date"
+                  value={to}
+                  min={from || undefined}
+                  onChange={(e) => setTo(e.target.value)}
+                  aria-label="종료 날짜"
+                  required
+                  readOnly={readOnly}
+                />
+                {rangeOk ? (
+                  <span className="rm-f-range-n">{dayCount(from, to)}일</span>
+                ) : from && to ? (
+                  <span className="rm-f-range-n bad">종료일이 시작일보다 빠릅니다</span>
+                ) : null}
+              </div>
             )}
             {kind === "month" && (
               <input

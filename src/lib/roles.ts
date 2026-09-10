@@ -66,6 +66,7 @@ export const FIELD_ALLOW_PREFIXES: string[] = [
   "/api/agents",
   "/roadmap",
   "/api/roadmap",
+  "/api/holidays",
   "/403",
 ];
 

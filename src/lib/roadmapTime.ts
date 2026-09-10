@@ -1,9 +1,10 @@
 
 // 로드맵 시점 해석. 순수 함수만 둘 것 — 서버·클라이언트가 같이 쓴다.
 
+import { HolidayOverlay, holidayOf } from "./holidays";
 import { Milestone, MilestoneStatus } from "./types";
 
-export type WhenPrecision = "day" | "month";
+export type WhenPrecision = "day" | "month" | "range";
 
 export interface WhenSpan {
   start: number;
@@ -17,9 +18,8 @@ export interface WhenSpan {
 
 const MS_DAY = 86_400_000;
 
+// 주는 일요일부터 시작한다 — 이 배열이 헤더 순서이자 getDay() 색인이다.
 export const WEEKDAY_KO = ["일", "월", "화", "수", "목", "금", "토"] as const;
-
-export const WEEK_HEADER_KO = ["월", "화", "수", "목", "금", "토", "일"] as const;
 
 function at(y: number, monthIdx: number, day = 1): number {
   return new Date(y, monthIdx, day).getTime();
@@ -27,9 +27,31 @@ function at(y: number, monthIdx: number, day = 1): number {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
+const MAX_RANGE_DAYS = 366;
+
 export function parseWhen(raw: string): WhenSpan | null {
   const s = (raw ?? "").trim();
   if (!s) return null;
+
+  if (s.includes("~")) {
+    const parts = s.split("~");
+    if (parts.length !== 2) return null;
+    const a = parseWhen(parts[0]);
+    const b = parseWhen(parts[1]);
+    if (!a || !b || a.precision !== "day" || b.precision !== "day") return null;
+    if (b.start < a.start) return null;
+    if (b.start === a.start) return a;
+    if (b.start - a.start > MAX_RANGE_DAYS * MS_DAY) return null;
+    return {
+      start: a.start,
+      end: b.end,
+      precision: "range",
+      label: `${a.label}~${b.label}`,
+      longLabel: `${a.longLabel} ~ ${b.longLabel}`,
+      year: a.year,
+      monthIdx: a.monthIdx,
+    };
+  }
 
   const parts = s.split(/[-./\s]+/).filter(Boolean);
   if (parts.length !== 2 && parts.length !== 3) return null;
@@ -68,22 +90,84 @@ export function parseWhen(raw: string): WhenSpan | null {
   };
 }
 
+/** 시점이 이 달에 하루라도 걸치는가. 기간이 달을 넘길 수 있어 시작 달만 봐선 안 된다. */
+export function spanTouchesMonth(span: WhenSpan, year: number, monthIdx: number): boolean {
+  return span.start < at(year, monthIdx + 1) && span.end > at(year, monthIdx);
+}
+
+export function spanTouchesYear(span: WhenSpan, year: number): boolean {
+  return span.start < at(year + 1, 0) && span.end > at(year, 0);
+}
+
+/** 달력 칸에 칠할 날들. 월 정밀도는 확정일이 없으므로 빈 배열. */
+export function spanDayKeys(span: WhenSpan): string[] {
+  if (span.precision === "month") return [];
+  const out: string[] = [];
+  const d = new Date(span.start);
+  while (d.getTime() < span.end) {
+    out.push(dayKeyOf(d.getTime()));
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
+/** 기간 항목이 달력에서 늘 같은 줄에 놓이도록 줄 번호를 준다.
+    한 칸에서만 순서를 정하면 다른 항목이 끼는 날마다 막대가 위아래로 튄다. */
+export function assignLanes(items: ResolvedMilestone[]): Map<string, number> {
+  const ranges = items
+    .filter((i) => i.span?.precision === "range")
+    .sort((a, b) => a.span!.start - b.span!.start || b.span!.end - a.span!.end);
+
+  const laneEnd: number[] = [];
+  const out = new Map<string, number>();
+  for (const it of ranges) {
+    const { start, end } = it.span!;
+    let lane = laneEnd.findIndex((e) => e <= start);
+    if (lane === -1) lane = laneEnd.length;
+    laneEnd[lane] = end;
+    out.set(it.milestone.id, lane);
+  }
+  return out;
+}
+
+export function isSpanStart(span: WhenSpan, ms: number): boolean {
+  return dayKeyOf(span.start) === dayKeyOf(ms);
+}
+
+export function isSpanEnd(span: WhenSpan, ms: number): boolean {
+  return dayKeyOf(span.end - MS_DAY) === dayKeyOf(ms);
+}
+
+/** 년 보기 미니 목록의 날짜 칸 — 그 달 카드 안이라 일(日)만 적는다. */
+export function miniDateLabel(span: WhenSpan): string {
+  if (span.precision === "month") return "–";
+  const a = new Date(span.start);
+  if (span.precision === "day") return pad(a.getDate());
+  const b = new Date(span.end - MS_DAY);
+  const tail =
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
+      ? pad(b.getDate())
+      : `${pad(b.getMonth() + 1)}.${pad(b.getDate())}`;
+  return `${pad(a.getDate())}~${tail}`;
+}
+
 export interface CalendarDay {
   ms: number;
   day: number;
   inMonth: boolean;
   isToday: boolean;
   weekday: number;
+  holiday: string | null;
 }
 
 export function buildMonthGrid(
   year: number,
   monthIdx: number,
   now: number,
-  minWeeks = 0
+  minWeeks = 0,
+  extra?: HolidayOverlay
 ): CalendarDay[][] {
-  const first = new Date(year, monthIdx, 1);
-  const lead = (first.getDay() + 6) % 7;
+  const lead = new Date(year, monthIdx, 1).getDay();
   const start = at(year, monthIdx, 1 - lead);
 
   const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
@@ -94,12 +178,14 @@ export function buildMonthGrid(
   for (let i = 0; i < total; i++) {
     const dt = new Date(start);
     dt.setDate(dt.getDate() + i);
+    const key = dayKeyOf(dt.getTime());
     const cell: CalendarDay = {
       ms: dt.getTime(),
       day: dt.getDate(),
       inMonth: dt.getFullYear() === year && dt.getMonth() === monthIdx,
-      isToday: dayKeyOf(dt.getTime()) === todayKey,
+      isToday: key === todayKey,
       weekday: dt.getDay(),
+      holiday: holidayOf(key, extra),
     };
     if (i % 7 === 0) weeks.push([]);
     weeks[weeks.length - 1].push(cell);

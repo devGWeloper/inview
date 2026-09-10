@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Milestone, Roadmap } from "@/lib/types";
+import { EMPTY_HOLIDAYS, HolidayDay, HolidayDoc, Milestone, Roadmap } from "@/lib/types";
 import { dayKeyOf, initialMonth, resolveMilestones, shiftMonth } from "@/lib/roadmapTime";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { CalMode, RoadmapCalendar } from "@/features/roadmap/RoadmapCalendar";
 import { MilestoneDialog } from "@/features/roadmap/MilestoneDialog";
+import { HolidayDialog } from "@/features/roadmap/HolidayDialog";
 
 
 type Dialog = { mode: "create" } | { mode: "edit"; id: string } | null;
@@ -16,6 +17,8 @@ export default function RoadmapPage() {
   const canEdit = !!user && user.role === "ADMIN" && user.global === true;
 
   const [rows, setRows] = useState<Milestone[]>([]);
+  const [holidays, setHolidays] = useState<HolidayDoc>(EMPTY_HOLIDAYS);
+  const [holidayOpen, setHolidayOpen] = useState(false);
   const [updatedAt, setUpdatedAt] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -35,10 +38,14 @@ export default function RoadmapPage() {
     let alive = true;
     (async () => {
       try {
-        const d = await apiJson<{ roadmap: Roadmap }>("/api/roadmap", { cache: "no-store" });
+        const [d, h] = await Promise.all([
+          apiJson<{ roadmap: Roadmap }>("/api/roadmap", { cache: "no-store" }),
+          apiJson<{ holidays: HolidayDoc }>("/api/holidays", { cache: "no-store" }),
+        ]);
         if (!alive) return;
         setRows(asArray<Milestone>(d.roadmap?.milestones));
         setUpdatedAt(d.roadmap?.updatedAt ?? "");
+        setHolidays({ days: asArray<HolidayDay>(h.holidays?.days), updatedAt: h.holidays?.updatedAt ?? "" });
       } catch (e) {
         if (alive) setLoadError(errMessage(e));
       } finally {
@@ -51,6 +58,10 @@ export default function RoadmapPage() {
   }, []);
 
   const items = useMemo(() => (now === null ? [] : resolveMilestones(rows, now)), [rows, now]);
+  const overlay = useMemo(
+    () => Object.fromEntries(holidays.days.map((d) => [d.date, d.name])),
+    [holidays]
+  );
 
   useEffect(() => {
     if (now === null || loading || view !== null) return;
@@ -96,6 +107,24 @@ export default function RoadmapPage() {
       setRows(asArray<Milestone>(d.roadmap?.milestones));
       setUpdatedAt(d.roadmap?.updatedAt ?? "");
       setDialog(null);
+    } catch (e) {
+      setSaveError(errMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveHolidays(days: HolidayDay[]) {
+    setSaving(true);
+    setSaveError("");
+    try {
+      const d = await apiJson<{ holidays: HolidayDoc }>("/api/holidays", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days }),
+      });
+      setHolidays({ days: asArray<HolidayDay>(d.holidays?.days), updatedAt: d.holidays?.updatedAt ?? "" });
+      setHolidayOpen(false);
     } catch (e) {
       setSaveError(errMessage(e));
     } finally {
@@ -167,6 +196,7 @@ export default function RoadmapPage() {
             monthIdx={view.monthIdx}
             now={now}
             selectedId={selectedId}
+            extra={overlay}
             onMove={move}
             onToday={goToday}
             onMode={setMode}
@@ -175,11 +205,25 @@ export default function RoadmapPage() {
               setMode("month");
             }}
             onPick={pickFromCalendar}
+            onHolidays={canEdit ? () => { setSaveError(""); setHolidayOpen(true); } : null}
           />
         </>
       )}
 
       {updatedAt && <p className="rm-foot">마지막 수정 {formatStamp(updatedAt)}</p>}
+
+      {holidayOpen && (
+        <HolidayDialog
+          days={holidays.days}
+          defaultDay={view ? defaultDayFor(view, now) : ""}
+          saving={saving}
+          error={saveError}
+          onSave={saveHolidays}
+          onClose={() => {
+            if (!saving) setHolidayOpen(false);
+          }}
+        />
+      )}
 
       {dialogOpen && (
         <MilestoneDialog

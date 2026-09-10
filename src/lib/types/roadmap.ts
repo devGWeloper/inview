@@ -25,3 +25,16 @@ export interface Roadmap {
 }
 
 export const DEFAULT_ROADMAP: Roadmap = { milestones: [], updatedAt: "" };
+
+/** 운영자가 넣는 임시공휴일. 내장 표(`lib/holidays.ts`) 위에 얹힌다. */
+export interface HolidayDay {
+  date: string;
+  name: string;
+}
+
+export interface HolidayDoc {
+  days: HolidayDay[];
+  updatedAt: string;
+}
+
+export const EMPTY_HOLIDAYS: HolidayDoc = { days: [], updatedAt: "" };

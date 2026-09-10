@@ -121,6 +121,33 @@
 .rm-cal-mode:hover { background: var(--surface-3); color: var(--text-2); }
 .rm-cal-mode.on { background: var(--text); color: #fff; }
 
+.rm-cal-nohol {
+  margin-left: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  border: 1px dashed var(--border);
+  border-radius: 99px;
+  padding: 3px 9px;
+  cursor: default;
+}
+
+/* 임시공휴일 버튼 - ADMIN 에게만. 이게 있으면 '오늘' 의 auto 를 이 버튼이 넘겨받는다 */
+.rm-cal-hol-btn {
+  appearance: none;
+  margin-left: auto;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 650;
+  padding: 5px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.rm-cal-hol-btn:hover { border-style: solid; border-color: var(--accent); color: var(--accent); }
+.rm-cal-hol-btn + .rm-cal-today { margin-left: 6px; }
+
 .rm-cal-today {
   appearance: none;
   margin-left: auto;
@@ -154,16 +181,18 @@
 .rm-cal-loose-items { display: flex; flex-wrap: wrap; gap: 5px; }
 
 .rm-cal-head, .rm-cal-week { display: grid; grid-template-columns: repeat(7, 1fr); }
+.rm-cal-week { overflow: hidden; }
 .rm-cal-wd {
   padding: 7px 0;
   text-align: center;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-3);
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
 }
-.rm-cal-wd.off { color: var(--text-muted); }
+.rm-cal-wd.sun { color: #b42318; }
+.rm-cal-wd.sat { color: #1d4ed8; }
 
 /* ⚠️ 칸 높이는 넉넉히. 74px 이었을 때 "위아래로 짜부돼 있다" 는 지적을 받았다.
    달력이 이 화면의 전부이므로 세로 공간을 아낄 이유가 없다. */
@@ -182,23 +211,48 @@
 /* 이번 달이 아닌 날은 있는 줄만 알면 된다 — 옅게 */
 .rm-cal-day.out { background: var(--surface-2); }
 .rm-cal-day.out .rm-cal-n { color: var(--text-muted); opacity: 0.6; }
+/* ⚠️ 높이를 고정할 것 — '오늘' 은 날짜에 알약 배경이 붙어 2px 더 높다.
+   그대로 두면 그 칸만 아래 내용이 밀려 기간 막대가 오늘을 지날 때 턱이 진다. */
+.rm-cal-hd { display: flex; align-items: center; gap: 6px; min-width: 0; height: 24px; flex: 0 0 auto; }
 .rm-cal-n {
   font-family: var(--mono);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
 .rm-cal-day.sun .rm-cal-n { color: #b42318; }
 .rm-cal-day.sat .rm-cal-n { color: #1d4ed8; }
+/* 공휴일 - 일요일과 같은 빨강. 이름은 칸 안에 그대로 적는다(118px 이면 들어간다) */
+.rm-cal-day.hol .rm-cal-n { color: #b42318; }
+.rm-cal-hol {
+  font-size: 11px;
+  font-weight: 700;
+  color: #b42318;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.rm-cal-day.out .rm-cal-hol { opacity: 0.45; }
 /* 오늘 — 이 화면에서 보라는 '오늘' 전용이다 */
-.rm-cal-day.today { background: #faf7ff; box-shadow: inset 0 0 0 2px var(--rm-today); }
+/* ⚠️ 테두리를 box-shadow 로 그리면 칸을 가로지르는 기간 막대가 그 위에 얹혀 테두리가 토막 난다.
+   위치 지정된 ::after 는 막대(비위치 자식)보다 나중에 칠해지므로 테두리가 끊기지 않는다. */
+.rm-cal-day.today { background: #faf7ff; position: relative; z-index: 1; }
+.rm-cal-day.today::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border: 2px solid var(--rm-today);
+  pointer-events: none;
+}
 .rm-cal-day.today .rm-cal-n {
   color: #fff;
   background: var(--rm-today);
   border-radius: 99px;
   padding: 1px 7px;
-  align-self: flex-start;
 }
 .rm-cal-items { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 
@@ -266,20 +320,21 @@
 .rm-mini-wk, .rm-mini-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
 .rm-mini-wd {
   text-align: center;
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 700;
   color: var(--text-muted);
   padding-bottom: 2px;
 }
-.rm-mini-wd.off { opacity: 0.6; }
+.rm-mini-wd.sun { color: #b42318; }
+.rm-mini-wd.sat { color: #1d4ed8; }
 /* 날짜 칸 — 항목이 있으면 상태 색으로 채운다. 이름은 아래 목록이 맡는다. */
 .rm-mini-d {
   display: grid;
   place-items: center;
-  height: 27px;
+  height: 30px;
   border-radius: 6px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   color: var(--text-3);
   position: relative;
@@ -287,6 +342,7 @@
 .rm-mini-d.out { visibility: hidden; }
 .rm-mini-d.sun { color: #b42318; }
 .rm-mini-d.sat { color: #1d4ed8; }
+.rm-mini-d.hol { color: #b42318; }
 .rm-mini-d.today { box-shadow: inset 0 0 0 1.5px var(--rm-today); color: var(--rm-today); font-weight: 700; }
 button.rm-mini-d {
   appearance: none;
@@ -372,6 +428,20 @@ button.rm-mini-d {
 .rm-cal-loose .rm-chip { width: auto; }
 /* 월 보기 칸은 넓다 — 칩도 그만큼 키워 이름이 잘리지 않게 한다 */
 .rm-chip.big { padding: 5px 9px; font-size: 12px; }
+/* 기간 항목 - 칸마다 끊긴 칩이 아니라 하나의 막대로 이어 보이게 한다.
+   가운데 칸은 좌우로 칸 경계만큼 삐져나오고 .rm-cal-week 가 그걸 잘라 준다. */
+/* ⚠️ 기간 막대는 세 가지를 동시에 지켜야 한 줄로 이어 보인다.
+   ① width:auto — width:100% 면 음수 margin-right 가 먹지 않아 오른쪽이 8px 모자란 채로 끌린다
+   ② 고정 높이 — 이름이 있는 칸(26px)과 없는 칸(24px)이 다르면 주마다 위아래로 2px 턱이 진다
+   ③ 줄 번호(assignLanes) — 없으면 다른 항목이 끼는 날마다 막대가 아랫줄로 밀린다 */
+.rm-chip.span { width: auto; height: 26px; padding-top: 0; padding-bottom: 0; border-radius: 0; }
+/* 그 칸엔 없지만 위 줄을 차지한 기간이 있을 때 자리만 잡아 주는 빈 줄 */
+.rm-cal-lane { display: block; height: 26px; flex: 0 0 auto; }
+.rm-chip.span.s { border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
+.rm-chip.span.e { border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
+.rm-chip.span:not(.s) { margin-left: -8px; padding-left: 9px; }
+.rm-chip.span:not(.e) { margin-right: -8px; padding-right: 9px; }
+
 /* 맨 아래 '일정 미정' 줄은 격자 밖이라 위쪽 경계를 갖는다 */
 .rm-cal-loose.bottom { border-bottom: 0; border-top: 1px solid var(--border); }
 
@@ -456,7 +526,74 @@ button.rm-mini-d {
 .rm-f-in::placeholder { color: var(--text-muted); }
 .rm-f-in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .rm-f-date { font-family: var(--mono); font-size: 13px; }
+.rm-f-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rm-f-range .rm-f-date { flex: 0 1 auto; }
+.rm-f-range-sep { color: var(--text-muted); font-weight: 700; }
+.rm-f-range-n {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.rm-f-range-n.bad { color: var(--err); }
+
 .rm-f-note { margin: 0; font-size: 11.5px; color: var(--text-muted); }
+.rm-f-note.warn { color: var(--err); font-weight: 650; }
+
+.rm-hol-add { display: flex; align-items: center; gap: 8px; }
+.rm-hol-add .rm-f-date { flex: 0 0 auto; }
+.rm-hol-add .rm-f-in:not(.rm-f-date) { flex: 1 1 auto; min-width: 0; }
+.rm-hol-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 232px;
+  overflow-y: auto;
+}
+.rm-hol-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: var(--surface);
+}
+.rm-hol-d {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.rm-hol-n {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rm-hol-x {
+  appearance: none;
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.rm-hol-x:hover { background: var(--err-soft); color: var(--err); }
 .rm-modal-err {
   margin: 0;
   font-size: 12.5px;
@@ -532,7 +669,7 @@ button.rm-mini-d {
   .rm-chip-dot { width: 5px; height: 5px; }
   .rm-year { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
   .rm-mini { padding: 10px 11px 12px; }
-  .rm-mini-d { height: 23px; font-size: 10px; }
+  .rm-mini-d { height: 26px; font-size: 11.5px; }
   .rm-cal-modes { margin-left: 8px; }
 }
 

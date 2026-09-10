@@ -10,7 +10,7 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const FILE = path.join(DATA_DIR, "roadmap.json");
 
 const MAX_NAME = 80;
-const MAX_WHEN = 20;
+const MAX_WHEN = 24;
 const MAX_DESC = 200;
 const MAX_ITEMS = 300;
 

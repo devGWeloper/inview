@@ -30,7 +30,7 @@ import 금지**.
 - `Role` · `ROLE_LABEL` · `roleAtLeast(role, min)`
 - `ROUTE_RULES` — 경로 prefix → 최소 권한. `requiredRoleForPath()`
 - **`canAccessPath(role, pathname)` 이 경로 인가의 유일한 진입점**.
-  미들웨어의 실제 차단과 `TabNav` 의 탭 노출이 같은 함수를 쓴다. 탭별 `minRole` 목록을 따로 두면
+  미들웨어의 실제 차단과 사이드바 메뉴 노출(`nav.ts` 의 `visibleNav()`)이 같은 함수를 쓴다. 메뉴별 `minRole` 목록을 따로 두면
   `ROUTE_RULES` 와 두 벌이 되어 "메뉴엔 보이는데 누르면 403" 이 생긴다
 - `resolveScope()` / `canViewAgent()` / `canManageAgent()` / `canActOnAccount()` / `isLockedScope()`
 - `isBizPath()` — 기본 에이전트 전용 화면 목록
@@ -141,5 +141,6 @@ FIELD 의 홈은 `/` 가 아니라 `/insights`(`homePathFor`). 로그인 페이�
 
 ## 클라이언트
 
-`AuthProvider`(`useAuth()`) → `AppChrome`(상단바/푸터 셸, `/login` 은 셸 없이) → `UserMenu`.
+`AuthProvider`(`useAuth()`) → `AppChrome`(상단바·사이드바·푸터 셸, `/login` 은 셸 없이) → `UserMenu`
+(비밀번호 변경·로그아웃만. 관리 메뉴는 사이드바).
 mutation fetch 는 세션 쿠키 자동 전송에 의존한다.

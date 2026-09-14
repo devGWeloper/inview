@@ -306,24 +306,30 @@
 .tick-call-flag.timeout { color: var(--err); background: var(--err-soft); }
 .tick-call-flag.error { color: var(--fail); background: var(--fail-soft); }
 
-/* ── 에이전트 전환 셀렉터 (상단바) ─────────────────────────────────── */
-/* .usermenu-* (위 "유저 메뉴" 섹션)와 짝을 이루는 상단바 드롭다운 — 톤을 맞춘다 */
-.agent-switch { position: relative; }
+/* 에이전트 전환 — 사이드바 맨 위. 에이전트가 보이는 메뉴를 정하므로 메뉴 목록 바로 위에 둔다 */
+.agent-switch { position: relative; flex: none; }
 .agent-switch-btn {
-  display: flex; align-items: center; gap: 6px;
-  height: 30px; padding: 0 9px;
-  border: 1px solid var(--border); border-radius: 8px;
-  background: var(--surface); color: var(--text);
-  font-size: 12px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; height: 46px; padding: 0 10px 0 8px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface-2); color: var(--text);
+  text-align: left; white-space: nowrap; cursor: pointer;
   transition: background .12s, border-color .12s, box-shadow .12s;
 }
 .agent-switch-btn:hover { background: var(--surface-3); border-color: var(--border-strong); }
 .agent-switch-btn.open { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .agent-switch-emoji { font-size: 14px; line-height: 1; }
+.agent-switch-btn > .agent-switch-emoji {
+  flex: none; width: 28px; height: 28px; border-radius: 7px;
+  display: grid; place-items: center; font-size: 16px;
+  background: linear-gradient(135deg, #eef3ff, #f5ecff);
+}
+.agent-switch-btn .agent-switch-label { flex: 1; }
+.agent-switch-btn .agent-switch-name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
 .agent-switch-caret { font-size: 9px; opacity: .6; }
 .agent-switch-menu {
-  position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
-  min-width: 220px; margin: 0; padding: 4px; list-style: none;
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+  min-width: 220px; width: 100%; margin: 0; padding: 4px; list-style: none;
   border: 1px solid var(--border); border-radius: 12px;
   background: var(--surface); box-shadow: 0 12px 40px -12px rgba(17,24,39,.35), 0 2px 8px rgba(17,24,39,.06);
   overflow: hidden; animation: usermenu-in .12s ease-out;
@@ -339,7 +345,7 @@
 .agent-switch-meta { font-size: 10.5px; color: var(--text-muted); }
 .nav-agent.static { cursor: default; }
 
-/* 결속 에이전트가 설정에 없을 때의 안내 띠 (상단바 아래 전폭) */
+/* 결속 에이전트가 설정에 없을 때의 안내 띠 (본문 맨 위 전폭) */
 .agent-scope-warn {
   display: flex; align-items: flex-start; gap: 8px;
   padding: 10px 22px; font-size: 12.5px; line-height: 1.5;

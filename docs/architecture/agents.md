@@ -115,9 +115,10 @@ LLM 호출 1건 = 1행. GAIA 가 `sql/dml_insert_token_det.sql` 로 적재. **�
 ### 화면
 
 `AgentScopeProvider`(`src/components/agents/`)가 선택 상태를 쥐고 `localStorage` 에 영속한다.
-상단바 `AgentSelector`(에이전트 1개면 미렌더).
+사이드바 맨 위 `AgentSelector`(에이전트 1개면 미렌더).
 
-- 비기본 에이전트를 고르면 `TabNav` 가 **Tokens/Timeout 만** 남기고 우측 칩은 그 에이전트의
+- 비기본 에이전트를 고르면 사이드바(`visibleNav()`, `isBizPath` 기준)가 BIZ 화면을 감춰
+  **Tokens/Timeout** 과 BIZ 아닌 관리 메뉴만 남기고 우측 칩은 그 에이전트의
   프로필(`/agent?agent=<id>`)로 간다
 - **BIZ 계열 경로로 이동하면 기본 에이전트로 스냅백**한다 — 숨긴 화면에 남의 에이전트 컨텍스트가
   걸린 상태를 만들지 않는다. 스냅백 effect 의 deps 는 **`[pathname]` 뿐**이다

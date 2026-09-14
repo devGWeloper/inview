@@ -1,0 +1,185 @@
+/* 좌측 사이드바 · Agent 근무 현황 칩 */
+/* ---------------- sidebar ---------------- */
+.sidenav {
+  flex: none;
+  width: var(--side-w);
+  transition: width .2s ease;
+  display: flex; flex-direction: column; gap: 8px;
+  min-height: 0;
+  padding: 12px 10px 10px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+/* 스크롤은 메뉴 목록만 — 에이전트 전환 드롭다운이 사이드바 밖으로 나가야 해서 aside 는 overflow 를 두지 않는다.
+   음수 margin + padding 은 활성 표시 막대(left:-10px)가 잘리지 않게 하는 것 */
+.sidenav-scroll {
+  flex: 1; min-height: 0;
+  overflow-y: auto; overflow-x: hidden;
+  margin: 0 -10px; padding: 0 10px;
+}
+.sidenav-label {
+  padding: 12px 10px 6px;
+  font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;
+  color: var(--text-muted); white-space: nowrap;
+}
+.sidenav-group:first-child .sidenav-label { padding-top: 4px; }
+.sidenav-items { display: flex; flex-direction: column; gap: 2px; }
+
+.sidenav-item {
+  position: relative;
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; height: 38px; padding: 0 10px;
+  border: 0; border-radius: 8px; background: transparent;
+  color: var(--text-2); font-size: 13.5px; font-weight: 600; letter-spacing: .2px;
+  white-space: nowrap; text-decoration: none; cursor: pointer;
+  transition: background .14s, color .14s;
+}
+.sidenav-item svg { flex: none; opacity: .8; transition: opacity .14s, transform .2s; }
+.sidenav-item:hover { background: var(--surface-3); color: var(--text); text-decoration: none; }
+.sidenav-item:hover svg,
+.sidenav-item.active svg { opacity: 1; }
+.sidenav-item.active { background: var(--accent-soft); color: var(--accent); }
+.sidenav-item.active::before {
+  content: "";
+  position: absolute; left: -10px; top: 8px; bottom: 8px; width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, #2563eb, #7c3aed);
+}
+.sidenav-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.sidenav-tag {
+  flex: none; padding: 0 5px;
+  border: 1px solid var(--border); border-radius: 5px;
+  font-size: 10px; font-weight: 700; letter-spacing: .3px; color: var(--text-muted);
+}
+
+/* 공사장 — 점선 박스 = "아직 공사 중". 정식 메뉴와 섞이지 않게 맨 아래 따로 */
+.sidenav-group.wip .sidenav-items {
+  padding: 4px;
+  border: 1px dashed var(--border-strong); border-radius: 10px;
+  background: var(--surface-2);
+}
+.sidenav-group.wip .sidenav-item { height: 34px; font-size: 13px; color: var(--text-3); }
+.sidenav-group.wip .sidenav-item:hover { color: var(--text); }
+.sidenav-group.wip .sidenav-item.active { color: var(--accent); }
+.sidenav-group.wip .sidenav-item.active::before { left: -5px; }
+
+.sidenav-foot { padding-top: 8px; border-top: 1px solid var(--border); }
+.sidenav-fold { color: var(--text-3); font-size: 12.5px; font-weight: 500; }
+
+/* 접힘 (64px 아이콘 레일) — ≤760px 에서는 아래 미디어쿼리가 같은 모양을 강제한다 */
+.app.nav-folded .sidenav-text,
+.app.nav-folded .sidenav-tag,
+.app.nav-folded .agent-switch-btn .agent-switch-label,
+.app.nav-folded .agent-switch-btn .agent-switch-caret { display: none; }
+.app.nav-folded .sidenav-item { justify-content: center; padding: 0; }
+.app.nav-folded .agent-switch-btn { justify-content: center; padding: 0; background: transparent; border-color: transparent; }
+.app.nav-folded .sidenav-label { font-size: 0; padding: 10px 6px 6px; }
+.app.nav-folded .sidenav-label::before { content: ""; display: block; height: 1px; background: var(--border); }
+.app.nav-folded .sidenav-group.wip .sidenav-items { padding: 3px 2px; }
+.app.nav-folded .sidenav-fold svg { transform: rotate(180deg); }
+
+/* Agent — 분석 탭과 성격이 다른 '근무 현황 카드'. 우상단에 자리를 차지하며
+   살아있는 상태등으로 "지금 일하는 주체"임을 드러낸다.
+   ⚠️ 클래스명 nav-agent* : /agent 페이지의 .agent-card(신분증) 와 충돌 방지용 별도 네임스페이스 */
+.nav-agent {
+  display: inline-flex; align-items: center; gap: 11px;
+  height: 48px;
+  padding: 0 16px 0 0;        /* 사진을 카드 좌측 끝까지 붙인다 */
+  border-radius: 13px;
+  overflow: hidden;          /* 사진을 카드 모서리에 맞춰 클립 → 삐져나옴 차단 */
+  text-decoration: none;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(135deg, #f7f9ff, #faf6ff) padding-box,
+    linear-gradient(135deg, rgba(37,99,235,.30), rgba(124,58,237,.30)) border-box;
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.05);
+  transition: box-shadow .18s, transform .18s, background .18s;
+}
+.nav-agent:hover {
+  text-decoration: none;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(124, 58, 237, .20);
+  background:
+    linear-gradient(135deg, #eef3ff, #f5ecff) padding-box,
+    linear-gradient(135deg, #2563eb, #7c3aed) border-box;
+}
+.nav-agent.active {
+  background:
+    linear-gradient(135deg, #e7eeff, #f1e6ff) padding-box,
+    linear-gradient(135deg, #2563eb, #7c3aed) border-box;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, .22);
+}
+
+/* 사진 = 카드 높이를 가득 채우는 좌측 스트립 (사원증 느낌) */
+.nav-agent-photo {
+  align-self: stretch;
+  width: 48px; flex-shrink: 0;
+  position: relative;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: #fff;
+}
+.nav-agent-photo img {
+  width: 100%; height: 100%; object-fit: cover; object-position: center top; display: block;
+}
+.nav-agent-emoji { font-size: 24px; line-height: 1; }
+/* 사진 위 미세한 광택 + 텍스트와의 경계선 */
+.nav-agent-photo::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(0,0,0,.10));
+  box-shadow: inset -1px 0 0 rgba(17, 24, 39, .10);
+}
+
+.nav-agent-id { display: flex; flex-direction: column; gap: 2px; line-height: 1.1; }
+.nav-agent-name {
+  font-size: 14px; font-weight: 700; color: var(--text);
+  letter-spacing: 0.1px;
+}
+.nav-agent-status { display: inline-flex; align-items: center; gap: 6px; }
+/* 인라인 펄스 근무중 점 */
+.nav-agent-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  background: #16a34a;
+  box-shadow: 0 0 0 0 rgba(22, 163, 74, .5);
+  animation: nav-agent-pulse 2s ease-out infinite;
+}
+@keyframes nav-agent-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(22, 163, 74, .5); }
+  70%  { box-shadow: 0 0 0 5px rgba(22, 163, 74, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+}
+.nav-agent-live { font-size: 11px; font-weight: 600; color: #15803d; }
+.nav-agent-role {
+  position: relative;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+  padding-left: 8px;
+  background: linear-gradient(90deg, #2563eb, #7c3aed);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.nav-agent-role::before {
+  content: ""; position: absolute; left: 0; top: 50%;
+  width: 1px; height: 9px; margin-top: -4.5px;
+  background: var(--border-strong);
+}
+
+/* .app 이 height:auto 가 되는 폭 — 본문이 문서째 스크롤되므로 사이드바를 화면에 붙잡아 둔다 */
+@media (max-width: 1180px) {
+  .sidenav { position: sticky; top: 0; align-self: flex-start; height: 100dvh; }
+}
+
+@media (max-width: 760px) {
+  .app { --side-w: 64px; }
+  .app .sidenav-text,
+  .app .sidenav-tag,
+  .app .agent-switch-btn .agent-switch-label,
+  .app .agent-switch-btn .agent-switch-caret,
+  .sidenav-foot { display: none; }
+  .app .sidenav-item { justify-content: center; padding: 0; }
+  .app .agent-switch-btn { justify-content: center; padding: 0; background: transparent; border-color: transparent; }
+  .app .sidenav-label { font-size: 0; padding: 10px 6px 6px; }
+  .app .sidenav-label::before { content: ""; display: block; height: 1px; background: var(--border); }
+  .app .sidenav-group.wip .sidenav-items { padding: 3px 2px; }
+  .nav-agent-id { display: none; }
+  .nav-agent { padding: 0; }
+}

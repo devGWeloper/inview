@@ -1,22 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useAuth } from "./AuthProvider";
 import { ChangePasswordModal } from "./ChangePasswordModal";
-import { ROLE_LABEL, Role, roleAtLeast } from "@/lib/roles";
-import { useAgentScope } from "@/components/agents/AgentScopeProvider";
-
-const ADMIN_LINKS: { href: string; label: string; icon: string; min: Role; biz?: true }[] = [
-  { href: "/improvement", label: "Improvement Center", icon: "🚀", min: "DEV", biz: true },
-  { href: "/event-fabs", label: "이벤트-FAB 매핑", icon: "🗂", min: "BR", biz: true },
-  { href: "/accounts", label: "계정 관리", icon: "👤", min: "ADMIN" },
-  { href: "/admin", label: "프로필 편집", icon: "✏️", min: "ADMIN" },
-];
+import { ROLE_LABEL } from "@/lib/roles";
 
 export function UserMenu() {
   const { user, loading, logout } = useAuth();
-  const { isDefault: isDefaultAgent } = useAgentScope();
   const [open, setOpen] = useState(false);
   const [showChangePw, setShowChangePw] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -32,7 +22,6 @@ export function UserMenu() {
   if (loading || !user) return null;
 
   const initial = user.name?.trim()?.[0] ?? user.userId[0] ?? "?";
-  const links = ADMIN_LINKS.filter((l) => roleAtLeast(user.role, l.min) && (isDefaultAgent || !l.biz));
 
   return (
     <>
@@ -63,19 +52,6 @@ export function UserMenu() {
                 <span className={"usermenu-role role-" + user.role}>{ROLE_LABEL[user.role]}</span>
               </div>
             </div>
-
-            {links.length > 0 && (
-              <div className="usermenu-section">
-                <div className="usermenu-section-label">관리</div>
-                {links.map((l) => (
-                  <Link key={l.href} href={l.href} className="usermenu-item" role="menuitem"
-                    prefetch={false} onClick={() => setOpen(false)}>
-                    <span className="usermenu-item-icon" aria-hidden>{l.icon}</span>
-                    <span>{l.label}</span>
-                  </Link>
-                ))}
-              </div>
-            )}
 
             <div className="usermenu-section">
               <button type="button" className="usermenu-item" role="menuitem"

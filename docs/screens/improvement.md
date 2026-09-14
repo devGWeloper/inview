@@ -13,7 +13,7 @@ Improvement Center 는 AI 에이전트 개선 허브(확장 가능한 플랫폼 
 - 집계: `src/lib/requestFailures.ts`
 - 스타일: `src/styles/improvement.css`
 - 권한: **목록/컨텍스트 조회 = DEV, 조치 저장(PUT) = ADMIN** (`requireBiz("ADMIN")`).
-  진입은 `/admin` 헤더 또는 유저 메뉴
+  진입은 사이드바 관리 그룹 또는 `/admin` 헤더
 
 ## 실패 요청의 정의
 

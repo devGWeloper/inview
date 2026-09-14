@@ -1,6 +1,13 @@
 /* 앱 셸 — statusbar · 레이아웃 · 패널 · 공용 버튼/폼 */
 /* ---------------- shell ---------------- */
-.app { height: 100dvh; min-height: 100dvh; display: flex; flex-direction: column; }
+.app {
+  --side-w: 232px;
+  height: 100dvh; min-height: 100dvh; display: flex; flex-direction: column;
+}
+.app.nav-folded { --side-w: 64px; }
+.app-body { flex: 1; min-height: 0; display: flex; }
+/* 화면 루트(.layout · .ic-page 등)는 여전히 flex:1 + 자체 overflow 로 스크롤한다 — .app 의 flex column 역할을 여기서 이어받는다 */
+.app-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
 
 .statusbar {
   flex-shrink: 0;
@@ -29,18 +36,28 @@
 }
 
 .topbar {
+  flex-shrink: 0;
   height: 64px;
-  padding: 0 22px;
+  padding: 0 22px 0 14px;
   background: linear-gradient(180deg, #ffffff, #fbfcfe);
   border-bottom: 1px solid var(--border);
   box-shadow: 0 1px 0 rgba(17, 24, 39, .02), 0 10px 22px -18px rgba(17, 24, 39, .25);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
 }
+.topbar-fold {
+  flex: none; width: 36px; height: 36px; border: 0; border-radius: 8px;
+  display: grid; place-items: center;
+  background: transparent; color: var(--text-3); cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.topbar-fold:hover { background: var(--surface-3); color: var(--text); }
+/* 브랜드 폭을 사이드바에 맞춰 현재 위치(.crumb)가 본문 시작선에서 출발하게 한다 (62 = 좌 패딩 + ☰ + gap) */
 .brand {
-  display: flex; align-items: center; gap: 9px;
-  font-size: 18px; font-weight: 700; letter-spacing: -0.1px;
+  display: flex; align-items: center; gap: 9px; flex: none;
+  min-width: calc(var(--side-w) - 62px); transition: min-width .2s ease;
+  font-size: 18px; font-weight: 700; letter-spacing: -0.1px; white-space: nowrap;
 }
 .brand .logo {
   width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
@@ -59,6 +76,19 @@
 .brand .sub {
   font-weight: 500; color: var(--text-muted); font-size: 13px;
   margin-left: 3px; letter-spacing: 0;
+}
+.crumb {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  padding-left: 16px; border-left: 1px solid var(--border);
+  font-size: 13px; color: var(--text-3); white-space: nowrap;
+}
+.crumb-sep { color: var(--border-strong); }
+.crumb-page {
+  font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -0.1px;
+  overflow: hidden; text-overflow: ellipsis;
+}
+@media (max-width: 760px) {
+  .brand .sub, .crumb { display: none; }
 }
 
 .env-badge {

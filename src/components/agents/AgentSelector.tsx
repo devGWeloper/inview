@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useAgentScope } from "./AgentScopeProvider";
 
+function scopeMeta(a: { isDefault: boolean; dbConfigured: boolean }): string {
+  return (a.isDefault ? "전체 화면" : "Tokens · Timeout") + (a.dbConfigured ? "" : " · DB 미구성");
+}
+
 export function AgentSelector() {
   const { agents, agentId, agent, setAgentId } = useAgentScope();
   const [open, setOpen] = useState(false);
@@ -35,7 +39,10 @@ export function AgentSelector() {
         title="에이전트 전환"
       >
         <span className="agent-switch-emoji" aria-hidden>{agent?.avatar ?? "🤖"}</span>
-        <span className="agent-switch-name">{agent?.name ?? "에이전트"}</span>
+        <span className="agent-switch-label">
+          <span className="agent-switch-name">{agent?.name ?? "에이전트"}</span>
+          {agent && <span className="agent-switch-meta">{scopeMeta(agent)}</span>}
+        </span>
         <span className="agent-switch-caret" aria-hidden>▾</span>
       </button>
       {open && (
@@ -52,10 +59,7 @@ export function AgentSelector() {
                 <span className="agent-switch-emoji" aria-hidden>{a.avatar}</span>
                 <span className="agent-switch-label">
                   <span className="agent-switch-name">{a.name}</span>
-                  <span className="agent-switch-meta">
-                    {a.isDefault ? "전체 화면" : "Tokens · Timeout"}
-                    {a.dbConfigured ? "" : " · DB 미구성"}
-                  </span>
+                  <span className="agent-switch-meta">{scopeMeta(a)}</span>
                 </span>
               </button>
             </li>

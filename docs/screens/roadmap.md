@@ -1,7 +1,7 @@
 # Action 오픈 로드맵 — `/roadmap`
 
 **DB 연동이 없는 계획표.** 운영자가 직접 적고 나머지 전원이 읽는다.
-아직 상단 탭에 없고 진입은 공사장(`/wip`)뿐이다.
+아직 정식 메뉴에 없고 진입은 사이드바 공사장 박스(`/wip` 과 같은 `WIP_SITES`)뿐이다.
 
 **파일**
 - 화면: `src/app/roadmap/page.tsx` · `src/features/roadmap/RoadmapCalendar.tsx` ·
@@ -151,9 +151,9 @@ ADMIN 하나다.
 
 ## 정식 오픈 시
 
-`TabNav` 의 `ANALYSIS_TABS` 에 한 줄 추가
-(`{ href: "/roadmap", label: "로드맵", … }`, `agentScoped` 없이 = 비기본 에이전트에선 자동으로 숨음)
-+ `/wip` 의 `SITES` 에서 그 줄 삭제.
+`nav.ts` 의 `WIP_SITES` 에서 그 줄을 `NAV_GROUPS` 분석 그룹으로 옮긴다
+(`{ href: "/roadmap", label: "로드맵", icon: "roadmap" }`). BIZ 경로가 아니므로 비기본 에이전트에서도
+보인다 — 에이전트와 무관한 문서라 그게 맞다.
 
 ## 화면에 사용법 문구를 두지 말 것
 

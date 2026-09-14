@@ -1,26 +1,66 @@
 "use client";
 
-import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { TabNav, AgentNavChip } from "@/components/shell/TabNav";
-import { useAuth } from "@/components/auth/AuthProvider";
+import { AgentNavChip } from "@/components/shell/AgentNavChip";
+import { PageCrumb, Sidebar } from "@/components/shell/Sidebar";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { AgentScopeProvider, AgentScopeWarning } from "@/components/agents/AgentScopeProvider";
-import { AgentSelector } from "@/components/agents/AgentSelector";
 import { TimeRangeProvider } from "@/components/ui/TimeRangeProvider";
+
+const FOLD_KEY = "tracex.navFolded";
+
+function isTypingTarget(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null;
+  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+}
 
 export function AppChrome({ version, children }: { version: string; children: React.ReactNode }) {
   const pathname = usePathname();
-  const { user } = useAuth();
   const bare = pathname === "/login";
+  const [folded, setFolded] = useState(false);
+
+  useEffect(() => {
+    try { setFolded(localStorage.getItem(FOLD_KEY) === "1"); } catch {}
+  }, []);
+
+  const toggleFold = useCallback(() => {
+    setFolded((v) => {
+      try { localStorage.setItem(FOLD_KEY, v ? "0" : "1"); } catch {}
+      return !v;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (bare) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "[" || e.ctrlKey || e.metaKey || e.altKey || isTypingTarget(e.target)) return;
+      toggleFold();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [bare, toggleFold]);
 
   if (bare) return <>{children}</>;
 
   return (
     <AgentScopeProvider>
      <TimeRangeProvider>
-      <div className="app">
+      <div className={"app" + (folded ? " nav-folded" : "")}>
         <header className="topbar">
+          <button
+            type="button"
+            className="topbar-fold"
+            onClick={toggleFold}
+            aria-label="메뉴 접기/펼치기"
+            aria-expanded={!folded}
+            title="메뉴 접기/펼치기 ( [ )"
+          >
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+                 strokeWidth="1.5" strokeLinecap="round" aria-hidden>
+              <path d="M2.5 4h11M2.5 8h11M2.5 12h11" />
+            </svg>
+          </button>
           <div className="brand">
             <span className="logo" aria-hidden>
               <svg viewBox="0 0 24 24" fill="none" width="15" height="15">
@@ -33,29 +73,20 @@ export function AppChrome({ version, children }: { version: string; children: Re
             <span className="brand-word">Trace<span className="brand-x">X</span></span>
             <span className="sub">· AI Action Trace</span>
           </div>
-          <TabNav />
+          <PageCrumb />
           <div className="topbar-right">
-            {/* 공사장(/wip) — 아직 안 연 화면의 유일한 진입점. 여기서 감추는 건 표시 제어일 뿐,
-                  실제 차단은 ROUTE_RULES 의 /wip(ADMIN) 규칙이다. */}
-            {user?.role === "ADMIN" && (
-              <Link
-                className="wip-entry"
-                href="/wip"
-                prefetch={false}
-                title="아직 열지 않은 화면 모음 (운영자 전용)"
-              >
-                <span aria-hidden>🚧</span>
-                <span>공사장</span>
-              </Link>
-            )}
-            <AgentSelector />
             <AgentNavChip />
             <UserMenu />
           </div>
         </header>
-        {/* 계정이 설정에 없는 에이전트에 묶여 있을 때만 뜬다 (빈 화면 + 403 의 이유를 밝힌다) */}
-        <AgentScopeWarning />
-        {children}
+        <div className="app-body">
+          <Sidebar folded={folded} onToggleFold={toggleFold} />
+          <main className="app-main">
+            {/* 계정이 설정에 없는 에이전트에 묶여 있을 때만 뜬다 (빈 화면 + 403 의 이유를 밝힌다) */}
+            <AgentScopeWarning />
+            {children}
+          </main>
+        </div>
         <footer className="statusbar">
           <div className="left">
             <span>© 2026 SK hynix</span>

@@ -53,6 +53,23 @@
 - **노드/모델/USER 필터는 공유하지 않는다** — 에이전트 전환 시 비워야 하고 두 화면의 차원 목록도 다르다
 - Dashboard/Insights 는 공유 대상이 아니다(기간 개념이 다르다 — 주 단위 이동, 월~월 경계 등)
 
+## 셸 · 사이드바 (`src/components/shell/`)
+
+상단바(☰ · 브랜드 · 현재 위치 · Agent 칩 · 유저 메뉴) + 좌측 사이드바 + 본문 + 상태바.
+
+- **메뉴의 단일 소스는 `nav.ts` 의 `NAV_GROUPS`**(분석 · 관리 · 공사장). 화면 추가 = 여기 한 줄 +
+  `Sidebar.tsx` 의 `ICON` 한 줄. 상단 현재 위치(`PageCrumb`)도 같은 배열에서 찾고, 메뉴 밖 경로는 `OFF_NAV`
+- **노출은 `visibleNav()` 하나** — `canAccessPath`(권한) + 비기본 에이전트면 `isBizPath` 숨김.
+  항목에 `minRole`/`agentScoped` 같은 플래그를 다시 두지 말 것(미들웨어와 두 벌이 된다)
+- `ADMIN` 태그는 `adminOnly()`(= `ROUTE_RULES` 최소 권한이 ADMIN)가 붙인다 — 항목에 손으로 적지 말 것.
+  공사장 박스는 통째로 ADMIN 전용이라 태그를 생략한다
+- 공사장 그룹 = `WIP_SITES`, ADMIN 에게만. `/wip` 페이지가 같은 배열을 그린다
+- 접기: `localStorage["tracex.navFolded"]` · ☰ · 사이드바 하단 버튼 · `[` 키(입력 중엔 무시).
+  ≤760px 는 항상 64px 레일
+- 화면 루트는 `.app-main`(flex column) 안에서 `flex:1; min-height:0; overflow:auto` 로 스스로 스크롤한다
+- **`.sidenav` 에 overflow 를 두지 말 것** — 에이전트 전환 드롭다운이 사이드바 밖으로 나가야 한다.
+  스크롤은 `.sidenav-scroll` 만
+
 ## CSS
 
 - 스타일시트는 `src/styles/` 아래 화면별로 나뉘고 `src/app/globals.css` 가 `@import` 순서를 정한다.

@@ -105,6 +105,7 @@ export default function Page() {
   const layoutRef = useRef<HTMLDivElement>(null);
   const splitterRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
+  const dragWidthRef = useRef<number | null>(null);
   const [leftWidth, setLeftWidth] = useState<number | null>(null);
 
   useEffect(() => {
@@ -117,11 +118,15 @@ export default function Page() {
       let next = e.clientX - rect.left - padding;
       if (next < MIN_LEFT) next = MIN_LEFT;
       if (next > max) next = max;
-      setLeftWidth(next);
+      // 드래그 중엔 state 를 거치지 않는다 — 이동마다 목록·상세 전체가 재렌더된다. 놓을 때 한 번 커밋
+      dragWidthRef.current = next;
+      layoutRef.current.style.setProperty("--left-w", `${next}px`);
     };
     const onUp = () => {
       if (!draggingRef.current) return;
       draggingRef.current = false;
+      if (dragWidthRef.current != null) setLeftWidth(dragWidthRef.current);
+      dragWidthRef.current = null;
       splitterRef.current?.classList.remove("dragging");
       document.body.style.cursor = "";
       document.body.style.userSelect = "";

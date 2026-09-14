@@ -137,7 +137,7 @@
 .rft-errbar-reset:hover { text-decoration: underline; }
 
 /* split */
-.rft-split { display: grid; grid-template-columns: minmax(340px, 400px) 1fr; gap: 16px; align-items: start; }
+.rft-split { display: grid; grid-template-columns: minmax(340px, 400px) 1fr; gap: 16px; align-items: stretch; }
 
 /* list panel */
 .rft-list-panel { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -167,8 +167,9 @@
 .rft-search input { border: none; outline: none; background: transparent; padding: 9px 0; width: 100%; font-size: 13px; }
 .rft-search-clear { border: none; background: transparent; cursor: pointer; color: var(--text-muted); font-size: 12px; }
 
+/* basis 0 이라 행 높이는 우측 상세가 정하고 리스트는 그 바닥까지 채운다 — max-height 로 되돌리면 중간에서 잘린다 */
 .rft-list {
-  display: flex; flex-direction: column; gap: 7px; max-height: 620px; overflow: auto;
+  display: flex; flex-direction: column; gap: 7px; flex: 1 0 0; min-height: 420px; overflow: auto;
   padding-right: 2px;
 }
 .rft-empty { padding: 26px 14px; text-align: center; color: var(--text-3); font-size: 13px; }
@@ -315,6 +316,7 @@
 
 @media (max-width: 1080px) {
   .rft-split { grid-template-columns: 1fr; }
+  .rft-list { flex: none; min-height: 0; max-height: 620px; }
   .rft-kpis { grid-template-columns: repeat(3, 1fr); }
   .ic-body { flex-direction: column; }
   .ic-rail { position: static; flex-basis: auto; width: 100%; flex-direction: row; flex-wrap: wrap; }

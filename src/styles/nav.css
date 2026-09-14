@@ -2,7 +2,7 @@
 /* ---------------- sidebar ---------------- */
 .sidenav {
   flex: none;
-  width: var(--side-w);
+  width: 232px;
   display: flex; flex-direction: column; gap: 8px;
   min-height: 0;
   padding: 12px 10px 10px;
@@ -70,6 +70,7 @@
 .app.nav-folded .sidenav-tag,
 .app.nav-folded .agent-switch-btn .agent-switch-label,
 .app.nav-folded .agent-switch-btn .agent-switch-caret { display: none; }
+.app.nav-folded .sidenav { width: 64px; }
 .app.nav-folded .sidenav-item { justify-content: center; padding: 0; }
 .app.nav-folded .agent-switch-btn { justify-content: center; padding: 0; background: transparent; border-color: transparent; }
 .app.nav-folded .sidenav-label { font-size: 0; padding: 10px 6px 6px; }
@@ -168,7 +169,7 @@
 }
 
 @media (max-width: 760px) {
-  .app { --side-w: 64px; }
+  .sidenav { width: 64px; }
   .app .sidenav-text,
   .app .sidenav-tag,
   .app .agent-switch-btn .agent-switch-label,

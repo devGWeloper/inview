@@ -1,10 +1,6 @@
 /* 앱 셸 — statusbar · 레이아웃 · 패널 · 공용 버튼/폼 */
 /* ---------------- shell ---------------- */
-.app {
-  --side-w: 232px;
-  height: 100dvh; min-height: 100dvh; display: flex; flex-direction: column;
-}
-.app.nav-folded { --side-w: 64px; }
+.app { height: 100dvh; min-height: 100dvh; display: flex; flex-direction: column; }
 .app-body { flex: 1; min-height: 0; display: flex; }
 /* 화면 루트(.layout · .ic-page 등)는 여전히 flex:1 + 자체 overflow 로 스크롤한다 — .app 의 flex column 역할을 여기서 이어받는다 */
 .app-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
@@ -53,12 +49,13 @@
   transition: background .12s, color .12s;
 }
 .topbar-fold:hover { background: var(--surface-3); color: var(--text); }
-/* 브랜드 폭을 사이드바에 맞춰 현재 위치(.crumb)가 본문 시작선에서 출발하게 한다 (62 = 좌 패딩 + ☰ + gap) */
+/* 브랜드 폭을 사이드바에 맞춰 현재 위치(.crumb)가 본문 시작선에서 출발하게 한다 (170 = 사이드바 232 − 좌 패딩·☰·gap 62) */
 .brand {
   display: flex; align-items: center; gap: 9px; flex: none;
-  min-width: calc(var(--side-w) - 62px);
+  min-width: 170px;
   font-size: 18px; font-weight: 700; letter-spacing: -0.1px; white-space: nowrap;
 }
+.app.nav-folded .brand { min-width: 0; }
 .brand .logo {
   width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
   background: linear-gradient(135deg, #2563eb, #7c3aed);
@@ -89,6 +86,7 @@
 }
 @media (max-width: 760px) {
   .brand .sub, .crumb { display: none; }
+  .brand { min-width: 0; }
 }
 
 .env-badge {
@@ -105,6 +103,8 @@
 .env-badge.dev   { color: #2563eb; background: #eff6ff; border-color: #bfdbfe; font-weight: 600; letter-spacing: .04em; }
 .env-badge.prd   { color: #b45309; background: #fffbeb; border-color: #fde68a; font-weight: 600; letter-spacing: .04em; }
 
+/* ⚠️ 비상속으로 등록할 것 — 상속 변수면 좌우 분할 드래그마다 패널 안 노드 전체가 스타일 재계산된다 */
+@property --left-w { syntax: "*"; inherits: false; }
 .layout {
   display: grid;
   grid-template-columns: var(--left-w, minmax(460px, 1fr)) auto minmax(0, 1.35fr);

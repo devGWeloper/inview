@@ -629,6 +629,9 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
   white-space: pre;
   overflow: auto;
   max-height: 260px;
+  /* ⚠️ 지우지 말 것 — 원문 전체를 하이라이트 span 으로 올려서, 없으면 화면 밖 블록까지 배치해 조회·폭 변경마다 수백 ms~1s+ 멈춘다 */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 260px;
   tab-size: 2;
 }
 .json-content.expanded { max-height: 640px; }

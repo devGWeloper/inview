@@ -64,11 +64,16 @@
 - `ADMIN` 태그는 `adminOnly()`(= `ROUTE_RULES` 최소 권한이 ADMIN)가 붙인다 — 항목에 손으로 적지 말 것.
   공사장 박스는 통째로 ADMIN 전용이라 태그를 생략한다
 - 공사장 그룹 = `WIP_SITES`, ADMIN 에게만. `/wip` 페이지가 같은 배열을 그린다
-- 접기: `localStorage["tracex.navFolded"]` · ☰ · 사이드바 하단 버튼 · `[` 키(입력 중엔 무시).
+- 접기: **기본은 접힘(64px 레일)**. 펼쳤을 때만 `localStorage["tracex.navExpanded"]="1"` 로 기억한다
+  (기록 없음 = 접힘이라 SSR 첫 화면도 접힌 채로 나와 깜빡임이 없다) · ☰ · 사이드바 하단 버튼 · `[` 키(입력 중엔 무시).
   ≤760px 는 항상 64px 레일
-- **사이드바 폭(`--side-w`)에 transition 을 걸지 말 것** — 폭은 레이아웃 속성이라 애니메이션 매 프레임
-  본문 전체가 재배치되고, 차트 `ResponsiveContainer` 가 매 프레임 다시 그리며, Traces 상세의 `@container`
-  경계를 지나는 순간 3열↔1열이 뒤집혀 크게 버벅인다. 접기는 즉시 전환이다
+- **사이드바 폭에 transition 을 걸지 말 것** — 폭은 레이아웃 속성이라 애니메이션 매 프레임 본문 전체가
+  재배치된다. 접기는 즉시 전환이다
+- **접힘 상태를 루트의 상속 CSS 변수로 내려보내지 말 것** — 루트에서 커스텀 프로퍼티를 바꾸면 문서 전체가
+  스타일 재계산된다(Traces 상세 47k 노드에서 실측 ≈120ms/회). 루트엔 `.nav-folded` 클래스만 두고(토글 실측 0ms)
+  폭은 `.app.nav-folded .sidenav` 처럼 그 요소 선택자에 직접 적는다
+- 접기 토글은 React 쪽에서 화면을 다시 렌더링하지 않는다(`children` 참조가 같다 — 실측 확인). 토글이 느리면
+  원인은 그 화면의 레이아웃 비용이다
 - 화면 루트는 `.app-main`(flex column) 안에서 `flex:1; min-height:0; overflow:auto` 로 스스로 스크롤한다
 - **`.sidenav` 에 overflow 를 두지 말 것** — 에이전트 전환 드롭다운이 사이드바 밖으로 나가야 한다.
   스크롤은 `.sidenav-scroll` 만

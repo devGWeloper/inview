@@ -8,7 +8,8 @@ import { UserMenu } from "@/components/auth/UserMenu";
 import { AgentScopeProvider, AgentScopeWarning } from "@/components/agents/AgentScopeProvider";
 import { TimeRangeProvider } from "@/components/ui/TimeRangeProvider";
 
-const FOLD_KEY = "tracex.navFolded";
+// 기본은 접힘 — 펼쳤을 때만 기록한다 (기록 없음 = 접힘)
+const EXPANDED_KEY = "tracex.navExpanded";
 
 function isTypingTarget(t: EventTarget | null): boolean {
   const el = t as HTMLElement | null;
@@ -18,15 +19,15 @@ function isTypingTarget(t: EventTarget | null): boolean {
 export function AppChrome({ version, children }: { version: string; children: React.ReactNode }) {
   const pathname = usePathname();
   const bare = pathname === "/login";
-  const [folded, setFolded] = useState(false);
+  const [folded, setFolded] = useState(true);
 
   useEffect(() => {
-    try { setFolded(localStorage.getItem(FOLD_KEY) === "1"); } catch {}
+    try { setFolded(localStorage.getItem(EXPANDED_KEY) !== "1"); } catch {}
   }, []);
 
   const toggleFold = useCallback(() => {
     setFolded((v) => {
-      try { localStorage.setItem(FOLD_KEY, v ? "0" : "1"); } catch {}
+      try { localStorage.setItem(EXPANDED_KEY, v ? "1" : "0"); } catch {}
       return !v;
     });
   }, []);

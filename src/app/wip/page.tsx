@@ -23,7 +23,7 @@ const SITES: Site[] = [
   {
     href: "/design-preview.html",
     name: "레이아웃 개편 시안",
-    what: "상단바·본문 배치를 바꾼 시안 4종",
+    what: "상단바·본문 배치를 바꾼 시안 7종",
     state: "검토 대기",
     external: true,
   },

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TraceX · 레이아웃 개편 시안 6종</title>
+<title>TraceX · 레이아웃 개편 시안 7종</title>
 <style>
 /* ═══════════════════════════════════════════════════════════════════════
    시안 뷰어 크롬 (어느 시안에도 속하지 않는 중립 셸)
@@ -783,6 +783,257 @@ body{
   .bm-hero-in{flex-direction:column;align-items:stretch}
   .bm-specs{border-left:0;border-top:1px solid rgba(255,255,255,.18);padding-top:22px;margin-top:24px}
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   시안 G — 현행 + Sidebar
+   지금 앱 토큰·컴포넌트 그대로, 상단 탭만 좌측 사이드바로.
+   ═══════════════════════════════════════════════════════════════════════ */
+.d-gs{
+  --bg:#f4f5f7; --surface:#fff; --surface-2:#fafbfc; --surface-3:#f0f2f5;
+  --border:#e1e4e8; --border-strong:#d0d4da;
+  --text:#1f2328; --text-2:#4b5563; --text-3:#6b7280; --text-muted:#8a94a6;
+  --accent:#2563eb; --accent-soft:#e8efff;
+  --ok:#067647; --ok-soft:#e6f4ec; --err:#b42318; --err-soft:#fdecec;
+  --fail:#c2410c; --fail-soft:#ffedd5; --warn:#b54708; --warn-soft:#fdf2e5;
+  --work-head:#e9edf4; --work-band:#f3f5f9; --work-rail:#a8b6cc;
+  --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,"D2Coding",monospace;
+  --side-w:232px;
+  background:var(--bg); color:var(--text); font-size:14px; line-height:1.5;
+}
+.design.on.d-gs{display:flex;flex-direction:column;height:calc(100dvh - 56px)}
+.gs-ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.gs-ico .f{fill:currentColor;stroke:none}
+
+.gs-top{
+  flex:none;height:64px;padding:0 22px 0 14px;position:relative;z-index:3;
+  background:linear-gradient(180deg,#fff,#fbfcfe);border-bottom:1px solid var(--border);
+  box-shadow:0 1px 0 rgba(17,24,39,.02),0 10px 22px -18px rgba(17,24,39,.25);
+  display:flex;align-items:center;gap:12px;
+}
+.gs-fold{
+  width:36px;height:36px;border-radius:8px;border:0;background:transparent;color:var(--text-3);
+  display:grid;place-items:center;flex:none;
+}
+.gs-fold:hover{background:var(--surface-3);color:var(--text)}
+.gs-brand{
+  display:flex;align-items:center;gap:9px;flex:none;
+  min-width:calc(var(--side-w) - 62px);transition:min-width .2s ease;
+  font-size:18px;font-weight:700;letter-spacing:-.1px;white-space:nowrap;
+}
+.gs-logo{
+  width:28px;height:28px;border-radius:8px;flex:none;display:grid;place-items:center;
+  background:linear-gradient(135deg,#2563eb,#7c3aed);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 2px 8px rgba(37,99,235,.35);
+}
+.gs-x{background:linear-gradient(135deg,#2563eb,#7c3aed);-webkit-background-clip:text;background-clip:text;color:transparent}
+.gs-brand .sub{font-weight:500;color:var(--text-muted);font-size:13px;margin-left:3px}
+.gs-crumb{
+  display:flex;align-items:center;gap:8px;min-width:0;
+  padding-left:16px;border-left:1px solid var(--border);
+  font-size:13px;color:var(--text-3);white-space:nowrap;
+}
+.gs-crumb b{font-size:16px;font-weight:700;color:var(--text);letter-spacing:-.1px}
+.gs-crumb i{font-style:normal;color:var(--border-strong)}
+.gs-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+
+.gs-agent{
+  display:inline-flex;align-items:center;gap:11px;height:48px;padding:0 16px 0 0;
+  border-radius:13px;overflow:hidden;border:1px solid transparent;
+  background:linear-gradient(135deg,#f7f9ff,#faf6ff) padding-box,
+             linear-gradient(135deg,rgba(37,99,235,.30),rgba(124,58,237,.30)) border-box;
+  box-shadow:0 1px 2px rgba(17,24,39,.05);
+}
+.gs-agent-ph{
+  align-self:stretch;width:48px;display:grid;place-items:center;font-size:24px;
+  background:linear-gradient(135deg,#2563eb,#7c3aed);
+}
+.gs-agent-id{display:flex;flex-direction:column;gap:2px;line-height:1.1}
+.gs-agent-id b{font-size:14px;font-weight:700}
+.gs-agent-st{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#15803d}
+.gs-agent-st i{width:7px;height:7px;border-radius:50%;background:#16a34a;animation:gs-pulse 2s ease-out infinite}
+.gs-agent-st em{
+  font-style:normal;font-size:10px;font-weight:700;letter-spacing:.5px;padding-left:8px;
+  border-left:1px solid var(--border-strong);
+  background:linear-gradient(90deg,#2563eb,#7c3aed);-webkit-background-clip:text;background-clip:text;color:transparent;
+}
+@keyframes gs-pulse{0%{box-shadow:0 0 0 0 rgba(22,163,74,.5)}70%{box-shadow:0 0 0 5px rgba(22,163,74,0)}100%{box-shadow:0 0 0 0 rgba(22,163,74,0)}}
+.gs-user{
+  display:inline-flex;align-items:center;gap:9px;height:40px;padding:0 10px 0 5px;
+  border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);
+}
+.gs-user-av{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;background:#e8eaf0;color:var(--text-2)}
+.gs-user-id{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15}
+.gs-user-id b{font-size:13px}
+.gs-role{font-size:10px;font-weight:700;letter-spacing:.4px;padding:1px 6px;border-radius:5px;background:#f3e8ff;color:#7e22ce}
+
+.gs-body{flex:1;min-height:0;display:flex}
+.gs-side{
+  flex:none;width:var(--side-w);transition:width .2s ease;
+  background:var(--surface);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;gap:2px;padding:12px 10px 10px;
+  overflow-y:auto;overflow-x:hidden;
+}
+.gs-scope{
+  display:flex;align-items:center;gap:10px;padding:8px 10px;margin-bottom:6px;
+  border:1px solid var(--border);border-radius:10px;background:var(--surface-2);
+  color:var(--text);text-align:left;white-space:nowrap;
+}
+.gs-scope:hover{border-color:var(--border-strong);background:var(--surface-3)}
+.gs-scope .em{width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#eef3ff,#f5ecff);display:grid;place-items:center;font-size:16px;flex:none}
+.gs-scope .tx{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.2}
+.gs-scope .tx b{font-size:13px}
+.gs-scope .tx span{font-size:11px;color:var(--text-3)}
+.gs-scope .cv{color:var(--text-muted);font-size:11px}
+.gs-grp{
+  padding:14px 10px 6px;white-space:nowrap;
+  font-size:11px;font-weight:700;letter-spacing:.6px;color:var(--text-muted);text-transform:uppercase;
+}
+.gs-item{
+  position:relative;display:flex;align-items:center;gap:10px;height:38px;padding:0 10px;
+  border-radius:8px;color:var(--text-2);font-size:13.5px;font-weight:600;white-space:nowrap;
+  transition:background .14s,color .14s;
+}
+.gs-item svg{opacity:.8}
+.gs-item:hover{background:var(--surface-3);color:var(--text)}
+.gs-item:hover svg{opacity:1}
+.gs-item.on{background:var(--accent-soft);color:var(--accent)}
+.gs-item.on svg{opacity:1}
+.gs-item.on::before{
+  content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;
+  background:linear-gradient(180deg,#2563eb,#7c3aed);
+}
+.gs-item .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.gs-item .tag{font-size:10px;font-weight:700;letter-spacing:.3px;color:var(--text-muted);border:1px solid var(--border);border-radius:5px;padding:0 5px}
+.gs-wipbox{
+  display:flex;flex-direction:column;gap:2px;padding:4px;border-radius:10px;
+  border:1px dashed var(--border-strong);background:var(--surface-2);
+}
+.gs-wipbox .gs-item{color:var(--text-3);height:34px;font-size:13px}
+.gs-side-foot{margin-top:auto;padding-top:10px;border-top:1px solid var(--border)}
+.gs-side-foot .gs-item{width:100%;border:0;background:transparent;color:var(--text-3);font-size:12.5px;font-weight:500}
+.gs-side-foot .gs-item:hover{background:var(--surface-3);color:var(--text)}
+.gs-side-foot svg{transition:transform .2s}
+
+.d-gs.fold{--side-w:64px}
+.d-gs.fold .gs-item .lbl,.d-gs.fold .gs-item .tag,
+.d-gs.fold .gs-scope .tx,.d-gs.fold .gs-scope .cv{display:none}
+.d-gs.fold .gs-item,.d-gs.fold .gs-scope{justify-content:center;padding:0}
+.d-gs.fold .gs-scope{height:44px;background:transparent;border-color:transparent}
+.d-gs.fold .gs-grp{font-size:0;padding:10px 6px 6px}
+.d-gs.fold .gs-grp::before{content:"";display:block;height:1px;background:var(--border)}
+.d-gs.fold .gs-wipbox{padding:3px 2px}
+.d-gs.fold .gs-side-foot svg{transform:rotate(180deg)}
+.d-gs.fold .gs-brand{min-width:0}
+
+.gs-main{
+  flex:1;min-width:0;min-height:0;padding:14px;
+  display:grid;grid-template-columns:minmax(460px,1.15fr) minmax(0,1.2fr);gap:14px;
+}
+.gs-panel{
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  display:flex;flex-direction:column;min-height:0;min-width:0;box-shadow:0 1px 0 rgba(17,24,39,.02);
+}
+.gs-ph{padding:13px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.gs-ph .t{font-size:16px;font-weight:600}
+.gs-ph .m{font-size:13px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gs-ph .m .e{color:var(--err)} .gs-ph .m .f{color:var(--fail)}
+.gs-flt{padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-2);display:flex;flex-direction:column;gap:10px}
+.gs-flt-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:8px}
+.gs-fld{
+  height:34px;padding:0 10px;border:1px solid var(--border-strong);border-radius:7px;background:#fff;
+  display:flex;align-items:center;justify-content:space-between;gap:6px;
+  font-size:13px;color:var(--text-3);white-space:nowrap;overflow:hidden;
+}
+.gs-flt-bot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.gs-flt-bot .l,.gs-flt-bot .r{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-2)}
+.gs-ftag{font-size:11.5px;font-weight:700;color:var(--text-3);letter-spacing:.4px}
+.gs-seg{display:inline-flex;background:#fff;border:1px solid var(--border-strong);border-radius:9px;padding:2px}
+.gs-seg button{border:0;background:transparent;padding:4px 11px;border-radius:6px;font-size:12.5px;color:var(--text-2)}
+.gs-seg button.on{background:var(--accent);color:#fff;font-weight:600}
+.gs-chk{display:inline-flex;align-items:center;gap:5px}
+.gs-chk i{width:14px;height:14px;border:1px solid var(--border-strong);border-radius:4px;background:#fff}
+.gs-btn{border:1px solid var(--border-strong);background:#fff;color:var(--text-2);border-radius:7px;padding:4px 11px;font-size:12.5px;font-weight:600}
+.gs-btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.gs-pb{flex:1;min-height:0;overflow:auto}
+
+.gs-tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.gs-tbl th{
+  position:sticky;top:0;z-index:1;background:var(--surface-2);text-align:left;padding:10px;
+  font-size:11.5px;font-weight:700;letter-spacing:.5px;color:var(--text-3);border-bottom:1px solid var(--border);
+}
+.gs-tbl td{padding:10px;border-bottom:1px solid var(--border);white-space:nowrap}
+.gs-tbl td:first-child{max-width:0;width:100%;overflow:hidden;text-overflow:ellipsis}
+.gs-tbl td.mono{font-family:var(--mono);font-size:12.5px;color:var(--text-2)}
+.gs-tbl tbody tr{cursor:pointer}
+.gs-tbl tbody tr:hover td{background:var(--surface-3)}
+.gs-tbl tr.on td{background:var(--accent-soft)!important}
+.gs-tbl tr.work td{background:var(--work-head);font-weight:600}
+.gs-tbl tr.work td:first-child{box-shadow:inset 3px 0 0 var(--work-rail)}
+.gs-tbl tr.kid td{background:var(--work-band)}
+.gs-tbl tr.kid td:first-child{box-shadow:inset 3px 0 0 var(--work-rail);padding-left:24px}
+.gs-caret{color:var(--text-3);margin-right:6px}
+.gs-chip{font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:5px;background:#fff;border:1px solid var(--border-strong);color:var(--text-2);margin-right:6px}
+.gs-flow{font-size:12.5px;color:var(--text-2)}
+.gs-dots{display:inline-flex;align-items:center;gap:4px;vertical-align:middle}
+.gs-dots i{width:8px;height:8px;border-radius:50%;border:1px solid var(--border-strong)}
+.gs-dots span{margin-left:6px;font-family:var(--mono);font-size:12px;color:var(--text-3)}
+.gs-pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:99px;border:1px solid transparent}
+.gs-pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.gs-pill.ok{background:var(--ok-soft);color:var(--ok);border-color:#bfe3ce}
+.gs-pill.err{background:var(--err-soft);color:var(--err);border-color:#f4c1bc}
+.gs-pill.fail{background:var(--fail-soft);color:var(--fail);border-color:#fed7aa}
+.gs-pill.warn{background:var(--warn-soft);color:var(--warn);border-color:#f1d6ba}
+
+.gs-dhead{padding:14px 18px 0;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.gs-dhead .id{font-family:var(--mono);font-size:13.5px;font-weight:600}
+.gs-dhead .sub{font-size:12.5px;color:var(--text-3)}
+.gs-step{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px 18px 4px}
+.gs-step div{border-radius:8px;padding:8px 10px;background:var(--surface-2);border:1px solid var(--border);border-top:3px solid var(--c)}
+.gs-step b{display:block;font-size:12px;color:var(--c);letter-spacing:.4px}
+.gs-step span{font-size:12px;color:var(--text-3);font-family:var(--mono)}
+.gs-lcard{margin:12px 18px 0;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.gs-lcard:last-child{margin-bottom:18px}
+.gs-lhead{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface-2);border-bottom:1px solid var(--border)}
+.gs-ltag{font-size:11px;font-weight:700;color:#fff;padding:1px 8px;border-radius:5px;background:var(--c)}
+.gs-lhead .rt{font-family:var(--mono);font-size:12.5px;color:var(--text-2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gs-http{font-family:var(--mono);font-size:11px;font-weight:700;padding:1px 6px;border-radius:5px;background:var(--ok-soft);color:var(--ok)}
+.gs-http.bad{background:var(--err-soft);color:var(--err)}
+.gs-lcols{display:grid;grid-template-columns:repeat(3,1fr)}
+.gs-lcols > div{padding:9px 12px;min-width:0}
+.gs-lcols > div + div{border-left:1px solid var(--border)}
+.gs-lcols h5{margin:0 0 3px;font-size:11px;font-weight:700;letter-spacing:.6px;color:var(--text-3);display:flex;justify-content:space-between}
+.gs-lcols h5 span{font-family:var(--mono);font-weight:500;letter-spacing:0}
+.gs-lcols code{display:block;font-family:var(--mono);font-size:11.5px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.gs-status{
+  flex:none;height:28px;padding:0 18px;background:var(--surface-2);border-top:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--text-3);
+}
+.gs-status .l,.gs-status .r{display:flex;align-items:center;gap:8px}
+.gs-status .sep{width:1px;height:12px;background:var(--border-strong)}
+.gs-status .ver{font-family:var(--mono);color:var(--text-muted)}
+
+@media (max-width:1180px){
+  .design.on.d-gs{height:auto;min-height:calc(100dvh - 56px)}
+  .gs-main{grid-template-columns:1fr}
+  .gs-panel{max-height:none}
+  .gs-crumb{display:none}
+}
+@media (max-width:760px){
+  .d-gs{--side-w:64px}
+  .d-gs .gs-item .lbl,.d-gs .gs-item .tag,.d-gs .gs-scope .tx,.d-gs .gs-scope .cv{display:none}
+  .d-gs .gs-item,.d-gs .gs-scope{justify-content:center;padding:0}
+  .d-gs .gs-scope{height:44px;background:transparent;border-color:transparent}
+  .d-gs .gs-grp{font-size:0;padding:10px 6px 6px}
+  .d-gs .gs-grp::before{content:"";display:block;height:1px;background:var(--border)}
+  .gs-brand{min-width:0}
+  .gs-brand .sub,.gs-agent-id,.gs-user-id,.gs-side-foot{display:none}
+  .gs-agent{padding:0}
+  .gs-main{padding:10px}
+  .gs-step{grid-template-columns:repeat(2,1fr)}
+  .gs-lcols{grid-template-columns:1fr}
+  .gs-lcols > div + div{border-left:0;border-top:1px solid var(--border)}
+}
 </style>
 </head>
 <body>
@@ -797,9 +1048,10 @@ body{
     <button class="vw-tab" data-v="vercel"><b>D · Vercel</b><span>Developer Platform — 검색/딥링크</span></button>
     <button class="vw-tab" data-v="shadcn"><b>E · shadcn</b><span>Design System — 토큰/테마 전환</span></button>
     <button class="vw-tab" data-v="scdata"><b>F · shadcn</b><span>Data Studio — 분석＋목록</span></button>
+    <button class="vw-tab" data-v="sidebar"><b>G · 현행＋Sidebar</b><span>지금 화면 그대로 — 탭만 좌측으로</span></button>
   </div>
   <div class="vw-actions">
-    <span class="vw-hint">1–6 키로 전환</span>
+    <span class="vw-hint">1–7 키로 전환</span>
     <button class="vw-btn" id="noteBtn">설계 노트</button>
   </div>
 </div>
@@ -1607,6 +1859,161 @@ body{
   </div>
 </section>
 
+<!-- ═══════════════════════════════════════════════════════════════════
+     G · 현행 + Sidebar
+     ═══════════════════════════════════════════════════════════════════ -->
+<section class="design d-gs" data-v="sidebar" id="gsRoot">
+
+  <header class="gs-top">
+    <button class="gs-fold" data-gs-fold title="메뉴 접기/펼치기 ( [ )">
+      <svg class="gs-ico" width="18" height="18" viewBox="0 0 16 16"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg>
+    </button>
+    <div class="gs-brand">
+      <span class="gs-logo" aria-hidden>
+        <svg viewBox="0 0 24 24" fill="none" width="15" height="15">
+          <path d="M4 17 L10 11 L14 14 L20 6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="4" cy="17" r="1.7" fill="#fff"/><circle cx="20" cy="6" r="1.7" fill="#fff"/>
+        </svg>
+      </span>
+      <span>Trace<span class="gs-x">X</span></span>
+      <span class="sub">· AI Action Trace</span>
+    </div>
+    <div class="gs-crumb"><span id="gsGrp">분석</span><i>/</i><b id="gsCur">Traces</b></div>
+    <div class="gs-right">
+      <a class="gs-agent mock-nolink">
+        <span class="gs-agent-ph">🧑‍🍳</span>
+        <span class="gs-agent-id">
+          <b>Action Agent</b>
+          <span class="gs-agent-st"><i></i>근무중<em>AI AGENT</em></span>
+        </span>
+      </a>
+      <button class="gs-user">
+        <span class="gs-user-av">이</span>
+        <span class="gs-user-id"><b>이억수</b><span class="gs-role">ADMIN</span></span>
+        <svg class="gs-ico" width="12" height="12" viewBox="0 0 12 12"><path d="M3 4.5 6 7.5 9 4.5"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="gs-body">
+    <aside class="gs-side" id="gsSide">
+      <button class="gs-scope" title="에이전트 전환">
+        <span class="em">🧑‍🍳</span>
+        <span class="tx"><b>Action Agent</b><span>기본 에이전트 · 전체 화면</span></span>
+        <span class="cv">▾</span>
+      </button>
+
+      <div class="gs-grp">분석</div>
+      <a class="gs-item on" data-grp="분석" title="Traces">
+        <svg class="gs-ico" width="16" height="16" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h7"/><circle class="f" cx="13" cy="12" r="1.3"/></svg>
+        <span class="lbl">Traces</span>
+      </a>
+      <a class="gs-item" data-grp="분석" title="Dashboard">
+        <svg class="gs-ico" width="16" height="16" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="6.5" rx="1.2"/><rect x="2" y="10.5" width="5" height="3.5" rx="1.2"/><rect x="9" y="2" width="5" height="3.5" rx="1.2"/><rect x="9" y="7.5" width="5" height="6.5" rx="1.2"/></svg>
+        <span class="lbl">Dashboard</span>
+      </a>
+      <a class="gs-item" data-grp="분석" title="Tokens">
+        <svg class="gs-ico" width="16" height="16" viewBox="0 0 16 16"><ellipse cx="8" cy="4" rx="5.2" ry="2.2"/><path d="M2.8 4v4c0 1.2 2.33 2.2 5.2 2.2s5.2-1 5.2-2.2V4"/><path d="M2.8 8v4c0 1.2 2.33 2.2 5.2 2.2s5.2-1 5.2-2.2V8"/></svg>
+        <span class="lbl">Tokens</span>
+      </a>
+      <a class="gs-item" data-grp="분석" title="Timeout">
+        <svg class="gs-ico" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="9" r="5.4"/><path d="M8 6.2V9l2 1.4M6 2h4"/></svg>
+        <span class="lbl">Timeout</span>
+      </a>
+      <a class="gs-item" data-grp="분석" title="실적">
+        <svg class="gs-ico" width="16" height="16" viewBox="0 0 16 16"><path d="M2 13.2h12"/><rect class="f" x="3" y="7" width="2.6" height="4.2" rx=".8"/><rect class="f" x="6.7" y="4.4" width="2.6" height="6.8" rx=".8"/><rect class="f" x="10.4" y="2" width="2.6" height="9.2" rx=".8"/></svg>
+        <span class="lbl">실적</span>
+      </a>
+
+      <div class="gs-grp">관리</div>
+      <a class="gs-item" data-grp="관리" title="Improvement Center">
+        <svg class="gs-ico" width="16" height="16" viewBox="0 0 16 16"><path d="M2.5 11.5 6 8l2.5 2.5L13.5 5.5"/><path d="M10 5.5h3.5V9"/></svg>
+        <span class="lbl">Improvement Center</span>
+      </a>
+      <a class="gs-item" data-grp="관리" title="이벤트-FAB 매핑">
+        <svg class="gs-ico" width="16" height="16" viewBox="0 0 16 16"><rect x="2" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9.5" y="9" width="4.5" height="4.5" rx="1"/><path d="M6.5 4.75h3a2 2 0 0 1 2 2V9"/></svg>
+        <span class="lbl">이벤트-FAB 매핑</span>
+      </a>
+      <a class="gs-item" data-grp="관리" title="계정 관리">
+        <svg class="gs-ico" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="5.5" r="2.6"/><path d="M3 13.5c.6-2.4 2.6-3.8 5-3.8s4.4 1.4 5 3.8"/></svg>
+        <span class="lbl">계정 관리</span><span class="tag">ADMIN</span>
+      </a>
+      <a class="gs-item" data-grp="관리" title="프로필 편집">
+        <svg class="gs-ico" width="16" height="16" viewBox="0 0 16 16"><path d="M10.5 2.8l2.7 2.7-7.4 7.4H3.1v-2.7z"/><path d="M9 4.3l2.7 2.7"/></svg>
+        <span class="lbl">프로필 편집</span><span class="tag">ADMIN</span>
+      </a>
+
+      <div class="gs-grp">🚧 공사장</div>
+      <div class="gs-wipbox">
+        <a class="gs-item" data-grp="공사장" title="Action 오픈 로드맵">
+          <svg class="gs-ico" width="16" height="16" viewBox="0 0 16 16"><path d="M3.5 14V2.5"/><path d="M3.5 3h8L9.9 5.6l1.6 2.6h-8"/></svg>
+          <span class="lbl">Action 오픈 로드맵</span>
+        </a>
+        <a class="gs-item" data-grp="공사장" title="레이아웃 개편 시안">
+          <svg class="gs-ico" width="16" height="16" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M6 2.5v11M6 6.5h8"/></svg>
+          <span class="lbl">레이아웃 개편 시안</span>
+        </a>
+      </div>
+
+      <div class="gs-side-foot">
+        <button class="gs-item" data-gs-fold title="메뉴 접기/펼치기 ( [ )">
+          <svg class="gs-ico" width="16" height="16" viewBox="0 0 16 16"><path d="M9.5 4.5 6 8l3.5 3.5M13 4.5 9.5 8 13 11.5"/></svg>
+          <span class="lbl">메뉴 접기</span>
+        </button>
+      </div>
+    </aside>
+
+    <main class="gs-main">
+      <section class="gs-panel">
+        <div class="gs-ph">
+          <span class="t">Traces</span>
+          <span class="m">128 건 · <span class="e">오류 3</span> · <span class="f">실패 2</span></span>
+        </div>
+        <div class="gs-flt">
+          <div class="gs-flt-row">
+            <span class="gs-fld">TRACE_ID</span>
+            <span class="gs-fld">USER_ID</span>
+            <span class="gs-fld">ACTION_TYP · 전체 <span>▾</span></span>
+            <span class="gs-fld">FAIL CODE · 전체 <span>▾</span></span>
+            <span class="gs-fld">FAB <span>▾</span></span>
+          </div>
+          <div class="gs-flt-bot">
+            <div class="l">
+              <span class="gs-ftag">기간</span>
+              <div class="gs-seg"><button class="on">전체</button><button>24시간</button><button>7일</button><button>30일</button><button>직접</button></div>
+            </div>
+            <div class="r">
+              <span class="gs-chk"><i></i>오류만</span>
+              <span class="gs-chk"><i></i>묶음만</span>
+              <button class="gs-btn">초기화</button>
+              <button class="gs-btn pri">조회</button>
+            </div>
+          </div>
+        </div>
+        <div class="gs-pb">
+          <table class="gs-tbl">
+            <thead><tr><th>TRACE_ID</th><th>USER</th><th>FIRST RECV</th><th>LAYERS</th><th>STATUS</th></tr></thead>
+            <tbody id="gsRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="gs-panel">
+        <div class="gs-ph">
+          <span class="t">Trace Detail</span>
+          <span class="m">CUBE → GAIA → MCP → ONEOIS</span>
+        </div>
+        <div class="gs-pb" id="gsDetail"></div>
+      </section>
+    </main>
+  </div>
+
+  <footer class="gs-status">
+    <div class="l"><span>© 2026 SK hynix</span><span class="sep"></span><span>eWorks Agent</span></div>
+    <div class="r"><span>TraceX</span><span class="ver">v0.1.0</span></div>
+  </footer>
+</section>
+
 </div>
 
 <script>
@@ -2117,8 +2524,107 @@ const NOTES = {
       ["내비게이션","상단 탭 4개 + 기간 세그먼트. 이 화면에서는 <u>표와 차트가 곧 내비게이션</u>이라 메뉴가 할 일이 적다."],
       ["트레이드오프","<u>한 화면이 두 일을 한다</u>. 그만큼 세로로 길어져 스크롤 없이는 전체가 안 보이고, 차트와 표 어느 쪽도 전용 화면만큼 넓지 않다. 관제(B)처럼 '한눈에'가 목적인 자리에는 맞지 않는다."]
     ]
+  },
+  sidebar:{
+    title:"G · 현행 + Sidebar",
+    lead:"A~F 가 '새 옷'이라면 이건 <u>지금 옷 그대로</u>다. 토큰·패널·표·필터·Agent 카드·상태바를 전부 현행 CSS 값으로 옮기고, 바뀐 건 <u>상단 탭이 좌측으로 빠진 것 하나</u>. 좌상단 ☰ 이나 사이드바 하단 '메뉴 접기'(또는 <u>[</u> 키)로 64px 레일로 접힌다.",
+    cards:[
+      ["바뀐 것","상단 세그먼트 탭(Traces·Dashboard·Tokens·Timeout·실적) → 사이드바 <u>분석</u> 그룹. 탭이 빠진 자리엔 <u>현재 위치(분석 / Traces)</u>를 크게 띄워 '어느 화면인가' 신호를 대신한다."],
+      ["같이 옮긴 것","유저 메뉴 안에 숨어 있던 <u>관리</u> 4종(Improvement·이벤트-FAB·계정·프로필)이 사이드바로 나온다 → 유저 메뉴엔 비밀번호 변경·로그아웃만 남는다. 상단바의 점선 <u>🚧 공사장</u> 칩은 사이드바 하단 점선 박스로 — 정식 메뉴와 섞이지 않는다는 원칙은 그대로."],
+      ["에이전트 전환","AgentSelector 를 사이드바 맨 위(워크스페이스 스위처 자리)로. 에이전트가 <u>보이는 메뉴를 정하므로</u>(비기본 에이전트 = Tokens·Timeout 만) 메뉴 목록 바로 위가 맞는 자리다. 우상단 '근무중' Agent 카드는 현행 유지."],
+      ["트레이드오프","사이드바 232px 만큼 본문이 좁아진다 — Traces 좌우 분할이 가장 먼저 느낀다. 그래서 <u>접기</u>를 1급 기능으로 둔다(접으면 64px). 메뉴가 10개 안팎이라 지금은 탭으로도 버티지만, 관리·공사장까지 늘어날 자리를 미리 만든다는 게 이득."]
+    ]
   }
 };
+
+/* ─────────────────────────── G · 현행 + Sidebar ─────────────────────────── */
+const GS_LAYERS = [["CUBE","#4b6bfb"],["GAIA","#a21caf"],["MCP","#059669"],["ONEOIS","#d97706"]];
+const GS_PILL = {ok:"OK", err:"ERROR", fail:"FAIL", warn:"PARTIAL"};
+const GS_ROWS = [
+  {work:"CH-M14-PM3", user:"2091834", t:"2026-09-14 09:31:02", flow:"POST › GET › GET", st:"ok", kids:[
+    {id:"7c1e0a92-3f4b-4e21-9d6a-51b8e0f4c2a7", user:"2091834", t:"2026-09-14 09:31:02", act:"POST", ly:4, st:"ok", on:true},
+    {id:"0b93d4e1-8a27-4c55-b1f0-2e6d9a7c3f18", user:"2091834", t:"2026-09-14 09:31:09", act:"GET",  ly:4, st:"ok"},
+    {id:"e45a1c07-6d2f-49b3-8c1e-7f0a2b5d9e64", user:"2091834", t:"2026-09-14 09:31:15", act:"GET",  ly:3, st:"warn"}]},
+  {id:"3d8f2b6a-1c47-4e90-a5d3-8b2f6e0c71a4", user:"1873302", t:"2026-09-14 09:28:47", ly:4, st:"err"},
+  {id:"91a4c3e8-0f5b-4d27-b6e9-2c8d1a7f5e03", user:"2240917", t:"2026-09-14 09:27:10", ly:4, st:"ok"},
+  {id:"c62e9b10-4a8d-4f35-9e7c-3b1f0d6a8e52", user:"1956621", t:"2026-09-14 09:25:55", ly:2, st:"fail"},
+  {id:"5f07d2a9-b83e-4c61-a0f4-7e2c9b5d1a86", user:"2091834", t:"2026-09-14 09:24:03", ly:4, st:"ok"},
+  {id:"a8b3e6f1-2d9c-4705-8b1a-6f4e0c3d9a27", user:"2310488", t:"2026-09-14 09:22:41", ly:4, st:"ok"},
+  {work:"CH-M16-EA1", user:"1873302", t:"2026-09-14 09:21:18", flow:"POST › GET", st:"ok", kids:[]},
+  {id:"d4c1f8a2-7e36-4b9d-a2c5-0f8e1b6d3c79", user:"2240917", t:"2026-09-14 09:19:30", ly:3, st:"warn"},
+  {id:"1e9a7c5b-3f02-4d8e-b4a6-9c2d7f0e5b31", user:"1956621", t:"2026-09-14 09:18:12", ly:4, st:"ok"},
+  {id:"6b2d0e4f-9a71-4c38-8f5e-1d3a6c9b7e20", user:"2310488", t:"2026-09-14 09:15:58", ly:4, st:"err"},
+  {id:"f3a8c1d6-5b24-4e7a-9d0f-8c6b2e1a4f95", user:"2091834", t:"2026-09-14 09:14:06", ly:4, st:"fail"},
+  {id:"2c7e5a9d-8f13-4b60-a7c2-4e9d1f3b6a08", user:"1873302", t:"2026-09-14 09:12:44", ly:4, st:"ok"},
+];
+const GS_DETAIL = [
+  {ly:0, route:"POST /cube/bot/action", http:200, ms:"4.21s",
+   recv:["09:31:02.114",'{"userId":"2091834","msg":"PM3 시즈닝 해줘"}'],
+   send:["09:31:02.131",'{"actionTyp":"NEST_Seasoning","facId":"M14"}'],
+   resp:["09:31:06.322",'{"result":"시즈닝을 요청했습니다."}']},
+  {ly:1, route:"POST /gaia/agent/invoke", http:200, ms:"3.97s",
+   recv:["09:31:02.140",'{"traceId":"7c1e0a92…","node":"actionRouterNode"}'],
+   send:["09:31:03.806",'{"tool":"nest.seasoning.create","eqp":"PM3"}'],
+   resp:["09:31:06.108",'{"status":"SUCCESS","tokens":2143}']},
+  {ly:2, route:"POST /mcp/tools/nest.seasoning.create", http:200, ms:"2.23s",
+   recv:["09:31:03.822",'{"eqpId":"PM3","chamber":"CH-M14-PM3"}'],
+   send:["09:31:03.845",'{"cmd":"SEASONING","lotCnt":1}'],
+   resp:["09:31:06.051",'{"rtnCd":"0","rtnMsg":"OK"}']},
+  {ly:3, route:"POST /oneois/eqp/command", http:200, ms:"2.19s",
+   recv:["09:31:03.861",'{"eqpId":"PM3","cmd":"SEASONING"}'],
+   send:["09:31:03.874",'{"txn":"EQP_CMD","seq":88213}'],
+   resp:["09:31:06.040",'{"ack":"Y"}']},
+];
+
+function gsDots(n){
+  return `<span class="gs-dots">${GS_LAYERS.map(([,c],i)=>
+    `<i style="${i<n?`background:${c};border-color:${c}`:""}"></i>`).join("")}<span>${n}/4</span></span>`;
+}
+function gsPill(st){ return `<span class="gs-pill ${st}">${GS_PILL[st]}</span>`; }
+function gsTrace(r, kid){
+  return `<tr class="${kid?"kid":""}${r.on?" on":""}" data-id="${r.id}">
+    <td class="mono" title="${r.id}">${r.act?`<span class="gs-chip">${r.act}</span>`:""}${r.id}</td>
+    <td>${r.user}</td><td class="mono">${r.t}</td><td>${gsDots(r.ly)}</td><td>${gsPill(r.st)}</td></tr>`;
+}
+function gsRender(){
+  document.getElementById("gsRows").innerHTML = GS_ROWS.map(r=>{
+    if(!r.work) return gsTrace(r,false);
+    const open = r.kids.length>0;
+    return `<tr class="work"><td><span class="gs-caret">${open?"▾":"▸"}</span><span class="mono">${r.work}</span></td>
+      <td>${r.user}</td><td class="mono">${r.t}</td><td><span class="gs-flow">${r.flow}</span></td><td>${gsPill(r.st)}</td></tr>`
+      + r.kids.map(k=>gsTrace(k,true)).join("");
+  }).join("");
+  const col = (h,[tm,body]) => `<div><h5>${h}<span>${tm}</span></h5><code>${body}</code></div>`;
+  document.getElementById("gsDetail").innerHTML = `
+    <div class="gs-dhead"><span class="id">7c1e0a92-3f4b-4e21-9d6a-51b8e0f4c2a7</span><span class="sub">NEST_Seasoning · M14 · 총 4.21s</span></div>
+    <div class="gs-step">${GS_DETAIL.map(d=>{const [k,c]=GS_LAYERS[d.ly];
+      return `<div style="--c:${c}"><b>${k}</b><span>${d.ms}</span></div>`;}).join("")}</div>
+    ${GS_DETAIL.map(d=>{const [k,c]=GS_LAYERS[d.ly];
+      return `<div class="gs-lcard"><div class="gs-lhead"><span class="gs-ltag" style="--c:${c}">${k}</span>
+        <span class="rt">${d.route}</span><span class="gs-http${d.http>=400?" bad":""}">HTTP ${d.http}</span></div>
+        <div class="gs-lcols">${col("RECV",d.recv)}${col("SEND",d.send)}${col("RESP",d.resp)}</div></div>`;}).join("")}`;
+}
+gsRender();
+
+const gsRoot = document.getElementById("gsRoot");
+function gsFold(){
+  gsRoot.classList.toggle("fold");
+  const lbl = gsRoot.querySelector(".gs-side-foot .lbl");
+  lbl.textContent = gsRoot.classList.contains("fold") ? "메뉴 펼치기" : "메뉴 접기";
+}
+gsRoot.querySelectorAll("[data-gs-fold]").forEach(b=>b.addEventListener("click",gsFold));
+gsRoot.querySelectorAll(".gs-item[data-grp]").forEach(a=>a.addEventListener("click",()=>{
+  gsRoot.querySelectorAll(".gs-item.on").forEach(x=>x.classList.remove("on"));
+  a.classList.add("on");
+  document.getElementById("gsGrp").textContent = a.dataset.grp;
+  document.getElementById("gsCur").textContent = a.querySelector(".lbl").textContent;
+}));
+document.getElementById("gsRows").addEventListener("click",(e)=>{
+  const tr = e.target.closest("tr[data-id]");
+  if(!tr) return;
+  document.querySelectorAll("#gsRows tr.on").forEach(x=>x.classList.remove("on"));
+  tr.classList.add("on");
+});
 
 /* ─────────────────────────── 시안 전환 ─────────────────────────── */
 const tabs = [...document.querySelectorAll(".vw-tab")];
@@ -2151,8 +2657,9 @@ noteBtn.addEventListener("click",()=>{
   noteBtn.classList.toggle("on", note.classList.contains("open"));
 });
 document.addEventListener("keydown",(e)=>{
-  const order = ["apple","binance","bmw","vercel","shadcn","scdata"];
-  if(e.key>="1" && e.key<="6"){ show(order[+e.key-1]); }
+  const order = ["apple","binance","bmw","vercel","shadcn","scdata","sidebar"];
+  if(e.key>="1" && e.key<="7"){ show(order[+e.key-1]); }
+  if(e.key==="[" && current==="sidebar"){ gsFold(); }
   if(e.key.toLowerCase()==="n"){ noteBtn.click(); }
 });
 renderNote();

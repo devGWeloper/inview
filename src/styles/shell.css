@@ -56,7 +56,7 @@
 /* 브랜드 폭을 사이드바에 맞춰 현재 위치(.crumb)가 본문 시작선에서 출발하게 한다 (62 = 좌 패딩 + ☰ + gap) */
 .brand {
   display: flex; align-items: center; gap: 9px; flex: none;
-  min-width: calc(var(--side-w) - 62px); transition: min-width .2s ease;
+  min-width: calc(var(--side-w) - 62px);
   font-size: 18px; font-weight: 700; letter-spacing: -0.1px; white-space: nowrap;
 }
 .brand .logo {

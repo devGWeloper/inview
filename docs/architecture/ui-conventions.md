@@ -66,6 +66,9 @@
 - 공사장 그룹 = `WIP_SITES`, ADMIN 에게만. `/wip` 페이지가 같은 배열을 그린다
 - 접기: `localStorage["tracex.navFolded"]` · ☰ · 사이드바 하단 버튼 · `[` 키(입력 중엔 무시).
   ≤760px 는 항상 64px 레일
+- **사이드바 폭(`--side-w`)에 transition 을 걸지 말 것** — 폭은 레이아웃 속성이라 애니메이션 매 프레임
+  본문 전체가 재배치되고, 차트 `ResponsiveContainer` 가 매 프레임 다시 그리며, Traces 상세의 `@container`
+  경계를 지나는 순간 3열↔1열이 뒤집혀 크게 버벅인다. 접기는 즉시 전환이다
 - 화면 루트는 `.app-main`(flex column) 안에서 `flex:1; min-height:0; overflow:auto` 로 스스로 스크롤한다
 - **`.sidenav` 에 overflow 를 두지 말 것** — 에이전트 전환 드롭다운이 사이드바 밖으로 나가야 한다.
   스크롤은 `.sidenav-scroll` 만

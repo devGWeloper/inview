@@ -465,7 +465,8 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
   grid-template-columns: var(--c1, 1fr) auto var(--c2, 1fr) auto var(--c3, 1fr);
   gap: 0;
 }
-@container (max-width: 980px) {
+/* ⚠️ 올리지 말 것 — 사이드바를 펼친 1920px 화면에서 상세 패널이 ≈945px 이라 그 아래로 가면 기본 상태에서 1열로 접힌다 */
+@container (max-width: 880px) {
   .tl-body-3 { grid-template-columns: 1fr; }
   .tl-body-3 > .json-splitter { display: none; }
   .tl-body-3 > .tl-col:not(:first-child) { border-top: 1px solid var(--border); }

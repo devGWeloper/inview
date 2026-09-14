@@ -36,7 +36,8 @@
 
 `TraceTimeline` 이 행을 레이어별로 묶어 렌더한다.
 
-- 단일 호출 레이어: **recv | send | resp** 3열
+- 단일 호출 레이어: **recv | send | resp** 3열. 패널 폭 880px 이하에서 1열로 접힌다(`@container`).
+  이 값을 올리지 말 것 — 사이드바를 펼친 1920px 화면에서 상세 패널이 ≈945px 이다
 - 멀티 호출 레이어: 상위 recv 를 위에 한 번, 그 아래 번호 붙은 `Call #N` 마다 send | resp 쌍
 - `Stepper` 는 레이어에 여러 행이 있으면 부제에 `N calls` 를 띄운다
 - `HTTP_STS_CD` 는 route 옆(단일 카드 head) / `Call #N` 헤더(멀티)에 배지로

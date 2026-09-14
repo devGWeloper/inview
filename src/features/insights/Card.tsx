@@ -3,11 +3,12 @@
 import React from "react";
 
 export function Card({
-  title, sub, hero, children,
+  title, sub, hero, aux, children,
 }: {
   title: string;
   sub?: string;
   hero?: boolean;
+  aux?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -17,6 +18,7 @@ export function Card({
           <span className="dash-card-title">{title}</span>
           {sub && <span className="dash-card-sub">{sub}</span>}
         </div>
+        {aux && <div className="dash-card-aux">{aux}</div>}
       </div>
       <div className="dash-card-body">{children}</div>
     </section>

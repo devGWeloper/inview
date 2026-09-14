@@ -17,6 +17,8 @@ import { InsightsResponse, ROUTING_FAIL_LABEL } from "@/lib/types";
 import { RECENT_PRESETS, RecentKey, Sel, isoNoTz, rangeDates, rangeLabel, rangeOf, sameSel, weekBadge } from "@/features/insights/range";
 import { ACTION_LABEL, FAC_NONE, actionLabel, compact, facLabel, pct } from "@/features/insights/labels";
 import { Card, Kpi } from "@/features/insights/Card";
+import { TickSelect, useTickUnit } from "@/components/charts/TickSelect";
+import { TickUnit, granOfTickUnit, granularityLabel } from "@/lib/timeBuckets";
 
 
 export default function InsightsPage() {
@@ -30,12 +32,20 @@ export default function InsightsPage() {
   const [copied, setCopied] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
-  const load = useCallback(async (p: Sel) => {
+  const spanMs = useMemo(() => {
+    const { from, to } = rangeDates(sel);
+    return Math.max(0, to.getTime() - from.getTime());
+  }, [sel]);
+  const { unit, enabled: unitEnabled, ready: unitReady, setUnit } = useTickUnit("insights", spanMs);
+
+  const load = useCallback(async (p: Sel, u: TickUnit) => {
     setLoading(true);
     setErr(null);
     try {
       const { from, to } = rangeOf(p);
       const qs = new URLSearchParams({ dateFrom: from, dateTo: to });
+      const g = granOfTickUnit(u);
+      if (g) qs.set("g", g);
       setData(await apiJson<InsightsResponse>(`/api/insights?${qs}`, { cache: "no-store" }));
     } catch (e) {
       setErr(errMessage(e));
@@ -45,7 +55,10 @@ export default function InsightsPage() {
     }
   }, []);
 
-  useEffect(() => { void load(sel); }, [sel, load]);
+  // unit 은 sel 에서 파생되므로 기간을 바꿔도 한 번만 돈다.
+  useEffect(() => {
+    if (unitReady) void load(sel, unit);
+  }, [sel, unit, unitReady, load]);
 
   const weekOffset = sel.kind === "week" ? sel.offset : 0;
   const goWeek = (offset: number) => setSel({ kind: "week", offset: Math.min(0, offset) });
@@ -230,7 +243,7 @@ export default function InsightsPage() {
           >
             {copied ? "✓ 복사됨" : "📋 리포트 복사"}
           </button>
-          <button type="button" className="btn ghost" onClick={() => void load(sel)}>
+          <button type="button" className="btn ghost" onClick={() => void load(sel, unit)}>
             새로고침
           </button>
         </div>
@@ -265,7 +278,12 @@ export default function InsightsPage() {
             />
           </div>
 
-          <Card title="처리 추이" sub="성공 · 실패 적층" hero>
+          <Card
+            title="처리 추이"
+            sub={`성공 · 실패 적층 · ${granularityLabel(data.granularity)} 단위`}
+            hero
+            aux={<TickSelect value={unit} enabled={unitEnabled} onChange={setUnit} />}
+          >
             <TimeSeriesChart stats={{ granularity: data.granularity, buckets: data.buckets }} />
           </Card>
 

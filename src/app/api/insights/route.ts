@@ -9,6 +9,7 @@ import { fetchTimeoutStats } from "@/lib/timeouts";
 import { defaultAgentId } from "@/lib/config";
 import { LOWEST_ROLE, canViewInsights } from "@/lib/roles";
 import { loadErrorCodeMap } from "@/lib/errorCodes";
+import { parseGranularityParam } from "@/lib/timeBuckets";
 // TEMP(ONEOIS 미연결): 가상 실패 코드의 사람이 읽는 라벨 — tempStatus.ts 를 지울 때 함께 정리.
 import { ACTION_FAIL_LABELS } from "@/lib/tempStatus";
 import {
@@ -40,14 +41,16 @@ export async function GET(req: NextRequest) {
     dateFrom: sp.get("dateFrom") || undefined,
     dateTo: sp.get("dateTo") || undefined,
   };
+  // 처리 추이 차트의 틱 단위 — 토큰·타임아웃 추이에는 싣지 않는다.
+  const gran = parseGranularityParam(sp.get("g"));
 
-  logger.info("GET /api/insights", { ...ctx, ...query, by: guard.session.sub });
+  logger.info("GET /api/insights", { ...ctx, ...query, gran, by: guard.session.sub });
 
   try {
     const agentId = defaultAgentId();
     const profile = readProfile(agentId);
     const [{ stats }, fte, tok, tmo, errMap] = await Promise.all([
-      computeStats(query),
+      computeStats({ ...query, gran }),
       computeFteStats(profile).catch(() => null),
       fetchTokenStats({ ...query, agentId, skipQuestions: true }).catch(() => null),
       fetchTimeoutStats({ ...query, agentId }).catch(() => null),

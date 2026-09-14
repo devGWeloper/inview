@@ -1,4 +1,7 @@
-# 틱 단위 축 · 1분 틱 뷰 — Dashboard · Tokens · Timeout 공용
+# 틱 단위 축 · 1분 틱 뷰 — Dashboard · Tokens · Timeout · 실적 공용
+
+> 실적(`/insights`)은 처리 추이 차트에만 붙는다. 기간 선택이 다르고 자동 갱신이 없다 —
+> [insights.md](insights.md)
 
 **파일**
 - 축(순수): `src/lib/timeBuckets.ts` — `TickUnit` `tickUnitsFor` `clampTickUnit` `granOfTickUnit`

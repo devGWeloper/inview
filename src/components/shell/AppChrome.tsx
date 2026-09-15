@@ -81,24 +81,13 @@ export function AppChrome({ version, children }: { version: string; children: Re
           </div>
         </header>
         <div className="app-body">
-          <Sidebar folded={folded} onToggleFold={toggleFold} />
+          <Sidebar folded={folded} onToggleFold={toggleFold} version={version} />
           <main className="app-main">
             {/* 계정이 설정에 없는 에이전트에 묶여 있을 때만 뜬다 (빈 화면 + 403 의 이유를 밝힌다) */}
             <AgentScopeWarning />
             {children}
           </main>
         </div>
-        <footer className="statusbar">
-          <div className="left">
-            <span>© 2026 SK hynix</span>
-            <span className="sep" aria-hidden />
-            <span>eWorks Agent</span>
-          </div>
-          <div className="right">
-            <span>TraceX</span>
-            <span className="ver">v{version}</span>
-          </div>
-        </footer>
       </div>
      </TimeRangeProvider>
     </AgentScopeProvider>

@@ -7,7 +7,7 @@ import { useAgentScope } from "@/components/agents/AgentScopeProvider";
 import { AgentSelector } from "@/components/agents/AgentSelector";
 import { NavIcon, adminOnly, isNavActive, locatePage, visibleNav } from "@/components/shell/nav";
 
-export function Sidebar({ folded, onToggleFold }: { folded: boolean; onToggleFold: () => void }) {
+export function Sidebar({ folded, onToggleFold, version }: { folded: boolean; onToggleFold: () => void; version: string }) {
   const path = usePathname() ?? "/";
   const { user } = useAuth();
   const { isDefault } = useAgentScope();
@@ -61,6 +61,13 @@ export function Sidebar({ folded, onToggleFold }: { folded: boolean; onToggleFol
           </svg>
           <span className="sidenav-text">{folded ? "메뉴 펼치기" : "메뉴 접기"}</span>
         </button>
+        <div className="sidenav-meta" title={`© 2026 SK hynix · eWorks Agent · TraceX v${version}`}>
+          <span className="sidenav-meta-full">© 2026 SK hynix · eWorks Agent</span>
+          <span>
+            <span className="sidenav-meta-name">TraceX </span>
+            <span className="ver">v{version}</span>
+          </span>
+        </div>
       </div>
     </aside>
   );

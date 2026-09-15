@@ -141,6 +141,6 @@ FIELD 의 홈은 `/` 가 아니라 `/insights`(`homePathFor`). 로그인 페이�
 
 ## 클라이언트
 
-`AuthProvider`(`useAuth()`) → `AppChrome`(상단바·사이드바·푸터 셸, `/login` 은 셸 없이) → `UserMenu`
+`AuthProvider`(`useAuth()`) → `AppChrome`(상단바·사이드바 셸 — 저작권·버전은 사이드바 하단, `/login` 은 셸 없이) → `UserMenu`
 (비밀번호 변경·로그아웃만. 관리 메뉴는 사이드바).
 mutation fetch 는 세션 쿠키 자동 전송에 의존한다.

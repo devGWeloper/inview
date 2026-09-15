@@ -64,6 +64,14 @@
 
 .sidenav-foot { padding-top: 8px; border-top: 1px solid var(--border); }
 .sidenav-fold { color: var(--text-3); font-size: 12.5px; font-weight: 500; }
+.sidenav-meta {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 6px 10px 0;
+  font-size: 11px; line-height: 1.4; letter-spacing: .2px;
+  color: var(--text-muted); white-space: nowrap; overflow: hidden;
+}
+.sidenav-meta-full { overflow: hidden; text-overflow: ellipsis; }
+.sidenav-meta .ver { font-family: var(--mono); }
 
 /* 접힘 (64px 아이콘 레일) — ≤760px 에서는 아래 미디어쿼리가 같은 모양을 강제한다 */
 .app.nav-folded .sidenav-text,
@@ -77,6 +85,9 @@
 .app.nav-folded .sidenav-label::before { content: ""; display: block; height: 1px; background: var(--border); }
 .app.nav-folded .sidenav-group.wip .sidenav-items { padding: 3px 2px; }
 .app.nav-folded .sidenav-fold svg { transform: rotate(180deg); }
+.app.nav-folded .sidenav-meta { align-items: center; padding: 6px 0 0; font-size: 10px; }
+.app.nav-folded .sidenav-meta-full,
+.app.nav-folded .sidenav-meta-name { display: none; }
 
 /* Agent — 분석 탭과 성격이 다른 '근무 현황 카드'. 우상단에 자리를 차지하며
    살아있는 상태등으로 "지금 일하는 주체"임을 드러낸다.

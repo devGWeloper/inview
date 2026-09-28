@@ -20,6 +20,7 @@ import {
   resolveGranularity,
 } from "./timeBuckets";
 import { SQL_ERR_PRED, SQL_OK_PRED } from "./tokenStatus";
+import { SQL_QUERY_TOKEN_ID, lobAsText } from "./queryCtn";
 
 let oracledbCached: typeof import("oracledb") | null = null;
 async function getOracle(): Promise<typeof import("oracledb") | null> {
@@ -140,7 +141,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
   const t0 = Date.now();
   try {
     conn = await oracle.getConnection(cfg);
-    const opts = { outFormat: oracle.OBJECT } as const;
+    const opts = { outFormat: oracle.OBJECT, fetchTypeHandler: lobAsText(oracle) } as const;
     const rowsOf = (r: { rows?: unknown }) => (r.rows ?? []) as Array<Record<string, unknown>>;
 
     let hasStatus = true;
@@ -290,11 +291,13 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     const agg = (col: string) =>
       `LISTAGG(${col}, ',' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY CALL_TM)`;
     const questionsSql =
-      `SELECT QKEY, TRACE_ID, NODES, MODELS, KEYNMS, ERRNODES, QCTN, USR, CALLS, P, C, T, LAST_TM FROM (` +
+      `SELECT q.QKEY, q.TRACE_ID, q.NODES, q.MODELS, q.KEYNMS, q.ERRNODES, d.QUERY_CTN AS QCTN,` +
+      ` q.USR, q.CALLS, q.P, q.C, q.T, q.LAST_TM FROM (` +
+      `SELECT * FROM (` +
         `SELECT TRACE_ID AS QKEY, TRACE_ID,` +
         ` ${agg("NODE_NM")} AS NODES, ${agg("MODEL_NM")} AS MODELS,` +
         ` ${hasKeyNm ? agg("KEY_NM") : "NULL"} AS KEYNMS, ${errNodeExpr} AS ERRNODES,` +
-        ` MIN(QUERY_CTN) KEEP (DENSE_RANK FIRST ORDER BY NVL2(QUERY_CTN, 0, 1), CALL_TM) AS QCTN,` +
+        ` ${SQL_QUERY_TOKEN_ID} AS QTOKEN,` +
         ` MAX(USER_ID) AS USR, COUNT(*) AS CALLS,` +
         ` SUM(INPUT_TOKENS) AS P, SUM(OUTPUT_TOKENS) AS C, SUM(TOTAL_TOKENS) AS T,` +
         ` TO_CHAR(MAX(CALL_TM), 'YYYY-MM-DD"T"HH24:MI:SS') AS LAST_TM` +
@@ -303,12 +306,13 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
         `SELECT 'token:' || TOKEN_ID AS QKEY, NULL AS TRACE_ID, NODE_NM AS NODES, MODEL_NM AS MODELS,` +
         ` ${hasKeyNm ? "KEY_NM" : "NULL"} AS KEYNMS,` +
         ` ${hasStatus ? `CASE WHEN ${SQL_ERR_PRED} THEN NODE_NM END` : "NULL"} AS ERRNODES,` +
-        ` QUERY_CTN AS QCTN,` +
+        ` TOKEN_ID AS QTOKEN,` +
         ` USER_ID AS USR, 1 AS CALLS,` +
         ` INPUT_TOKENS AS P, OUTPUT_TOKENS AS C, TOTAL_TOKENS AS T,` +
         ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS') AS LAST_TM` +
         ` FROM TRX_TOKEN_DET${grpWhere("TRACE_ID IS NULL")}` +
-      `) ORDER BY LAST_TM DESC FETCH FIRST ${QUESTION_LIMIT} ROWS ONLY`;
+      `) ORDER BY LAST_TM DESC FETCH FIRST ${QUESTION_LIMIT} ROWS ONLY` +
+      `) q LEFT JOIN TRX_TOKEN_DET d ON d.TOKEN_ID = q.QTOKEN ORDER BY q.LAST_TM DESC`;
     const questions: TokenQuestion[] = skipQ ? [] : (await run("questions", questionsSql)).map((r) => ({
       qKey: String(r.QKEY ?? r.qkey ?? ""),
       traceId: str(r.TRACE_ID ?? r.trace_id),

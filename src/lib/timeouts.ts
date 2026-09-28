@@ -3,6 +3,7 @@
 import { getAgentDbConfig } from "./config";
 import { logger } from "./logger";
 import { SQL_ERR_PRED, SQL_TIMEOUT_PRED } from "./tokenStatus";
+import { lobAsText } from "./queryCtn";
 import {
   TimeoutBucket,
   TimeoutDimStat,
@@ -138,7 +139,7 @@ export async function fetchTimeoutStats(filter: TimeoutFilter): Promise<TimeoutS
   let conn: Awaited<ReturnType<typeof oracle.getConnection>> | undefined;
   try {
     conn = await oracle.getConnection(cfg);
-    const opts = { outFormat: oracle.OBJECT } as const;
+    const opts = { outFormat: oracle.OBJECT, fetchTypeHandler: lobAsText(oracle) } as const;
 
     try {
       await conn.execute("SELECT STAT_CD, ERR_CTN FROM TRX_TOKEN_DET WHERE 1 = 0", {}, opts);

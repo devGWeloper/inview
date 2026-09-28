@@ -14,6 +14,7 @@ import {
   LAYER_ORDER,
 } from "./types";
 import { logger } from "./logger";
+import { SQL_QUERY_TOKEN_ID, lobAsText } from "./queryCtn";
 
 let oracledbCached: typeof import("oracledb") | null = null;
 async function getOracle(): Promise<typeof import("oracledb") | null> {
@@ -493,13 +494,14 @@ export async function fetchRequestFailureContext(
           })
           .join(", ");
         const qres = await conn.execute(
-          `SELECT TRACE_ID,
-                  MIN(QUERY_CTN) KEEP (DENSE_RANK FIRST ORDER BY NVL2(QUERY_CTN, 0, 1), CALL_TM) AS QCTN
-             FROM TRX_TOKEN_DET
-            WHERE TRACE_ID IN (${placeholders})
-            GROUP BY TRACE_ID`,
+          `SELECT q.TRACE_ID, d.QUERY_CTN AS QCTN
+             FROM (SELECT TRACE_ID, ${SQL_QUERY_TOKEN_ID} AS QTOKEN
+                     FROM TRX_TOKEN_DET
+                    WHERE TRACE_ID IN (${placeholders})
+                    GROUP BY TRACE_ID) q
+             JOIN TRX_TOKEN_DET d ON d.TOKEN_ID = q.QTOKEN`,
           qBinds,
-          { outFormat: oracle.OBJECT }
+          { outFormat: oracle.OBJECT, fetchTypeHandler: lobAsText(oracle) }
         );
         const qmap = new Map<string, string>();
         for (const r of (qres.rows ?? []) as Record<string, unknown>[]) {

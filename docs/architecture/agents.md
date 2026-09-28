@@ -51,7 +51,7 @@ LLM 호출 1건 = 1행. GAIA 가 `sql/dml_insert_token_det.sql` 로 적재. **�
 | `USER_ID` | |
 | `INPUT_TOKENS`/`OUTPUT_TOKENS`/`TOTAL_TOKENS` | provider-neutral 명칭. OpenAI 호환 응답의 `prompt_tokens`/`completion_tokens` 매핑 |
 | `LATENCY_MS` | LLM 요청→응답 ms, **nullable**. 없으면 집계에서 자동 제외 |
-| `QUERY_CTN` | LLM 에 실제 들어간 쿼리/프롬프트. `VARCHAR2(4000)`, nullable, 집계 대상 아님 |
+| `QUERY_CTN` | LLM 에 실제 들어간 쿼리/프롬프트. 기본 `VARCHAR2(4000)` 이나 **에이전트에 따라 CLOB**, nullable, 집계 대상 아님 |
 | `STAT_CD`/`ERR_CTN` | 호출 결과 |
 | `CALL_TM`/`REG_DT` | |
 
@@ -71,6 +71,15 @@ LLM 호출 1건 = 1행. GAIA 가 `sql/dml_insert_token_det.sql` 로 적재. **�
 `KEY_NM` 도 같은 방식이다(`hasKeyNm`, 세 집계 모두 — `tokens.ts`/`timeouts.ts`/`tickStats.ts`).
 없으면 SELECT 목록·GROUP BY·WHERE 에서 통째로 빠지고 응답의 `keyAvailable: false` 로 화면이
 키 관련 표시(보드·컬럼·필터)를 숨긴다. **한 컬럼이 없다고 전 쿼리가 ORA-00904 로 죽으면 안 된다.**
+
+**`QUERY_CTN` 타입 내성 (VARCHAR2 / CLOB)**: 규칙은 `src/lib/queryCtn.ts` 한 곳.
+- SQL 에서 `QUERY_CTN` 을 `MIN`/`MAX`/`GROUP BY`/`DISTINCT`/`UNION` 하지 않는다 — CLOB 이면 ORA-00932 로
+  쿼리가 통째로 실패하고 `run()` 이 빈 배열로 삼켜 화면이 조용히 빈다. 질문별 대표 질의가 필요하면
+  `SQL_QUERY_TOKEN_ID`(가장 이른 non-null 호출의 `TOKEN_ID`)로 행을 고른 뒤 `TOKEN_ID` 로 조인해 읽는다.
+- `QUERY_CTN` 을 SELECT 하는 쿼리는 `fetchTypeHandler: lobAsText(oracle)` 를 단다. 없으면 CLOB 이
+  Lob 객체로 와서 `[object Object]` 로 찍힌다. 값은 `QUERY_CTN_MAX_CHARS`(4000자)에서 자른다.
+- 타입을 탐지하지 않는다 — 두 규칙 모두 VARCHAR2 에서도 그대로 동작한다. 다른 텍스트 컬럼이 CLOB 로
+  바뀌어도 같은 두 규칙을 적용하면 된다.
 
 ## 멀티 에이전트 — Tokens / Timeout 두 화면만
 

@@ -58,8 +58,7 @@ latency 도 같이 집계한다: 버킷별 `avgLatencyMs`(`SUM/COUNT` 로 NULL �
 null-trace 행은 한 질문 = 한 호출로 취급.
 
 **원본 질의**: 한 질문의 호출들은 보통 같은 `QUERY_CTN` 을 공유하므로 `questions` 가 질문 단위로
-`queryCtn`(가장 이른 non-null 호출의 값,
-`MIN ... KEEP (DENSE_RANK FIRST ORDER BY NVL2(QUERY_CTN,0,1), CALL_TM)`)을 내리고, 표의 질문 셀은
+`queryCtn`(가장 이른 non-null 호출의 값)을 내리고, 표의 질문 셀은
 **질의(크게) + TRACE_ID(작게) 2줄**로 그린다.
 
 표에는 **컬럼별 필터**(질문/USER 텍스트, NODE/MODEL/KEY 셀렉트 — 로드된 상위 질문 범위 내 클라이언트
@@ -83,6 +82,8 @@ null-trace 행은 한 질문 = 한 호출로 취급.
 호출 카드의 쿼리는 **원본과 다를 때만**(공백 정규화 비교) "이 호출의 쿼리" 로 다시 표시한다.
 
 `QUERY_CTN` 은 `calls` 쿼리와 `questions` 의 원본 질의 집계에서만 SELECT 한다.
+`QUERY_CTN` 은 집계하지 않는다 — 질문별 대표 호출의 `TOKEN_ID` 를 고르고(`SQL_QUERY_TOKEN_ID`) 다시 조인해
+가져온다. 규칙은 [agents.md](../architecture/agents.md) 의 `QUERY_CTN` 절.
 
 ## 실패 호출은 최소한으로만 얹는다
 

@@ -45,6 +45,7 @@ TraceX — AI Action 트랜잭션 추적 뷰어. Next.js 14 (App Router) · Reac
 | Agent 프로필 · 관리 | `/agent` `/admin` | [docs/screens/agent-profile.md](docs/screens/agent-profile.md) |
 | 계정 · 로그인 | `/accounts` `/login` | [docs/screens/accounts.md](docs/screens/accounts.md) |
 | 공사장 | `/wip` | [docs/screens/wip.md](docs/screens/wip.md) |
+| Link Board (사이드바 플라이아웃) | — 전역 | [docs/screens/link-board.md](docs/screens/link-board.md) |
 | 차트 단위(집계 ┊ 틱) *(4화면 공용)* | — | [docs/screens/tick.md](docs/screens/tick.md) |
 
 ## 구조 문서

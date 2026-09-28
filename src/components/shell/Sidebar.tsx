@@ -6,6 +6,8 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useAgentScope } from "@/components/agents/AgentScopeProvider";
 import { AgentSelector } from "@/components/agents/AgentSelector";
 import { NavIcon, adminOnly, isNavActive, locatePage, visibleNav } from "@/components/shell/nav";
+import { LinkBoardNav } from "@/components/shell/link-board/LinkBoardNav";
+import { roleAtLeast } from "@/lib/roles";
 
 export function Sidebar({ folded, onToggleFold, version }: { folded: boolean; onToggleFold: () => void; version: string }) {
   const path = usePathname() ?? "/";
@@ -46,6 +48,14 @@ export function Sidebar({ folded, onToggleFold, version }: { folded: boolean; on
             </div>
           </div>
         ))}
+        {user && roleAtLeast(user.role, "DEV") && (
+          <div className="sidenav-group tools">
+            <div className="sidenav-label">도구</div>
+            <div className="sidenav-items">
+              <LinkBoardNav folded={folded} />
+            </div>
+          </div>
+        )}
       </nav>
       <div className="sidenav-foot">
         <button

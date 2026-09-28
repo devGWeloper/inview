@@ -49,6 +49,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: "/timeouts", min: "DEV" }, // 타임아웃 추적 (조회 전용) — LLM 타임아웃은 개발자가 본다
   { prefix: "/api/timeouts", min: "DEV" },
   { prefix: "/improvement", min: "DEV" }, // Improvement Center — 조치 저장 PUT 은 ADMIN
+  { prefix: "/api/link-board", min: "DEV" }, // Link Board 플라이아웃 — 편집 PUT 은 전역 ADMIN
 ];
 
 export function requiredRoleForPath(pathname: string): Role | null {

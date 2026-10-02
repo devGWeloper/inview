@@ -1,13 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { LinkItem, allTags, groupLinks, hostOf, matchesQuery } from "@/lib/types";
+import { LinkItem, allTags, groupLinks, matchesQuery } from "@/lib/types";
 
-/** 파비콘은 사내망에서 외부 요청이 막히므로 쓰지 않는다 — 호스트명으로 글자 칩을 만든다. */
+// 사내 주소는 대부분 IP(10.x)라 호스트로 칩을 만들면 전부 "1" 이 된다 — 이름에서 만든다.
 function hueOf(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
   return h;
+}
+
+function initialsOf(title: string): string {
+  const words = title.trim().split(/[\s_\-·/]+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  const latin = /^[A-Za-z0-9]/;
+  if (words.length > 1 && latin.test(words[0]) && latin.test(words[1])) {
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  return Array.from(words[0])[0].toUpperCase();
 }
 
 export function LinkPanel({
@@ -52,7 +62,6 @@ export function LinkPanel({
 
   function row(link: LinkItem) {
     const pinnedNow = pins.includes(link.id);
-    const host = hostOf(link.url);
     return (
       <div key={link.id} className="lb-row">
         <a
@@ -63,13 +72,14 @@ export function LinkPanel({
           title={link.desc ? `${link.desc}\n${link.url}` : link.url}
           onClick={onClose}
         >
-          <span className="lb-mark" style={{ ["--lb-h" as string]: hueOf(host) }} aria-hidden>
-            {(host[0] ?? "?").toUpperCase()}
+          <span className="lb-mark" style={{ ["--lb-h" as string]: hueOf(link.title) }} aria-hidden>
+            {initialsOf(link.title)}
           </span>
-          <span className="lb-row-id">
-            <span className="lb-row-title">{link.title}</span>
-            <span className="lb-row-host">{host}</span>
-          </span>
+          <span className="lb-row-title">{link.title}</span>
+          <svg className="lb-row-out" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+               strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M6 3.5h6.5V10M12.5 3.5 4 12" />
+          </svg>
         </a>
         {canEdit && (
           <button type="button" className="lb-row-btn" onClick={() => onEdit(link.id)} title="수정" aria-label={`${link.title} 수정`}>
@@ -111,7 +121,7 @@ export function LinkPanel({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="이름 · 주소 · 설명 · 태그"
+            placeholder="링크 검색"
             aria-label="링크 검색"
           />
           {query && (
@@ -163,7 +173,7 @@ export function LinkPanel({
               <section className="lb-sect">
                 <h3 className="lb-sect-t">
                   <span className="lb-sect-star" aria-hidden>★</span>
-                  즐겨찾기
+                  <span className="lb-sect-name">즐겨찾기</span>
                   <span className="lb-sect-n">{pinned.length}</span>
                 </h3>
                 {pinned.map(row)}
@@ -172,7 +182,7 @@ export function LinkPanel({
             {groups.map((g) => (
               <section key={g.category} className="lb-sect">
                 <h3 className="lb-sect-t">
-                  {g.category}
+                  <span className="lb-sect-name">{g.category}</span>
                   <span className="lb-sect-n">{g.links.length}</span>
                 </h3>
                 {g.links.map(row)}

@@ -63,11 +63,3 @@ export function matchesQuery(link: LinkItem, query: string): boolean {
     link.tags.some((t) => t.toLowerCase().includes(q))
   );
 }
-
-export function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url.replace(/^https?:\/\//, "").split("/")[0] ?? url;
-  }
-}

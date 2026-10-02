@@ -153,7 +153,7 @@ export default function RoadmapPage() {
     <div className="rm-page">
       <header className="rm-head">
         <div className="rm-head-id">
-          <h1 className="rm-title">Action 오픈 로드맵</h1>
+          <h1 className="rm-title">달력</h1>
           <p className="rm-sub">Action Agent 가 여는 기능의 오픈 일정입니다.</p>
         </div>
         <div className="rm-head-act">

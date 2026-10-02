@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useAgentScope } from "@/components/agents/AgentScopeProvider";
 import { AgentSelector } from "@/components/agents/AgentSelector";
-import { NavIcon, adminOnly, isNavActive, locatePage, visibleNav } from "@/components/shell/nav";
+import { NavIcon, NavItem, TOOLS_LABEL, adminOnly, isNavActive, locatePage, visibleNav, visibleTools } from "@/components/shell/nav";
 import { LinkBoardNav } from "@/components/shell/link-board/LinkBoardNav";
 import { roleAtLeast } from "@/lib/roles";
 
@@ -14,6 +14,8 @@ export function Sidebar({ folded, onToggleFold, version }: { folded: boolean; on
   const { user } = useAuth();
   const { isDefault } = useAgentScope();
   const groups = user ? visibleNav(user.role, isDefault) : [];
+  const tools = user ? visibleTools(user.role) : [];
+  const showLinkBoard = !!user && roleAtLeast(user.role, "DEV");
 
   return (
     <aside className="sidenav" aria-label="주 메뉴">
@@ -21,38 +23,18 @@ export function Sidebar({ folded, onToggleFold, version }: { folded: boolean; on
       <nav className="sidenav-scroll">
         {groups.map((g) => (
           <div key={g.key} className={"sidenav-group " + g.key}>
-            <div className="sidenav-label">
-              {g.key === "wip" && <span aria-hidden>🚧 </span>}
-              {g.label}
-            </div>
+            <div className="sidenav-label">{g.label}</div>
             <div className="sidenav-items">
-              {g.items.map((it) => {
-                const active = isNavActive(it.href, path);
-                return (
-                  <Link
-                    key={it.href}
-                    href={it.href}
-                    prefetch={false}
-                    className={"sidenav-item" + (active ? " active" : "")}
-                    aria-current={active ? "page" : undefined}
-                    title={folded ? it.label : undefined}
-                    target={it.external ? "_blank" : undefined}
-                    rel={it.external ? "noreferrer" : undefined}
-                  >
-                    <NavIconSvg name={it.icon} />
-                    <span className="sidenav-text">{it.label}</span>
-                    {g.key !== "wip" && adminOnly(it.href) && <span className="sidenav-tag">ADMIN</span>}
-                  </Link>
-                );
-              })}
+              {g.items.map((it) => <NavLink key={it.href} it={it} path={path} folded={folded} />)}
             </div>
           </div>
         ))}
-        {user && roleAtLeast(user.role, "DEV") && (
+        {(tools.length > 0 || showLinkBoard) && (
           <div className="sidenav-group tools">
-            <div className="sidenav-label">도구</div>
+            <div className="sidenav-label">{TOOLS_LABEL}</div>
             <div className="sidenav-items">
-              <LinkBoardNav folded={folded} />
+              {tools.map((it) => <NavLink key={it.href} it={it} path={path} folded={folded} />)}
+              {showLinkBoard && <LinkBoardNav folded={folded} />}
             </div>
           </div>
         )}
@@ -80,6 +62,23 @@ export function Sidebar({ folded, onToggleFold, version }: { folded: boolean; on
         </div>
       </div>
     </aside>
+  );
+}
+
+function NavLink({ it, path, folded }: { it: NavItem; path: string; folded: boolean }) {
+  const active = isNavActive(it.href, path);
+  return (
+    <Link
+      href={it.href}
+      prefetch={false}
+      className={"sidenav-item" + (active ? " active" : "")}
+      aria-current={active ? "page" : undefined}
+      title={folded ? it.label : undefined}
+    >
+      <NavIconSvg name={it.icon} />
+      <span className="sidenav-text">{it.label}</span>
+      {adminOnly(it.href) && <span className="sidenav-tag">ADMIN</span>}
+    </Link>
   );
 }
 
@@ -158,16 +157,10 @@ const ICON: Record<NavIcon, JSX.Element> = {
       <path d="M9 4.3l2.7 2.7" />
     </>
   ),
-  roadmap: (
+  calendar: (
     <>
-      <path d="M3.5 14V2.5" />
-      <path d="M3.5 3h8L9.9 5.6l1.6 2.6h-8" />
-    </>
-  ),
-  layout: (
-    <>
-      <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
-      <path d="M6 2.5v11M6 6.5h8" />
+      <rect x="2" y="3" width="12" height="11" rx="1.5" />
+      <path d="M2 6.5h12M5.5 1.8v2.4M10.5 1.8v2.4" />
     </>
   ),
 };

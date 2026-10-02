@@ -10,7 +10,7 @@
 - 사이드바 배치: `src/components/shell/Sidebar.tsx` 의 `도구` 그룹
 - API: `src/app/api/link-board/route.ts`
 - 저장: `src/lib/linkBoard.ts` → `data/links.json` (fs, gitignore)
-- 순수 로직 · 타입: `src/lib/types/links.ts` (`groupLinks`/`allTags`/`matchesQuery`/`hostOf`)
+- 순수 로직 · 타입: `src/lib/types/links.ts` (`groupLinks`/`allTags`/`matchesQuery`)
 - 스타일: `src/styles/link-board.css` (`lb-*`)
 - 권한: **읽기 DEV 이상 / 쓰기 전역 ADMIN**
 
@@ -61,7 +61,8 @@
 ## 그 밖에
 
 - **파비콘을 받아오지 말 것.** 운영은 폐쇄망이라 외부 파비콘 요청은 깨진 아이콘만 남긴다.
-  호스트명 해시로 색을 정한 글자 칩(`lb-mark`, `--lb-h`)이 그 자리를 대신한다.
+  **링크 이름**에서 만든 이니셜 칩(`lb-mark`, 색은 이름 해시 `--lb-h`)이 그 자리를 대신한다.
+  호스트로 만들면 안 된다 — 사내 주소가 대부분 `10.x` IP 라 전부 "1" 이 된다.
 - 링크는 `target="_blank" rel="noreferrer noopener"` 로만 연다.
-- 행의 설명은 툴팁(`title`)으로 간다. 패널이 좁아 제목·호스트 두 줄이 한계다.
+- 행은 **이름 한 줄**만 보인다. 주소·설명은 툴팁(`title`)으로 간다 — IP 주소를 행마다 깔면 목록이 지저분해진다.
 - 태그 여러 개를 고르면 **모두 가진** 링크만 남는다(AND).

@@ -57,13 +57,13 @@
 
 상단바(☰ · 브랜드 · 현재 위치 · Agent 칩 · 유저 메뉴) + 좌측 사이드바 + 본문 + 상태바.
 
-- **메뉴의 단일 소스는 `nav.ts` 의 `NAV_GROUPS`**(분석 · 관리 · 공사장). 화면 추가 = 여기 한 줄 +
+- **메뉴의 단일 소스는 `nav.ts` 의 `NAV_GROUPS`**(분석 · 관리). 화면 추가 = 여기 한 줄 +
   `Sidebar.tsx` 의 `ICON` 한 줄. 상단 현재 위치(`PageCrumb`)도 같은 배열에서 찾고, 메뉴 밖 경로는 `OFF_NAV`
 - **노출은 `visibleNav()` 하나** — `canAccessPath`(권한) + 비기본 에이전트면 `isBizPath` 숨김.
   항목에 `minRole`/`agentScoped` 같은 플래그를 다시 두지 말 것(미들웨어와 두 벌이 된다)
-- `ADMIN` 태그는 `adminOnly()`(= `ROUTE_RULES` 최소 권한이 ADMIN)가 붙인다 — 항목에 손으로 적지 말 것.
-  공사장 박스는 통째로 ADMIN 전용이라 태그를 생략한다
-- 공사장 그룹 = `WIP_SITES`, ADMIN 에게만. `/wip` 페이지가 같은 배열을 그린다
+- `ADMIN` 태그는 `adminOnly()`(= `ROUTE_RULES` 최소 권한이 ADMIN)가 붙인다 — 항목에 손으로 적지 말 것
+- 도구 그룹(사이드바 맨 아래) = `TOOL_ITEMS`(링크 항목, `visibleTools()` 로 권한만 거른다 — 에이전트 무관)
+  + Link Board 버튼(DEV 이상). 둘 다 없으면 그룹이 안 그려진다
 - 접기: **기본은 접힘(64px 레일)**. 펼쳤을 때만 `localStorage["tracex.navExpanded"]="1"` 로 기억한다
   (기록 없음 = 접힘이라 SSR 첫 화면도 접힌 채로 나와 깜빡임이 없다) · ☰ · 사이드바 하단 버튼 · `[` 키(입력 중엔 무시).
   ≤760px 는 항상 64px 레일

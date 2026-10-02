@@ -41,7 +41,6 @@ export interface RouteRule {
 
 export const ROUTE_RULES: RouteRule[] = [
   { prefix: "/admin", min: "ADMIN" }, // 프로필 편집 (편집 전용 화면)
-  { prefix: "/wip", min: "ADMIN" },
   { prefix: "/design-preview.html", min: "ADMIN" }, // 레이아웃 개편 시안 뷰어 (검토용)
   { prefix: "/accounts", min: "ADMIN" }, // 계정 관리 (등록/수정/삭제/비번초기화)
   { prefix: "/api/accounts", min: "ADMIN" }, // 계정 CRUD API

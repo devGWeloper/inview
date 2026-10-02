@@ -51,17 +51,6 @@
   font-size: 10px; font-weight: 700; letter-spacing: .3px; color: var(--text-muted);
 }
 
-/* 공사장 — 점선 박스 = "아직 공사 중". 정식 메뉴와 섞이지 않게 맨 아래 따로 */
-.sidenav-group.wip .sidenav-items {
-  padding: 4px;
-  border: 1px dashed var(--border-strong); border-radius: 10px;
-  background: var(--surface-2);
-}
-.sidenav-group.wip .sidenav-item { height: 34px; font-size: 13px; color: var(--text-3); }
-.sidenav-group.wip .sidenav-item:hover { color: var(--text); }
-.sidenav-group.wip .sidenav-item.active { color: var(--accent); }
-.sidenav-group.wip .sidenav-item.active::before { left: -5px; }
-
 .sidenav-foot { padding-top: 8px; border-top: 1px solid var(--border); }
 .sidenav-fold { color: var(--text-3); font-size: 12.5px; font-weight: 500; }
 .sidenav-meta {
@@ -83,7 +72,6 @@
 .app.nav-folded .agent-switch-btn { justify-content: center; padding: 0; background: transparent; border-color: transparent; }
 .app.nav-folded .sidenav-label { font-size: 0; padding: 10px 6px 6px; }
 .app.nav-folded .sidenav-label::before { content: ""; display: block; height: 1px; background: var(--border); }
-.app.nav-folded .sidenav-group.wip .sidenav-items { padding: 3px 2px; }
 .app.nav-folded .sidenav-fold svg { transform: rotate(180deg); }
 .app.nav-folded .sidenav-meta { align-items: center; padding: 6px 0 0; font-size: 10px; }
 .app.nav-folded .sidenav-meta-full,
@@ -190,7 +178,6 @@
   .app .agent-switch-btn { justify-content: center; padding: 0; background: transparent; border-color: transparent; }
   .app .sidenav-label { font-size: 0; padding: 10px 6px 6px; }
   .app .sidenav-label::before { content: ""; display: block; height: 1px; background: var(--border); }
-  .app .sidenav-group.wip .sidenav-items { padding: 3px 2px; }
   .nav-agent-id { display: none; }
   .nav-agent { padding: 0; }
 }

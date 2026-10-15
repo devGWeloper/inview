@@ -433,6 +433,7 @@ function CallsDetail({
                   <span className="qcall-arrow" aria-hidden>→</span>
                   <span className="qmodel">{c.modelNm ?? "—"}</span>
                   {showKey && c.keyNm && <span className="qkey" title="이 호출에 쓴 API 키 별칭(Tier)">{c.keyNm}</span>}
+                  {c.funcNm && <span className="qfunc" title={c.funcNm}>{c.funcNm}</span>}
                   {isFail && (
                     <span className="qcall-status" title={c.errCtn ?? undefined}>
                       {st === "timeout" ? "타임아웃" : "실패"}

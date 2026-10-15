@@ -32,6 +32,7 @@ INSERT INTO TRX_TOKEN_DET (
     TRACE_ID,
     NODE_NM,
     MODEL_NM,
+    FUNC_NM,
     USER_ID,
     INPUT_TOKENS,
     OUTPUT_TOKENS,
@@ -45,6 +46,7 @@ INSERT INTO TRX_TOKEN_DET (
     :trace_id,          -- 액션 trace ID (없으면 NULL)
     :node_nm,           -- 호출 노드 (action/judge/setup_guide 등)
     :model_nm,          -- 모델명 (ex. claude-opus-4-8)
+    :func_nm,           -- 이 호출의 기능/메소드명 (트레이스 전체가 아니라 LLM 호출 1건의 역할, 없으면 NULL)
     :user_id,           -- 사용자 ID (없으면 NULL)
     :input_tokens,      -- 입력 토큰 (실패면 0)
     :output_tokens,     -- 출력 토큰 (실패면 0)

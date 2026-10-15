@@ -48,6 +48,7 @@ LLM 호출 1건 = 1행. GAIA 가 `sql/dml_insert_token_det.sql` 로 적재. **�
 | `NODE_NM` | 호출한 GAIA 노드(`action`/`judge`/`setup_guide`…) — **주 집계 차원** |
 | `MODEL_NM` | 호출 LLM (현재 사내 Qwen, 변경 가능) |
 | `KEY_NM` | 호출에 쓴 **API 키 별칭(Tier)**. 같은 모델도 키마다 등급이 달라 키 단위로 갈라 본다. 출처가 GAIA 설정(`LLMModelConfig.key_nm`)뿐이라 미설정이면 NULL |
+| `FUNC_NM` | **LLM 호출 1건**의 기능/메소드명(트레이스 대표값 아님). nullable — 컬럼이 없거나 NULL 이면 호출 카드에서 칩을 숨긴다 |
 | `USER_ID` | |
 | `INPUT_TOKENS`/`OUTPUT_TOKENS`/`TOTAL_TOKENS` | provider-neutral 명칭. OpenAI 호환 응답의 `prompt_tokens`/`completion_tokens` 매핑 |
 | `LATENCY_MS` | LLM 요청→응답 ms, **nullable**. 없으면 집계에서 자동 제외 |

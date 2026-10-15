@@ -400,6 +400,21 @@ button.tbd-row:not(:disabled):hover {
   background: color-mix(in srgb, #0d9488 12%, transparent);
   color: #0d9488;
 }
+.qfunc {
+  display: inline-block;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: var(--mono);
+  background: color-mix(in srgb, #64748b 12%, transparent);
+  color: #64748b;
+}
 
 
 /* TOTAL 셀: 값 뒤에 옅은 막대로 상대 크기 표현 */

@@ -160,6 +160,14 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
       logger.warn("fetchTokenStats: KEY_NM 미존재 — 키 집계 생략", { err: String(e) });
     }
 
+    let hasFuncNm = true;
+    try {
+      await conn.execute("SELECT FUNC_NM FROM TRX_TOKEN_DET WHERE 1 = 0", {}, opts);
+    } catch (e) {
+      hasFuncNm = false;
+      logger.warn("fetchTokenStats: FUNC_NM 미존재 — 호출 기능명 생략", { err: String(e) });
+    }
+
     const { where, binds } = buildWhere(filter, hasKeyNm);
 
     const run = async (
@@ -337,6 +345,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
         nodeNm: str(r.NODE_NM ?? r.node_nm),
         modelNm: str(r.MODEL_NM ?? r.model_nm),
         keyNm: str(r.KEY_NM ?? r.key_nm),
+        funcNm: str(r.FUNC_NM ?? r.func_nm),
         userId: str(r.USER_ID ?? r.user_id),
         inputTokens: num(r.INPUT_TOKENS ?? r.input_tokens),
         outputTokens: num(r.OUTPUT_TOKENS ?? r.output_tokens),
@@ -352,7 +361,7 @@ export async function fetchTokenStats(filter: TokenFilter): Promise<TokenStatsRe
     let calls: TokenRow[] = [];
     if (filter.traceId && !skipQ) {
       const callsSql =
-        `SELECT TOKEN_ID, TRACE_ID, NODE_NM, MODEL_NM${hasKeyNm ? ", KEY_NM" : ""}, USER_ID,` +
+        `SELECT TOKEN_ID, TRACE_ID, NODE_NM, MODEL_NM${hasKeyNm ? ", KEY_NM" : ""}${hasFuncNm ? ", FUNC_NM" : ""}, USER_ID,` +
         ` INPUT_TOKENS, OUTPUT_TOKENS, TOTAL_TOKENS, LATENCY_MS, QUERY_CTN${statCols},` +
         ` TO_CHAR(CALL_TM, 'YYYY-MM-DD"T"HH24:MI:SS.FF3') AS CALL_TM` +
         ` FROM TRX_TOKEN_DET WHERE TRACE_ID = :traceId` +

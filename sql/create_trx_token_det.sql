@@ -26,6 +26,7 @@ CREATE TABLE TRX_TOKEN_DET (
     TRACE_ID           VARCHAR2(50),                             -- 액션 trace 연계용(있을 때만). 집계 아님, 표기용
     NODE_NM            VARCHAR2(50),                             -- LLM 을 호출한 노드 (action/judge/setup_guide …) — 1차 집계 차원
     MODEL_NM           VARCHAR2(100),                            -- 모델명 (ex. qwen2.5-72b) — 보조 집계 차원
+    FUNC_NM            VARCHAR2(200),                           -- 이 LLM 호출의 기능/메소드명 (호출 단위, 없으면 NULL)
     USER_ID            VARCHAR2(50),                             -- 사용자 ID (있을 때)
     INPUT_TOKENS       NUMBER         DEFAULT 0,                 -- 입력 토큰 (LLM usage 의 prompt_tokens/input_tokens)
     OUTPUT_TOKENS      NUMBER         DEFAULT 0,                 -- 출력 토큰 (LLM usage 의 completion_tokens/output_tokens)
@@ -52,6 +53,7 @@ COMMENT ON COLUMN TRX_TOKEN_DET.TOKEN_ID          IS '호출 단위 surrogate ke
 COMMENT ON COLUMN TRX_TOKEN_DET.TRACE_ID          IS '액션 trace ID (연계용, 있을 때만)';
 COMMENT ON COLUMN TRX_TOKEN_DET.NODE_NM           IS 'LLM 호출 노드 (action/judge/setup_guide 등)';
 COMMENT ON COLUMN TRX_TOKEN_DET.MODEL_NM          IS '모델명';
+COMMENT ON COLUMN TRX_TOKEN_DET.FUNC_NM           IS '이 LLM 호출의 기능/메소드명 (호출 단위, 없으면 NULL)';
 COMMENT ON COLUMN TRX_TOKEN_DET.USER_ID           IS '사용자 ID';
 COMMENT ON COLUMN TRX_TOKEN_DET.INPUT_TOKENS      IS '입력 토큰 수 (prompt_tokens/input_tokens)';
 COMMENT ON COLUMN TRX_TOKEN_DET.OUTPUT_TOKENS     IS '출력 토큰 수 (completion_tokens/output_tokens)';
@@ -78,6 +80,11 @@ COMMIT;
 -- ============================================================================
 -- ALTER TABLE TRX_TOKEN_DET ADD (LATENCY_MS NUMBER);
 -- COMMENT ON COLUMN TRX_TOKEN_DET.LATENCY_MS IS 'LLM 호출 소요시간(ms): 요청→응답. 없으면 NULL';
+-- COMMIT;
+--
+-- FUNC_NM 를 사후 추가할 때 (TraceX 는 컬럼이 없어도 죽지 않고 칩만 숨긴다):
+-- ALTER TABLE TRX_TOKEN_DET ADD (FUNC_NM VARCHAR2(200));
+-- COMMENT ON COLUMN TRX_TOKEN_DET.FUNC_NM IS '이 LLM 호출의 기능/메소드명 (호출 단위, 없으면 NULL)';
 -- COMMIT;
 --
 -- QUERY_CTN 를 사후 추가할 때:

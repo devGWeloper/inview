@@ -8,6 +8,7 @@ export interface TokenRow {
   nodeNm: string | null;
   modelNm: string | null;
   keyNm: string | null;
+  funcNm: string | null;
   userId: string | null;
   inputTokens: number;
   outputTokens: number;

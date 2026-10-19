@@ -8,7 +8,7 @@ import {
   TraceStatus, WorkSummary, WorkTraceItem
 } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
-import { classifyPath, traceStages, upstreamLabel } from "@/lib/flows";
+import { DEFAULT_FLOW, classifyPath, traceStages, upstreamLabel } from "@/lib/flows";
 
 const DEFAULT_FILTER: TraceFilter = {};
 const MIN_LEFT = 360;
@@ -76,12 +76,15 @@ function FlowCell({ t }: { t: WorkTraceItem }) {
   const expected = stages.filter((st) => st.expected);
   const hitCount = expected.filter((st) => t.stagesHit.includes(st.key)).length;
   const route = [upstreamLabel(t.path), ...stages.map((st) => st.label)].join(" → ");
+  const isDefault = t.path.flow === DEFAULT_FLOW;
   return (
-    <span className="flow-cell" title={`${FLOW_LABEL[t.path.flow]} · ${route}`}>
-      <span className={`flow-chip flow-${t.path.flow.toLowerCase()}`}>
-        {t.path.entry === "DSP" && <span className="flow-entry">DSP</span>}
-        {FLOW_LABEL[t.path.flow]}
-      </span>
+    <span className="flow-cell" title={isDefault ? route : `${FLOW_LABEL[t.path.flow]} · ${route}`}>
+      {(!isDefault || t.path.entry === "DSP") && (
+        <span className={`flow-chip flow-${t.path.flow.toLowerCase()}`}>
+          {t.path.entry === "DSP" && <span className="flow-entry">DSP</span>}
+          {!isDefault && FLOW_LABEL[t.path.flow]}
+        </span>
+      )}
       <span className="layer-dots">
         {stages.map((st) => {
           const present = t.stagesHit.includes(st.key);
@@ -286,7 +289,8 @@ export default function Page() {
     if (detailRows.length === 0) return "CUBE · DSP → … ";
     const path = classifyPath(detailRows);
     const stages = traceStages(path, detailRows.map((r) => r.layer));
-    return `${FLOW_LABEL[path.flow]} · ${[upstreamLabel(path), ...stages.map((st) => st.label)].join(" → ")}`;
+    const route = [upstreamLabel(path), ...stages.map((st) => st.label)].join(" → ");
+    return path.flow === DEFAULT_FLOW ? route : `${FLOW_LABEL[path.flow]} · ${route}`;
   })();
 
   const applyFlow = (flow: FlowKey | undefined) => {
@@ -379,7 +383,7 @@ export default function Page() {
                   <div className="flt-dates">
                     <span className="flt-tag">흐름</span>
                     <div className="seg" role="group" aria-label="흐름">
-                      {[{ key: undefined, label: "전체" }, ...FLOWS].map((f) => (
+                      {[{ key: undefined, label: "전체" }, ...FLOWS.filter((f) => f.key !== DEFAULT_FLOW)].map((f) => (
                         <button
                           key={f.key ?? "all"}
                           type="button"

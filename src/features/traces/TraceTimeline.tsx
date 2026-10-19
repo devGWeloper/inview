@@ -2,7 +2,7 @@
 
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { FLOW_LABEL, FlowStage, LAYER_COLOR, LAYER_LABEL, LAYER_ORDER, LayerKey, TracePath, TraceRow } from "@/lib/types";
-import { classifyPath, sendPeerLabel, stageHit, traceStages, upstreamLabel } from "@/lib/flows";
+import { DEFAULT_FLOW, classifyPath, sendPeerLabel, stageHit, traceStages, upstreamLabel } from "@/lib/flows";
 
 const COL_MIN_FR = 0.25;
 const SPLITTER_PX = 6;
@@ -401,7 +401,9 @@ function FlowPath({ path, stages, rows }: { path: TracePath; stages: FlowStage[]
   };
   return (
     <div className="flow-path">
-      <span className={`flow-chip flow-${path.flow.toLowerCase()}`}>{FLOW_LABEL[path.flow]}</span>
+      {path.flow !== DEFAULT_FLOW && (
+        <span className={`flow-chip flow-${path.flow.toLowerCase()}`}>{FLOW_LABEL[path.flow]}</span>
+      )}
       <span className="fp-node if" title="I/F 만 하고 적재하지 않는다">{upstreamLabel(path)}</span>
       {stages.map((st, i) => {
         const n = callsInto(i);

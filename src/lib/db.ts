@@ -178,7 +178,7 @@ export async function fetchAllRows(filter: TraceFilter): Promise<TraceRow[]> {
 
 export async function fetchTraceIdsBy(
   layer: LayerKey,
-  column: "FAC_ID" | "ACTION_TYP" | "USER_ID",
+  column: "FAC_ID" | "ACTION_TYP" | "USER_ID" | "SYS_ID",
   value: string,
   filter: Pick<TraceFilter, "dateFrom" | "dateTo" | "limit">
 ): Promise<string[]> {

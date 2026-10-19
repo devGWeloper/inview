@@ -18,7 +18,7 @@ TraceX — AI Action 트랜잭션 추적 뷰어. Next.js 14 (App Router) · Reac
 
 요청은 `CUBE → GAIA → MCP → ONEOIS` 4계층을 지나고, 각 계층이 **자기 Oracle DB** 에 같은 스키마의
 `BIZ_AIACTIONTXN_HIS` 를 복제해 기록한다. 앱은 계층별로 병렬 조회해 `TRACE_ID` 로 조인하고 하나의
-트레이스를 재구성한다. 경로는 FIX / Judge(DSP → MCP Market) / ER MAP(DSP → A2A) 3종이다
+트레이스를 재구성한다. 경로는 FIX / Judge(DSP → MCP Market) / ER MAP(DSP → A2A) / Market(전사 → MCP Market) 4종이다
 ([data-flow.md](docs/architecture/data-flow.md) "흐름"). 여기에 GAIA 의 LLM 호출 상세(`TRX_TOKEN_DET`)와 앱 전용 테이블
 (계정·에러코드·조치정보)이 얹힌다.
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchAllRows, fetchRecentTraceIds, fetchTraceIdsBy, fetchWorkGroupRows, connectedLayerCount, getAppEnv } from "@/lib/db";
 import { FLOW_KEYS, FlowKey, LAYER_ORDER, LayerKey, TraceFilter, TraceStatus, TraceSummary, TraceRow, WorkSummary } from "@/lib/types";
-import { A2A_ACTION_TYPS, JUDGE_ACTION_TYP, classifyPath, isTraceComplete, stageHit, traceStages } from "@/lib/flows";
+import { A2A_ACTION_TYPS, JUDGE_ACTION_TYP, MCP_MARKET_SYS_ID, classifyPath, isTraceComplete, stageHit, traceStages } from "@/lib/flows";
 import { logger, reqContext } from "@/lib/logger";
 import { isoNoTz } from "@/lib/timeBuckets";
 import { classifyPendingByCubeResp } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
@@ -70,6 +70,18 @@ function summarize(rows: TraceRow[]): TraceSummary[] {
 
   summaries.sort((a, b) => (b.firstRecvTm ?? "").localeCompare(a.firstRecvTm ?? ""));
   return summaries;
+}
+
+/** 레이어별 최근순 목록을 번갈아 합쳐 상한까지 — 2단계 TRACE_ID IN 목록이 상한을 넘지 않게 */
+function unionRecent(lists: string[][], limit: number): string[] {
+  const out = new Set<string>();
+  for (let i = 0; out.size < limit && lists.some((l) => i < l.length); i++) {
+    for (const l of lists) {
+      if (i < l.length) out.add(l[i]);
+      if (out.size >= limit) break;
+    }
+  }
+  return Array.from(out);
 }
 
 function parseFlow(v: string | null): FlowKey | undefined {
@@ -245,18 +257,23 @@ export async function GET(req: NextRequest) {
   logger.info("GET /api/traces", { ...ctx, query: sp.toString(), filter });
 
   try {
-    const idFilters: Array<[LayerKey, "FAC_ID" | "ACTION_TYP" | "USER_ID", string]> = [];
-    if (filter.facId) idFilters.push(["MCP", "FAC_ID", filter.facId]);
-    if (filter.actionTyp) idFilters.push(["GAIA", "ACTION_TYP", filter.actionTyp]);
-    if (filter.userId) idFilters.push([LAYER_ORDER[0], "USER_ID", filter.userId]);
+    // 필터마다 레이어 여러 개면 합집합, 필터끼리는 교집합.
+    // Market 흐름은 CUBE·GAIA 행이 없어 USER_ID·ACTION_TYP 을 MCP 에서도 찾아야 한다
+    const idFilters: Array<[LayerKey[], "FAC_ID" | "ACTION_TYP" | "USER_ID" | "SYS_ID", string]> = [];
+    if (filter.facId) idFilters.push([["MCP"], "FAC_ID", filter.facId]);
+    if (filter.actionTyp) idFilters.push([["GAIA", "MCP"], "ACTION_TYP", filter.actionTyp]);
+    if (filter.userId) idFilters.push([[LAYER_ORDER[0], "MCP"], "USER_ID", filter.userId]);
     // FIX 는 1단계로 좁힐 컬럼이 없어 아래 summaries 단계에서만 거른다
-    if (filter.flow === "JUDGE") idFilters.push(["GAIA", "ACTION_TYP", JUDGE_ACTION_TYP]);
-    if (filter.flow === "ERMAP") idFilters.push(["GAIA", "ACTION_TYP", A2A_ACTION_TYPS[0]]);
+    if (filter.flow === "JUDGE") idFilters.push([["GAIA"], "ACTION_TYP", JUDGE_ACTION_TYP]);
+    if (filter.flow === "ERMAP") idFilters.push([["GAIA"], "ACTION_TYP", A2A_ACTION_TYPS[0]]);
+    if (filter.flow === "MARKET") idFilters.push([["MCP"], "SYS_ID", MCP_MARKET_SYS_ID]);
 
     const matchedByDimension = async (): Promise<Set<string> | null> => {
       if (idFilters.length === 0) return null;
       const idSets = await Promise.all(
-        idFilters.map(([layer, column, value]) => fetchTraceIdsBy(layer, column, value, filter))
+        idFilters.map(async ([layers, column, value]) =>
+          unionRecent(await Promise.all(layers.map((l) => fetchTraceIdsBy(l, column, value, filter))), limit)
+        )
       );
       return new Set(
         idSets.reduce((acc, set) => {

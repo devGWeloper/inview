@@ -1,7 +1,7 @@
 # Traces — `/`
 
 4계층 동기 메시지의 end-to-end 트레이스 뷰어. 이 앱의 원래 목적.
-흐름 3종(FIX / Judge / ER MAP)을 한 목록에서 구분해 보여준다.
+흐름 4종(FIX / Judge / ER MAP / Market)을 한 목록에서 구분해 보여준다.
 
 **파일**
 - 화면: `src/app/page.tsx` · `src/features/traces/TraceTimeline.tsx`
@@ -24,9 +24,10 @@
 
 ### FLOW 열 · 흐름 필터
 
-- FLOW 열 = 흐름 칩 + 그 흐름의 칸만큼 점 + `거친 칸/거쳐야 할 칸`. FIX 칩은 회색, 신규 흐름만 색을 쓴다.
-  DSP 진입은 칩 안에 점선 `DSP` 표시. 흐름 밖 레이어에 행이 있으면 네모 점
-- 흐름 필터는 기간처럼 세그먼트 버튼이고 누르면 바로 재조회한다(`?flow=`).
+- FLOW 열 = 흐름 칩 + 그 흐름의 칸만큼 점 + `거친 칸/거쳐야 할 칸`. **기본 흐름(FIX)은 칩·라벨을 띄우지 않는다**
+  (`DEFAULT_FLOW`). DSP 진입은 칩 안에 점선 `DSP` 표시. 흐름 밖 레이어에 행이 있으면 네모 점
+- 흐름 필터는 기간처럼 세그먼트 버튼(전체 / Judge / ER MAP / Market)이고 누르면 바로 재조회한다(`?flow=`).
+  API 는 `flow=FIX` 도 받는다. Market 은 1단계에서 MCP `SYS_ID='MCP_MARKET'` 으로 좁힌다(Judge 도 걸리므로 summaries 에서 다시 거른다).
   Judge / ER MAP 은 1단계에서 GAIA `ACTION_TYP` 으로 좁히고, FIX 는 좁힐 컬럼이 없어
   최근 N 트레이스를 읽은 뒤 summaries 단계에서 거른다(그래서 FIX 는 상한보다 적게 나올 수 있다).
   Judge 의 ACTION_TYP 없는 폴백 판정 건은 Judge 필터 1단계에 안 걸린다
@@ -50,7 +51,7 @@
 - 헤더의 흐름 경로(`FlowPath`): 흐름 칩 → 점선 상위 I/F(CUBE/DSP, 미적재) → 칸들. 기록 없는 칸은 외곽선만,
   여러 번 부른 구간은 `⇉×N`. N 은 **부른 쪽(앞 칸) 행 수**로 센다 — GAIA 는 MCP 호출마다 행이 생기므로
   받는 쪽으로 세면 AI GATEWAY → GAIA 가 ×N 으로 잘못 나온다
-- 스테퍼 칸 = 흐름의 칸(`traceStages`). 레이어 키 대신 표시명(CUBE BOT / AI GATEWAY / MCP Market / A2A · ER MAP)
+- 스테퍼 칸 = 흐름의 칸(`traceStages`). 레이어 키 대신 표시명(AI GATEWAY / MCP Market / A2A · ER MAP)
 - A2A 칸은 DB 가 없어 GAIA 행으로 판정: send 없음 → 호출 없음, `ERR_CD` 에 `A2A` → ERROR, resp 있음 → OK
 - 카드 태그도 표시명. ER MAP 흐름의 GAIA 하위 시스템은 `A2A` 로 보인다(기록값은 툴팁)
 

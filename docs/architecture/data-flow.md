@@ -9,24 +9,31 @@
 `LAYER_COLOR`·스테퍼·`/N` 분모·태그 색이 전부 여기서 파생된다.
 레이어 추가/삭제/순서변경 = 이 배열 + `config.yml`/`config.dev.yml` 의 블록.
 
-## 흐름 — FIX / Judge / ER MAP
+## 흐름 — FIX / Judge / ER MAP / Market
 
-4개 DB 레이어는 그대로지만 요청이 지나가는 경로는 세 가지다. 도표: `docs/flows/action-flows.pptx`.
+4개 DB 레이어는 그대로지만 요청이 지나가는 경로는 네 가지다. 도표: `docs/flows/action-flows.pptx`.
 
 | 흐름 | 경로 | 거쳐야 할 DB 레이어 |
 |---|---|---|
-| FIX | CUBE ┄ CUBE BOT → GAIA → MCP → ONEOIS | 4개 전부 |
+| FIX (기본) | CUBE ┄ AI GATEWAY → GAIA → MCP → ONEOIS | 4개 전부 |
 | Judge | DSP ┄ AI GATEWAY → GAIA ⇉ MCP Market (N회) | CUBE · GAIA · MCP |
 | ER MAP | DSP(또는 CUBE) ┄ AI GATEWAY → GAIA → A2A | CUBE · GAIA |
+| Market | Market ┄ MCP Market (→ ONEOIS) | MCP (ONEOIS 는 있으면) |
 
-- **CUBE · DSP 는 I/F 만 하고 적재하지 않는다.** AI GATEWAY 는 CUBE BOT 과 같은 형상이고 **같은 DB(CUBE 레이어)** 에
-  쌓인다. 진입 구분은 CUBE 레이어 행의 `RECV_SYS_ID='DSP'`
-- MCP 는 경로별로 `SYS_ID` 가 다르다 — internal(GAIA 직결) `MCP`, external(Market) `MCP_MARKET`. 같은 MCP DB
+- **CUBE · DSP 는 I/F 만 하고 적재하지 않는다.** 그 아래 적재 계층은 흐름과 무관하게 AI GATEWAY(CUBE 레이어 DB).
+  진입 구분은 CUBE 레이어 행의 `RECV_SYS_ID='DSP'`
+- MCP 는 경로별로 `SYS_ID` 가 다르다 — internal(GAIA 직결) `MCP`, external(Market) `MCP_MARKET`. 같은 MCP DB.
+  external 은 전사 MCP Market 이 직접 붙는 경로라 **AI GATEWAY·GAIA 행 없이 MCP 행만 있는 트레이스**가 생긴다 = Market 흐름.
+  `USER_ID` 는 MCP 가 `X-Gaia-User-Id` 헤더로 받은 실제 사용자다
 - A2A(ER MAP 에이전트)는 DB 가 없다. GAIA 행의 send/resp 가 곧 A2A 호출이다.
   **GAIA 는 A2A 호출도 `SEND_SYS_ID='MCP'` 로 기록한다** — 화면은 ER MAP 흐름에서 이를 `A2A` 로 바꿔 보이고
   툴팁에 기록값을 남긴다
-- 판정은 `src/lib/flows.ts` 한 곳(서버·클라이언트 공용). `ACTION_TYP` 이 `ERMAP` → ER MAP, `JUDGE` → Judge,
-  `ACTION_TYP` 이 없고 MCP 행이 전부 `MCP_MARKET` 이며 ONEOIS 가 없으면 Judge, 나머지 FIX
+- 판정은 `src/lib/flows.ts` 한 곳(서버·클라이언트 공용). CUBE·GAIA 행이 없고 MCP 행이 전부 `MCP_MARKET` → Market,
+  `ACTION_TYP` 이 `ERMAP` → ER MAP, `JUDGE` → Judge, `ACTION_TYP` 이 없고 MCP 가 전부 `MCP_MARKET` 이며 ONEOIS 가
+  없으면 Judge, 나머지 FIX
+- **트레이스를 찾는 조건은 Market 흐름까지 덮어야 한다.** `USER_ID` 는 최상위 레이어 + MCP, `ACTION_TYP` 은 GAIA + MCP 에서
+  찾는다(필터 안에선 합집합, 필터끼리는 교집합). 최상위 레이어만 보면 Market 트레이스가 안 나온다.
+  `/api/action-types` 도 GAIA + MCP 값을 합친다
 - **완료(`allComplete`)는 흐름이 거쳐야 할 레이어 기준**이다(`isTraceComplete`). Judge 에 ONEOIS 가 없는 건
   정상이다. Traces 와 Dashboard(`stats.ts`)가 같은 함수를 쓴다
 

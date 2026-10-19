@@ -291,6 +291,7 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
 }
 .flow-chip.flow-judge { background: #f3e8ff; border-color: #ddd6fe; color: #6d28d9; }
 .flow-chip.flow-ermap { background: #e0f7fa; border-color: #a5e3ee; color: #0e7490; }
+.flow-chip.flow-market { background: #e6f4ec; border-color: #bfe3ce; color: #047857; }
 .flow-entry {
   padding: 0 4px;
   border-radius: 4px;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchAllRows, fetchRecentTraceIds, fetchTraceIdsBy, fetchWorkGroupRows, connectedLayerCount, getAppEnv } from "@/lib/db";
-import { LAYER_ORDER, LayerKey, TraceFilter, TraceStatus, TraceSummary, TraceRow, WorkSummary } from "@/lib/types";
+import { FLOW_KEYS, FlowKey, LAYER_ORDER, LayerKey, TraceFilter, TraceStatus, TraceSummary, TraceRow, WorkSummary } from "@/lib/types";
+import { A2A_ACTION_TYPS, JUDGE_ACTION_TYP, classifyPath, isTraceComplete, stageHit, traceStages } from "@/lib/flows";
 import { logger, reqContext } from "@/lib/logger";
 import { isoNoTz } from "@/lib/timeBuckets";
 import { classifyPendingByCubeResp } from "@/lib/tempStatus"; // TEMP: ONEOIS 미연결 대응
@@ -51,7 +52,8 @@ function summarize(rows: TraceRow[]): TraceSummary[] {
     const recvTimes = list.map((r) => r.recvTm).filter((v): v is string => !!v).sort();
     const sendTimes = list.flatMap((r) => [r.sendTm, r.respTm]).filter((v): v is string => !!v).sort();
     const layerSet = new Set(list.map((r) => r.layer));
-    const allComplete = layerSet.size === LAYER_ORDER.length && list.every((r) => r.sendCompltYn === "Y");
+    const allComplete = isTraceComplete(list);
+    const path = classifyPath(list);
     summaries.push({
       traceId,
       userId: list.find((r) => r.userId)?.userId ?? null,
@@ -60,12 +62,18 @@ function summarize(rows: TraceRow[]): TraceSummary[] {
       layerCount: layerSet.size,
       layers: LAYER_ORDER.filter((l) => layerSet.has(l)),
       status: classify(list, allComplete),
-      allComplete
+      allComplete,
+      path,
+      stagesHit: traceStages(path, layerSet).filter((st) => stageHit(st.key, list)).map((st) => st.key),
     });
   }
 
   summaries.sort((a, b) => (b.firstRecvTm ?? "").localeCompare(a.firstRecvTm ?? ""));
   return summaries;
+}
+
+function parseFlow(v: string | null): FlowKey | undefined {
+  return FLOW_KEYS.find((k) => k === v);
 }
 
 const MAX_SIBLING_TRACES = 500;
@@ -226,6 +234,7 @@ export async function GET(req: NextRequest) {
     errCd: sp.get("errCd") || undefined,
     facId: sp.get("facId") || undefined,
     actionTyp: sp.get("actionTyp") || undefined,
+    flow: parseFlow(sp.get("flow")),
     dateFrom: sp.get("dateFrom") || undefined,
     dateTo: sp.get("dateTo") || undefined,
     onlyError: sp.get("onlyError") === "true" ? true : undefined,
@@ -240,6 +249,9 @@ export async function GET(req: NextRequest) {
     if (filter.facId) idFilters.push(["MCP", "FAC_ID", filter.facId]);
     if (filter.actionTyp) idFilters.push(["GAIA", "ACTION_TYP", filter.actionTyp]);
     if (filter.userId) idFilters.push([LAYER_ORDER[0], "USER_ID", filter.userId]);
+    // FIX 는 1단계로 좁힐 컬럼이 없어 아래 summaries 단계에서만 거른다
+    if (filter.flow === "JUDGE") idFilters.push(["GAIA", "ACTION_TYP", JUDGE_ACTION_TYP]);
+    if (filter.flow === "ERMAP") idFilters.push(["GAIA", "ACTION_TYP", A2A_ACTION_TYPS[0]]);
 
     const matchedByDimension = async (): Promise<Set<string> | null> => {
       if (idFilters.length === 0) return null;
@@ -272,13 +284,15 @@ export async function GET(req: NextRequest) {
     let rows: TraceRow[] = traceIds.length > 0 ? await fetchAllRows({ traceIds, lean: true }) : [];
     if (!groupedOnly) rows = keepErrorMatchingTraces(rows, filter);
 
-    const summaries = summarize(rows);
+    let summaries = summarize(rows);
+    if (filter.flow) summaries = summaries.filter((s) => s.path.flow === filter.flow);
     let works = await buildWorks(summaries, groupInfo);
 
     if (groupedOnly) {
       works = works.filter((w) => w.traces.length > 1);
       const allowed = await matchedByDimension();
       if (allowed) works = works.filter((w) => w.traces.some((t) => allowed.has(t.traceId)));
+      if (filter.flow) works = works.filter((w) => w.traces.some((t) => t.path.flow === filter.flow));
       if (filter.errCd || filter.onlyError) {
         const hit = new Set(keepErrorMatchingTraces(rows, filter).map((r) => r.traceId));
         works = works.filter((w) => w.traces.some((t) => hit.has(t.traceId)));

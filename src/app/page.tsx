@@ -3,11 +3,12 @@
 import { CSSProperties, Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { TraceTimeline } from "@/features/traces/TraceTimeline";
 import {
-  LAYER_COLOR, LAYER_ORDER,
+  FLOWS, FLOW_LABEL, FlowKey,
   TraceFilter, TraceListResponse, TraceDetailResponse, TraceRow,
   TraceStatus, WorkSummary, WorkTraceItem
 } from "@/lib/types";
 import { apiJson, asArray, errMessage } from "@/lib/apiClient";
+import { classifyPath, traceStages, upstreamLabel } from "@/lib/flows";
 
 const DEFAULT_FILTER: TraceFilter = {};
 const MIN_LEFT = 360;
@@ -63,26 +64,39 @@ function traceRow(t: WorkTraceItem, active: boolean, onClick: () => void, child 
         {/* 액션 칩은 첫 열이 아니라 여기 둔다 — 이 열의 폭은 이미 묶음 행의 칩들이
             정하고 있어서 칩이 하나 더 들어가도 안 넓어지고, 첫 열(TRACE_ID)은 그만큼 넉넉해진다 */}
         {child && t.actionLabel && <span className="work-chip">{t.actionLabel}</span>}
-        <span
-          className="layer-dots"
-          title={`${t.layerCount} / ${LAYER_ORDER.length} layers · ${t.layers.join(", ") || "—"}`}
-        >
-          {LAYER_ORDER.map((l) => {
-            const present = t.layers.includes(l);
-            return (
-              <span
-                key={l}
-                className={"layer-dot" + (present ? " on" : "")}
-                style={present ? { background: LAYER_COLOR[l], borderColor: LAYER_COLOR[l] } : undefined}
-                aria-label={`${l} ${present ? "present" : "missing"}`}
-              />
-            );
-          })}
-          <span className="layer-dots-count">{t.layerCount}/{LAYER_ORDER.length}</span>
-        </span>
+        <FlowCell t={t} />
       </td>
       <td>{statusPill(t.status)}</td>
     </tr>
+  );
+}
+
+function FlowCell({ t }: { t: WorkTraceItem }) {
+  const stages = traceStages(t.path, t.layers);
+  const expected = stages.filter((st) => st.expected);
+  const hitCount = expected.filter((st) => t.stagesHit.includes(st.key)).length;
+  const route = [upstreamLabel(t.path), ...stages.map((st) => st.label)].join(" → ");
+  return (
+    <span className="flow-cell" title={`${FLOW_LABEL[t.path.flow]} · ${route}`}>
+      <span className={`flow-chip flow-${t.path.flow.toLowerCase()}`}>
+        {t.path.entry === "DSP" && <span className="flow-entry">DSP</span>}
+        {FLOW_LABEL[t.path.flow]}
+      </span>
+      <span className="layer-dots">
+        {stages.map((st) => {
+          const present = t.stagesHit.includes(st.key);
+          return (
+            <span
+              key={st.key}
+              className={"layer-dot" + (present ? " on" : "") + (st.expected ? "" : " extra")}
+              style={present ? { background: st.color, borderColor: st.color } : undefined}
+              aria-label={`${st.label} ${present ? "present" : "missing"}`}
+            />
+          );
+        })}
+        <span className="layer-dots-count">{hitCount}/{expected.length}</span>
+      </span>
+    </span>
   );
 }
 
@@ -160,6 +174,7 @@ export default function Page() {
       if (f.actionTyp) q.set("actionTyp", f.actionTyp);
       if (f.errCd) q.set("errCd", f.errCd);
       if (f.facId) q.set("facId", f.facId);
+      if (f.flow) q.set("flow", f.flow);
       const df = withSeconds(f.dateFrom);
       const dt = withSeconds(f.dateTo);
       if (df) q.set("dateFrom", df);
@@ -267,6 +282,19 @@ export default function Page() {
     runList(next);
   };
 
+  const detailPath = (() => {
+    if (detailRows.length === 0) return "CUBE · DSP → … ";
+    const path = classifyPath(detailRows);
+    const stages = traceStages(path, detailRows.map((r) => r.layer));
+    return `${FLOW_LABEL[path.flow]} · ${[upstreamLabel(path), ...stages.map((st) => st.label)].join(" → ")}`;
+  })();
+
+  const applyFlow = (flow: FlowKey | undefined) => {
+    const next: TraceFilter = { ...filter, flow };
+    setFilter(next);
+    runList(next);
+  };
+
   const errorCount = works.filter((w) => w.status === "error").length;
   const failCount = works.filter((w) => w.status === "fail").length;
 
@@ -347,26 +375,43 @@ export default function Page() {
               </div>
 
               <div className="flt-bottom">
-                <div className="flt-dates">
-                  <span className="flt-tag">기간</span>
-                  <div className="seg" role="group" aria-label="기간 프리셋">
-                    {DATE_PRESETS.map((p) => (
+                <div className="flt-groups">
+                  <div className="flt-dates">
+                    <span className="flt-tag">흐름</span>
+                    <div className="seg" role="group" aria-label="흐름">
+                      {[{ key: undefined, label: "전체" }, ...FLOWS].map((f) => (
+                        <button
+                          key={f.key ?? "all"}
+                          type="button"
+                          className={filter.flow === f.key ? "on" : ""}
+                          onClick={() => applyFlow(f.key)}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flt-dates">
+                    <span className="flt-tag">기간</span>
+                    <div className="seg" role="group" aria-label="기간 프리셋">
+                      {DATE_PRESETS.map((p) => (
+                        <button
+                          key={p.key}
+                          type="button"
+                          className={datePreset === p.key ? "on" : ""}
+                          onClick={() => applyPreset(p.key)}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
                       <button
-                        key={p.key}
                         type="button"
-                        className={datePreset === p.key ? "on" : ""}
-                        onClick={() => applyPreset(p.key)}
+                        className={datePreset === "custom" ? "on" : ""}
+                        onClick={() => setDatePreset("custom")}
                       >
-                        {p.label}
+                        직접
                       </button>
-                    ))}
-                    <button
-                      type="button"
-                      className={datePreset === "custom" ? "on" : ""}
-                      onClick={() => setDatePreset("custom")}
-                    >
-                      직접
-                    </button>
+                    </div>
                   </div>
                 </div>
                 <div className="flt-run">
@@ -425,7 +470,7 @@ export default function Page() {
                   <th>TRACE_ID</th>
                   <th>USER</th>
                   <th>FIRST RECV</th>
-                  <th>LAYERS</th>
+                  <th>FLOW</th>
                   <th>STATUS</th>
                 </tr>
               </thead>
@@ -494,7 +539,7 @@ export default function Page() {
         <section className="panel">
           <div className="panel-header">
             <span className="title">Trace Detail</span>
-            <span className="meta">{LAYER_ORDER.join(" → ")}</span>
+            <span className="meta">{detailPath}</span>
           </div>
           <div className="panel-body tight">
             {detailErr && !detailLoading && (

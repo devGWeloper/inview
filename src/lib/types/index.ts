@@ -1,5 +1,6 @@
 // 도메인별 타입의 배럴. `@/lib/types` 로 import 하면 전부 여기서 나온다.
 export * from "./layers";
+export * from "./flows";
 export * from "./trace";
 export * from "./stats";
 export * from "./profile";

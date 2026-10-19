@@ -9,6 +9,27 @@
 `LAYER_COLOR`·스테퍼·`/N` 분모·태그 색이 전부 여기서 파생된다.
 레이어 추가/삭제/순서변경 = 이 배열 + `config.yml`/`config.dev.yml` 의 블록.
 
+## 흐름 — FIX / Judge / ER MAP
+
+4개 DB 레이어는 그대로지만 요청이 지나가는 경로는 세 가지다. 도표: `docs/flows/action-flows.pptx`.
+
+| 흐름 | 경로 | 거쳐야 할 DB 레이어 |
+|---|---|---|
+| FIX | CUBE ┄ CUBE BOT → GAIA → MCP → ONEOIS | 4개 전부 |
+| Judge | DSP ┄ AI GATEWAY → GAIA ⇉ MCP Market (N회) | CUBE · GAIA · MCP |
+| ER MAP | DSP(또는 CUBE) ┄ AI GATEWAY → GAIA → A2A | CUBE · GAIA |
+
+- **CUBE · DSP 는 I/F 만 하고 적재하지 않는다.** AI GATEWAY 는 CUBE BOT 과 같은 형상이고 **같은 DB(CUBE 레이어)** 에
+  쌓인다. 진입 구분은 CUBE 레이어 행의 `RECV_SYS_ID='DSP'`
+- MCP 는 경로별로 `SYS_ID` 가 다르다 — internal(GAIA 직결) `MCP`, external(Market) `MCP_MARKET`. 같은 MCP DB
+- A2A(ER MAP 에이전트)는 DB 가 없다. GAIA 행의 send/resp 가 곧 A2A 호출이다.
+  **GAIA 는 A2A 호출도 `SEND_SYS_ID='MCP'` 로 기록한다** — 화면은 ER MAP 흐름에서 이를 `A2A` 로 바꿔 보이고
+  툴팁에 기록값을 남긴다
+- 판정은 `src/lib/flows.ts` 한 곳(서버·클라이언트 공용). `ACTION_TYP` 이 `ERMAP` → ER MAP, `JUDGE` → Judge,
+  `ACTION_TYP` 이 없고 MCP 행이 전부 `MCP_MARKET` 이며 ONEOIS 가 없으면 Judge, 나머지 FIX
+- **완료(`allComplete`)는 흐름이 거쳐야 할 레이어 기준**이다(`isTraceComplete`). Judge 에 ONEOIS 가 없는 건
+  정상이다. Traces 와 Dashboard(`stats.ts`)가 같은 함수를 쓴다
+
 ## 조회 경로
 
 ```
@@ -67,7 +88,7 @@ PK 는 `(TRACE_ID, TIMEKEY)` — **레이어당 여러 행이 가능**하다(GAI
 
 ### `ACTION_TYP` 없음 = 라우팅 실패
 
-BIZ 에 쌓이는 트레이스는 전부 액션 요청이다(setup_guide/judge 같은 비액션 흐름은 `TRX_TOKEN_DET`
+BIZ 에 쌓이는 트레이스는 전부 액션 요청이다(Judge 는 `ACTION_TYP='JUDGE'` 로 쌓인다. setup_guide 같은 비액션 흐름은 `TRX_TOKEN_DET`
 에만 남는다). 따라서 `ACTION_TYP` 이 비었다 = ACTION ROUTER 에서 실제 ACTION 노드로 못 간 것.
 이런 트레이스는 반드시 `errCd` 를 동반하므로 status 는 이미 fail 이다.
 

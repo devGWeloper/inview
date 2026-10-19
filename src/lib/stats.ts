@@ -3,6 +3,7 @@
 // 같은 기간인데 두 화면의 숫자가 갈린다. docs/architecture/metrics.md
 
 import { fetchAllRows } from "./db";
+import { isTraceComplete } from "./flows";
 import {
   DailyStat,
   DimensionStats,
@@ -170,9 +171,7 @@ export async function computeStats(q: StatsQuery): Promise<StatsResult> {
     if (excludedTraces.has(traceId)) continue;
 
     totals.total += 1;
-    const layerSet = new Set(list.map((r) => r.layer));
-    const allComplete =
-      layerSet.size === LAYER_ORDER.length && list.every((r) => r.sendCompltYn === "Y");
+    const allComplete = isTraceComplete(list);
     const status = classify(list, allComplete);
     totals[status] += 1;
 

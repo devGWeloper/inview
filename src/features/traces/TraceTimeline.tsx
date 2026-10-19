@@ -1,7 +1,8 @@
 "use client";
 
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
-import { LAYER_COLOR, LAYER_LABEL, LAYER_ORDER, LayerKey, TraceRow } from "@/lib/types";
+import { FLOW_LABEL, FlowStage, LAYER_COLOR, LAYER_LABEL, LAYER_ORDER, LayerKey, TracePath, TraceRow } from "@/lib/types";
+import { classifyPath, sendPeerLabel, stageHit, traceStages, upstreamLabel } from "@/lib/flows";
 
 const COL_MIN_FR = 0.25;
 const SPLITTER_PX = 6;
@@ -296,6 +297,11 @@ function JsonBlock({ raw, kind }: { raw: string | null; kind: JsonKind }) {
 
 type LayerGroup = { layer: LayerKey; rows: TraceRow[] };
 
+function peerTitle(row: TraceRow, path: TracePath): string | undefined {
+  const shown = sendPeerLabel(row, path);
+  return shown !== row.sendSysId ? `기록값 SEND_SYS_ID=${row.sendSysId ?? "-"}` : undefined;
+}
+
 function rowErrKind(errCd: string | null): "fail" | "err" | null {
   if (!errCd) return null;
   if (errCd.startsWith("FAIL_")) return "fail";
@@ -311,48 +317,68 @@ function groupStatus(rows: TraceRow[]): "ok" | "err" | "fail" | "warn" | "skip" 
   return "warn";
 }
 
-function Stepper({ groups }: { groups: LayerGroup[] }) {
+type StepStatus = "ok" | "err" | "fail" | "warn" | "skip";
+
+/** A2A 는 DB 가 없어 GAIA 행의 send/resp 로 판정한다 */
+function a2aStatus(gaiaRows: TraceRow[]): { status: StepStatus; row?: TraceRow } {
+  const sent = gaiaRows.filter((r) => r.sendTm);
+  if (sent.length === 0) return { status: "skip" };
+  const errRow = gaiaRows.find((r) => r.errCd?.toUpperCase().includes("A2A"));
+  if (errRow) return { status: "err", row: errRow };
+  return { status: sent.every((r) => r.respTm) ? "ok" : "warn", row: sent[0] };
+}
+
+const STEP_LABEL: Record<StepStatus, string> = { err: "ERROR", fail: "FAIL", ok: "OK", warn: "WAIT", skip: "—" };
+
+function Stepper({ stages, groups }: { stages: FlowStage[]; groups: LayerGroup[] }) {
   const byLayer = Object.fromEntries(groups.map((g) => [g.layer, g])) as Record<LayerKey, LayerGroup | undefined>;
-  const gridStyle: CSSProperties = { gridTemplateColumns: `repeat(${LAYER_ORDER.length}, minmax(0, 1fr))` };
+  const gridStyle: CSSProperties = { gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` };
 
   return (
     <div className="stepper" style={gridStyle}>
-      {LAYER_ORDER.map((l, i) => {
-        const g = byLayer[l];
-        const status = groupStatus(g?.rows ?? []);
-        const row = g?.rows[0];
-        const callCount = g?.rows.length ?? 0;
-        const statusLabel =
-          status === "err" ? "ERROR"
-          : status === "fail" ? "FAIL"
-          : status === "ok" ? "OK"
-          : status === "warn" ? "WAIT"
-          : "—";
+      {stages.map((st, i) => {
+        let status: StepStatus;
+        let row: TraceRow | undefined;
+        let errRow: TraceRow | undefined;
+        let callCount = 0;
+        if (st.key === "A2A") {
+          const a = a2aStatus(byLayer.GAIA?.rows ?? []);
+          status = a.status;
+          row = a.row;
+          errRow = a.status === "err" ? a.row : undefined;
+          callCount = (byLayer.GAIA?.rows ?? []).filter((r) => r.sendTm).length;
+        } else {
+          const g = byLayer[st.key];
+          status = groupStatus(g?.rows ?? []);
+          row = g?.rows[0];
+          errRow = g?.rows.find((r) => !!r.errCd);
+          callCount = g?.rows.length ?? 0;
+        }
         const isErrRow = status === "err" || status === "fail";
-        const errRow = g?.rows.find((r) => !!r.errCd);
+        const ts = st.key === "A2A" ? row?.sendTm ?? null : row?.recvTm ?? null;
         return (
-          <div key={l} className={`step ${status}`}>
+          <div
+            key={st.key}
+            className={`step ${status}${st.expected ? "" : " extra"}`}
+            title={st.expected ? undefined : "이 흐름에서는 거치지 않는 계층인데 기록이 있습니다"}
+          >
             <span className="step-num">{i + 1}</span>
             <div className="step-body">
               <div className="step-top">
                 <span className="name">
-                  <span className="layer-chip" style={{ background: LAYER_COLOR[l] }} />
-                  {l}
+                  <span className="layer-chip" style={{ background: st.color }} />
+                  {st.label}
                 </span>
-                {status !== "skip" && (
-                  <span className={`pill xs ${status}`}>
-                    {statusLabel}
-                  </span>
-                )}
+                {status !== "skip" && <span className={`pill xs ${status}`}>{STEP_LABEL[status]}</span>}
               </div>
               <div className="step-sub">
                 {!row ? (
-                  <span className="muted">기록 없음</span>
+                  <span className="muted">{st.key === "A2A" ? "호출 없음" : "기록 없음"}</span>
                 ) : isErrRow ? (
                   <span className="mono">{errRow?.errCd ?? "-"}</span>
                 ) : (
                   <>
-                    <span className="mono">{fmtTsShort(row.recvTm)}</span>
+                    <span className="mono">{fmtTsShort(ts)}</span>
                     {callCount > 1 && <span className="step-calls">{callCount} calls</span>}
                   </>
                 )}
@@ -365,8 +391,42 @@ function Stepper({ groups }: { groups: LayerGroup[] }) {
   );
 }
 
-function SingleCallCard({ row, seq, frac3, setFrac3, startResize }: {
+/** 요청이 지나간 경로. 적재하지 않는 상위 I/F(CUBE·DSP)는 점선으로 */
+function FlowPath({ path, stages, rows }: { path: TracePath; stages: FlowStage[]; rows: TraceRow[] }) {
+  // 호출 횟수는 부른 쪽(앞 칸) 행 수로 센다 — GAIA 는 MCP 호출마다 행이 생겨 받는 쪽 행 수로 세면 틀린다
+  const callsInto = (i: number): number => {
+    const caller = stages[i - 1]?.key;
+    if (!caller || caller === "A2A") return 1;
+    return rows.filter((r) => r.layer === caller && r.sendTm).length;
+  };
+  return (
+    <div className="flow-path">
+      <span className={`flow-chip flow-${path.flow.toLowerCase()}`}>{FLOW_LABEL[path.flow]}</span>
+      <span className="fp-node if" title="I/F 만 하고 적재하지 않는다">{upstreamLabel(path)}</span>
+      {stages.map((st, i) => {
+        const n = callsInto(i);
+        const hit = stageHit(st.key, rows);
+        return (
+          <span key={st.key} className="fp-hop">
+            <span className="fp-arrow">{n > 1 ? <>⇉<sub>×{n}</sub></> : "→"}</span>
+            <span
+              className={"fp-node" + (hit ? "" : " miss") + (st.expected ? "" : " extra")}
+              style={hit ? { background: st.color, borderColor: st.color } : { borderColor: st.color, color: st.color }}
+              title={hit ? undefined : "기록 없음"}
+            >
+              {st.label}
+            </span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function SingleCallCard({ row, label, path, seq, frac3, setFrac3, startResize }: {
   row: TraceRow;
+  label: string;
+  path: TracePath;
   seq: SeqMap;
   frac3: number[];
   setFrac3: (next: number[]) => void;
@@ -387,13 +447,13 @@ function SingleCallCard({ row, seq, frac3, setFrac3, startResize }: {
     <div className="tl-card">
       <div className="tl-card-head">
         <div className="left">
-          <span className="tl-layer-tag" style={{ background: LAYER_COLOR[row.layer] }}>{row.layer}</span>
+          <span className="tl-layer-tag" style={{ background: LAYER_COLOR[row.layer] }}>{label}</span>
           <span className="route" title={LAYER_LABEL[row.layer]}>
             <span className="hop">{row.recvSysId ?? "-"}</span>
             <span className="arrow">→</span>
             <span className="hop">{row.sysId ?? row.layer}</span>
             <span className="arrow">⇄</span>
-            <span className="hop">{row.sendSysId ?? "-"}</span>
+            <span className="hop" title={peerTitle(row, path)}>{sendPeerLabel(row, path) ?? "-"}</span>
           </span>
           <HttpStsBadge code={row.httpStsCd} />
         </div>
@@ -417,7 +477,7 @@ function SingleCallCard({ row, seq, frac3, setFrac3, startResize }: {
           onDoubleClick={() => setFrac3([1, 1, 1])}
         />
         <div className="tl-col">
-          <ColHead kind="send" seq={seq} row={row} peer={row.sendSysId} ts={row.sendTm} />
+          <ColHead kind="send" seq={seq} row={row} peer={sendPeerLabel(row, path)} ts={row.sendTm} />
           <JsonBlock raw={row.sendMsgCtn} kind="send" />
         </div>
         <div
@@ -429,7 +489,7 @@ function SingleCallCard({ row, seq, frac3, setFrac3, startResize }: {
           onDoubleClick={() => setFrac3([1, 1, 1])}
         />
         <div className="tl-col">
-          <ColHead kind="resp" seq={seq} row={row} peer={row.sendSysId} ts={row.respTm} />
+          <ColHead kind="resp" seq={seq} row={row} peer={sendPeerLabel(row, path)} ts={row.respTm} />
           <JsonBlock raw={row.respMsgCtn} kind="resp" />
         </div>
       </div>
@@ -444,8 +504,10 @@ function SingleCallCard({ row, seq, frac3, setFrac3, startResize }: {
   );
 }
 
-function MultiCallCard({ group, seq, frac2, setFrac2, startResize }: {
+function MultiCallCard({ group, label, path, seq, frac2, setFrac2, startResize }: {
   group: LayerGroup;
+  label: string;
+  path: TracePath;
   seq: SeqMap;
   frac2: number[];
   setFrac2: (next: number[]) => void;
@@ -467,7 +529,7 @@ function MultiCallCard({ group, seq, frac2, setFrac2, startResize }: {
     <div className="tl-card">
       <div className="tl-card-head">
         <div className="left">
-          <span className="tl-layer-tag" style={{ background: LAYER_COLOR[layer] }}>{layer}</span>
+          <span className="tl-layer-tag" style={{ background: LAYER_COLOR[layer] }}>{label}</span>
           <span className="route" title={LAYER_LABEL[layer]}>
             <span className="hop">{firstRow.recvSysId ?? "-"}</span>
             <span className="arrow">→</span>
@@ -493,6 +555,7 @@ function MultiCallCard({ group, seq, frac2, setFrac2, startResize }: {
           <CallItem
             key={row.timekey}
             row={row}
+            path={path}
             ci={ci}
             seq={seq}
             frac2={frac2}
@@ -505,8 +568,9 @@ function MultiCallCard({ group, seq, frac2, setFrac2, startResize }: {
   );
 }
 
-function CallItem({ row, ci, seq, frac2, setFrac2, startResize }: {
+function CallItem({ row, path, ci, seq, frac2, setFrac2, startResize }: {
   row: TraceRow;
+  path: TracePath;
   ci: number;
   seq: SeqMap;
   frac2: number[];
@@ -524,7 +588,7 @@ function CallItem({ row, ci, seq, frac2, setFrac2, startResize }: {
       <div className="tl-call-header">
         <span className="tl-call-num">Call #{ci + 1}</span>
         <span className="tl-call-meta">
-          <span className="hop mono">{row.sendSysId ?? "-"}</span>
+          <span className="hop mono" title={peerTitle(row, path)}>{sendPeerLabel(row, path) ?? "-"}</span>
           <HttpStsBadge code={row.httpStsCd} />
           <span className="dur-inline">{callDur}</span>
           {row.errCd && <span className={`pill ${errKind} xs`}><span className="dot" />{row.errCd}</span>}
@@ -533,7 +597,7 @@ function CallItem({ row, ci, seq, frac2, setFrac2, startResize }: {
       </div>
       <div ref={bodyRef} className="tl-call-body" style={colsStyle(frac2)}>
         <div className="tl-col">
-          <ColHead kind="send" seq={seq} row={row} peer={row.sendSysId} ts={row.sendTm} />
+          <ColHead kind="send" seq={seq} row={row} peer={sendPeerLabel(row, path)} ts={row.sendTm} />
           <JsonBlock raw={row.sendMsgCtn} kind="send" />
         </div>
         <div
@@ -545,7 +609,7 @@ function CallItem({ row, ci, seq, frac2, setFrac2, startResize }: {
           onDoubleClick={() => setFrac2([1, 1])}
         />
         <div className="tl-col">
-          <ColHead kind="resp" seq={seq} row={row} peer={row.sendSysId} ts={row.respTm} />
+          <ColHead kind="resp" seq={seq} row={row} peer={sendPeerLabel(row, path)} ts={row.respTm} />
           <JsonBlock raw={row.respMsgCtn} kind="resp" />
         </div>
       </div>
@@ -572,7 +636,7 @@ export function TraceTimeline({ traceId, rows, loading }: {
     return (
       <div className="empty">
         좌측 TRACE 목록에서 항목을 선택하면<br />
-        전체 레이어({LAYER_ORDER.join(" → ")}) 송수신 내역이 표시됩니다.
+        요청이 거친 계층별 송수신 내역이 표시됩니다.
       </div>
     );
   }
@@ -591,6 +655,9 @@ export function TraceTimeline({ traceId, rows, loading }: {
     .filter((g) => g.rows.length > 0);
 
   const seq = buildSeqMap(rows);
+  const path = classifyPath(rows);
+  const stages = traceStages(path, groups.map((g) => g.layer));
+  const labelOf = (l: LayerKey) => stages.find((st) => st.key === l)?.label ?? l;
 
   return (
     <>
@@ -605,14 +672,15 @@ export function TraceTimeline({ traceId, rows, loading }: {
           <div className="cell"><span className="k">Last Activity</span><span className="v">{fmtTs(last)}</span></div>
           <div className="cell"><span className="k">Total Latency</span><span className="v">{totalLatency}</span></div>
         </div>
-        <Stepper groups={groups} />
+        <FlowPath path={path} stages={stages} rows={rows} />
+        <Stepper stages={stages} groups={groups} />
       </div>
 
       <div className="timeline">
         {groups.map((g) =>
           g.rows.length === 1
-            ? <SingleCallCard key={g.layer} row={g.rows[0]} seq={seq} frac3={frac3} setFrac3={setFrac3} startResize={startResize} />
-            : <MultiCallCard key={g.layer} group={g} seq={seq} frac2={frac2} setFrac2={setFrac2} startResize={startResize} />
+            ? <SingleCallCard key={g.layer} row={g.rows[0]} label={labelOf(g.layer)} path={path} seq={seq} frac3={frac3} setFrac3={setFrac3} startResize={startResize} />
+            : <MultiCallCard key={g.layer} group={g} label={labelOf(g.layer)} path={path} seq={seq} frac2={frac2} setFrac2={setFrac2} startResize={startResize} />
         )}
       </div>
     </>

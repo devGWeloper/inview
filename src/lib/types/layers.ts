@@ -3,10 +3,10 @@
 // 도메인 타입 모음. LAYERS 가 레이어 정의의 단일 소스 — 여기만 고치면 나머지가 따라온다.
 
 export const LAYERS = [
-  { key: "CUBE",   label: "Cube / Cube Bot", color: "#4b6bfb" },
-  { key: "GAIA",   label: "Gaia Agent",      color: "#a21caf" },
-  { key: "MCP",    label: "MCP Server",      color: "#059669" },
-  { key: "ONEOIS", label: "OneOIS",          color: "#d97706" },
+  { key: "CUBE",   label: "Cube Bot / AI Gateway", color: "#4b6bfb" },
+  { key: "GAIA",   label: "Gaia Agent",            color: "#a21caf" },
+  { key: "MCP",    label: "MCP / MCP Market",      color: "#059669" },
+  { key: "ONEOIS", label: "OneOIS",                color: "#d97706" },
 ] as const;
 
 export type LayerKey = typeof LAYERS[number]["key"];

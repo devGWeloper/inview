@@ -46,6 +46,7 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px; margin-top: 9px; flex-wrap: wrap;
 }
+.flt-groups { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; min-width: 0; }
 .flt-dates { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .flt-tag {
   font-size: 11px; font-weight: 700; color: var(--text-3);
@@ -267,11 +268,35 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
   transition: background .12s, border-color .12s;
 }
 .layer-dot.on { /* color는 inline style 로 주입 */ }
+/* 흐름 밖 계층에 기록이 있을 때 — 네모로 구분 */
+.layer-dot.extra { border-radius: 2px; }
 .layer-dots-count {
   margin-left: 6px;
   font-family: var(--mono);
   font-size: 12.5px;
   color: var(--text-3);
+}
+
+/* 흐름 칩 — 다수인 FIX 는 조용히, 신규 흐름만 색으로 띄운다 */
+.flow-cell { display: inline-flex; align-items: center; gap: 8px; vertical-align: middle; }
+.flow-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--surface-3);
+  color: var(--text-3);
+  font-size: 11px; font-weight: 700;
+  white-space: nowrap;
+}
+.flow-chip.flow-judge { background: #f3e8ff; border-color: #ddd6fe; color: #6d28d9; }
+.flow-chip.flow-ermap { background: #e0f7fa; border-color: #a5e3ee; color: #0e7490; }
+.flow-entry {
+  padding: 0 4px;
+  border-radius: 4px;
+  border: 1px dashed currentColor;
+  font-size: 10px;
+  line-height: 14px;
 }
 
 /* ---------------- status pill ---------------- */
@@ -327,7 +352,30 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
 .detail-meta .cell .v { color: var(--text); font-family: var(--mono); }
 .detail-meta .cell .v.sans { font-family: var(--sans); }
 
-/* stepper — grid-template-columns 는 컴포넌트에서 LAYER_ORDER.length 로 inline 주입 */
+/* 흐름 경로 — 상위 I/F(미적재)는 점선, 기록 없는 칸은 외곽선만 */
+.flow-path {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  margin-top: 14px;
+  font-size: 12.5px;
+}
+.flow-path .flow-chip { font-size: 12px; padding: 2px 9px; margin-right: 4px; }
+.fp-hop { display: inline-flex; align-items: center; gap: 6px; }
+.fp-arrow { color: var(--text-3); font-weight: 700; white-space: nowrap; }
+.fp-arrow sub { font-size: 10.5px; margin-left: 1px; }
+.fp-node {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  color: #fff;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.fp-node.if { border: 1px dashed var(--border-strong); background: var(--surface); color: var(--text-3); }
+.fp-node.miss { background: var(--surface); border-style: dashed; }
+.fp-node.extra { outline: 2px dotted var(--warn); outline-offset: 1px; }
+
+/* stepper — grid-template-columns 는 컴포넌트에서 흐름의 칸 수로 inline 주입 */
 .stepper {
   display: grid;
   gap: 0;
@@ -398,6 +446,7 @@ select.flt-field[data-empty="true"] { color: var(--text-3); }
 .step.warn  { background: var(--warn-soft); }
 .step.warn  .step-num { background: var(--warn); border-color: var(--warn); color: #fff; }
 .step.skip  { opacity: 0.55; }
+.step.extra .step-num { border-style: dashed; }
 
 /* timeline nodes */
 .timeline { padding: 16px; }

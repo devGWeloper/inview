@@ -1,5 +1,6 @@
 // 트레이스 행 · 요약 · 묶음 · 목록/상세 응답.
 import type { LayerKey } from "./layers";
+import type { FlowKey, StageKey, TracePath } from "./flows";
 
 export interface TraceRow {
   layer: LayerKey;
@@ -36,6 +37,9 @@ export interface TraceSummary {
   layers: LayerKey[];
   status: TraceStatus;
   allComplete: boolean;
+  path: TracePath;
+  /** 흐름의 칸 중 실제로 거친 것 */
+  stagesHit: StageKey[];
 }
 
 export interface WorkTraceItem extends TraceSummary {
@@ -69,6 +73,7 @@ export interface TraceFilter {
   actionTyp?: string;
   errCd?: string;
   facId?: string;
+  flow?: FlowKey;
   traceIds?: string[];
   dateFrom?: string;
   dateTo?: string;
